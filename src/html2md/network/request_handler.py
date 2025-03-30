@@ -1,6 +1,7 @@
-import requests
 import logging
 import time
+
+import requests
 
 
 def fetch_html(url, session, headers, method="GET", data=None, max_retries=3):

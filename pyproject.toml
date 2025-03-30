@@ -1,38 +1,45 @@
-[project]
+[tool.poetry]
 name = "html2md"
 version = "1.0.0"
 description = "A Python package to convert web pages to markdown"
-authors = [{ name = "Justin Kindrix", email = "jkindrix@gmail.com" }]
-license = { file = "LICENSE" }
-requires-python = ">=3.7"
+authors = ["Justin Kindrix <jkindrix@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{ include = "html2md", from = "src" }]
 
-dependencies = [
-  "beautifulsoup4==4.13.3",
-  "certifi==2025.1.31",
-  "charset-normalizer==3.4.1",
-  "idna==3.10",
-  "markdownify==1.0.0",
-  "requests==2.32.3",
-  "six==1.17.0",
-  "soupsieve==2.6",
-  "typing_extensions==4.12.2",
-  "urllib3==2.3.0",
-  "browser_cookie3",
-  "python-json-logger==2.0.7",
-]
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+beautifulsoup4 = "*"
+certifi = "*"
+charset-normalizer = "*"
+idna = "*"
+markdownify = "*"
+requests = "*"
+six = "*"
+soupsieve = "*"
+typing-extensions = "*"
+urllib3 = "*"
+browser-cookie3 = "*"
+jeepney = "*"
+lz4 = "*"
+pycryptodomex = "*"
+python-json-logger = "*"
+pyjwt = "*"
+google-auth-oauthlib = "1.2.1"
+google-auth = "2.38.0"
 
-[project.optional-dependencies]
-dev = ["pytest"]
+[tool.poetry.group.dev.dependencies]
+pytest = "*"
+pre-commit = "*"
+types-requests = "^2.32.0.20250328"
 
-[project.scripts]
+[tool.poetry.scripts]
 html2md = "html2md.cli.main:main"
 
-[tool.setuptools]
-package-dir = { "" = "src" }
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
 [tool.pytest.ini_options]
-pythonpath = ["src", "venv/lib/python3.11/site-packages"]
+pythonpath = ["src"]
 addopts = ["--import-mode=append"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

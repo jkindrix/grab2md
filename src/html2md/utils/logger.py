@@ -1,6 +1,7 @@
 import logging
 import os
 from logging.handlers import RotatingFileHandler
+
 from pythonjsonlogger import jsonlogger
 
 # Allow environment variables to override default settings

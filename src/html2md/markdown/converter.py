@@ -1,42 +1,69 @@
-import requests
 import logging
+
+import requests
 from markdownify import markdownify as md
-from html2md.utils.formatter import format_markdown
+
+from html2md.cookies.session_manager import get_session
 from html2md.markdown.trimmer import trim_markdown
+from html2md.utils.formatter import format_markdown
 
 # Setup logger
 logger = logging.getLogger("html2md")
 
 # Default headers for web requests
 DEFAULT_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive",
+    "Cache-Control": "no-cache",
 }
 
 
-def html_to_markdown(url, session, headers=None, trim=False):
-    """Fetch HTML and convert to Markdown."""
+def html_to_markdown(url, session=None, headers=None, trim=False):
+    """
+    Fetch HTML and convert to Markdown.
 
+    Args:
+        url (str): URL to fetch HTML content from.
+        session (requests.Session, optional): Session object for HTTP requests.
+        headers (dict, optional): Custom headers for the HTTP request.
+        trim (bool, optional): Whether to apply trimming rules to the resulting markdown.
+
+    Returns:
+        str or None: Markdown content if successful, None otherwise.
+    """
+
+    # Use provided session or initialize a new one
+    session = session or get_session()
+
+    # Use default headers if none are provided
     if headers is None:
-        headers = DEFAULT_HEADERS  # Use default headers if none provided
+        headers = DEFAULT_HEADERS
 
     try:
         logger.info(f"Fetching URL: {url}")
+        # Send GET request to fetch the HTML content
         response = session.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         html_content = response.text
-        logger.info(f"Received {len(html_content)} bytes of HTML.")
+        logger.info(f"Received {len(html_content)} bytes of HTML from {url}.")
 
     except requests.RequestException as e:
         logger.error(f"Failed to retrieve {url}: {e}")
         return None
 
+    # Handle empty HTML response
     if not html_content.strip():
         logger.warning(f"Empty HTML response from {url}")
         return None
 
+    # Convert HTML to Markdown using markdownify
     markdown_content = md(html_content, heading_style="ATX")
+
+    # Apply formatting rules to clean up the generated markdown
     formatted_markdown = format_markdown(markdown_content)
 
+    # Apply trimming if requested
     if trim:
         formatted_markdown = trim_markdown(formatted_markdown, url)
 

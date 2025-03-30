@@ -1,7 +1,8 @@
 import logging
 from urllib.parse import urlparse
-from html2md.utils.parser import find_nth_occurrence
+
 from html2md.config.loader import load_config
+from html2md.utils.parser import find_nth_occurrence
 
 
 def trim_markdown(markdown_content, url):

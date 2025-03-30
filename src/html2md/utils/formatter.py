@@ -1,5 +1,5 @@
-import re
 import logging
+import re
 
 # Define characters that should be removed
 EXCLUDED_CHARACTERS = [""]

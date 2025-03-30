@@ -1,15 +1,60 @@
 {
   "domains": {
     "chatgpt.com": {
+      "path_rules": {
+        "": {
+          "h1_occurrence": 1,
+          "footer_marker": ""
+        }
+      }
     },
     "docs.datadoghq.com": {
-      "footer_marker": "## Further reading"
+      "path_rules": {
+        "": {
+          "h1_occurrence": 1,
+          "footer_marker": "## Further reading"
+        }
+      }
     },
     "learn.microsoft.com": {
-      "footer_marker": "## See Also"
+      "path_rules": {
+        "/en-us/connectors": {
+          "h1_occurrence": 2,
+          "footer_marker": "[Your Privacy Choices](https://aka.ms/yourcaliforniaprivacychoices)"
+        },
+        "": {
+          "h1_occurrence": 1,
+          "footer_marker": "## See Also"
+        }
+      }
+    },
+    "devblog.microsoft.com": {
+      "path_rules": {
+        "": {
+          "h1_occurrence": 1,
+          "footer_marker": "## Author"
+        }
+      }
+    },
+    "support.microsoft.com": {
+      "path_rules": {
+        "/en-us/office": {
+          "h1_occurrence": 2,
+          "footer_marker": "[![Facebook](/images/Facebook-GrayScale.png)]"
+        },
+        "": {
+          "h1_occurrence": 2,
+          "footer_marker": "[SUBSCRIBE RSS FEEDS](/en-us/rss-feed-picker)"
+        }
+      }
     },
     "developer.android.com": {
-      "footer_marker": "Content and code samples on this page are subject to the licenses described in the"
+      "path_rules": {
+        "": {
+          "h1_occurrence": 1,
+          "footer_marker": "Content and code samples on this page are subject to the licenses described in the"
+        }
+      }
     },
     "developer.hashicorp.com": {
       "path_rules": {
@@ -28,8 +73,17 @@
       }
     },
     "hashicorp.com": {
-      "footer_marker": "#### Sign up for the latest HashiCorp news"
+      "path_rules": {
+        "": {
+          "h1_occurrence": 1,
+          "footer_marker": "#### Sign up for the latest HashiCorp news"
+        }
+      }
     }
+  },
+  "oauth": {
+    "CLIENT_ID": "YOUR_GOOGLE_CLIENT_ID",
+    "CLIENT_SECRET": "YOUR_GOOGLE_CLIENT_SECRET"
   },
   "logging": {
     "level": "DEBUG"
