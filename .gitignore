@@ -23,6 +23,8 @@ pip-delete-this-directory.txt
 .tox/
 .nox/
 .pytest_cache/
+test_output/
+test_links.md
 
 # IDE / Editor
 .vscode/
@@ -37,3 +39,6 @@ Thumbs.db
 # Logs and temporary files
 *.log
 *.tmp
+
+# Dedicated .ignore directory
+.ignore/

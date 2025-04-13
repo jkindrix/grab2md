@@ -1,0 +1,114 @@
+# html2md
+
+A command-line utility for converting HTML content to Markdown.
+
+## Features
+
+- Convert HTML from URLs to Markdown
+- Convert HTML from local files to Markdown
+- Support for cookie-based authentication
+- Domain-specific content trimming
+- Batch processing of markdown files containing links
+- Modular output with preserved link structure
+
+## Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/html2md.git
+cd html2md
+
+# Install with Poetry
+poetry install
+
+# Or install with pip
+pip install .
+```
+
+## Usage
+
+### Basic Usage
+
+Convert a single URL to Markdown:
+
+```bash
+html2md convert https://example.com
+```
+
+Convert a local HTML file to Markdown:
+
+```bash
+html2md convert path/to/local/file.html
+```
+
+Save the output to a file:
+
+```bash
+html2md convert https://example.com --output result.md
+```
+
+### Batch Processing
+
+Process markdown files containing links and create a modular output structure:
+
+```bash
+html2md batch path/to/link-collection.md --output-dir docs
+```
+
+Process multiple files at once:
+
+```bash
+html2md batch file1.md file2.md --output-dir docs
+```
+
+Use glob patterns to process multiple files:
+
+```bash
+html2md batch "docs/*.md" --output-dir output
+```
+
+## Command Line Options
+
+### Global Options
+
+- `--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}`: Set logging level (default: INFO)
+
+### Convert Command Options
+
+- `--no-trim`: Disable trimming based on domain-specific rules
+- `--output FILE`: Specify output file to save converted markdown
+- `--no-cookies`: Disable loading cookies from the browser
+- `--local`: Force treating sources as local files even if they look like URLs
+
+### Batch Command Options
+
+- `--output-dir DIR`: Directory to save the output files and folders (default: "output")
+- `--no-trim`: Disable trimming based on domain-specific rules
+
+## Examples
+
+### Converting a URL with Authentication
+
+If you need to access a site that requires authentication, html2md can use your browser cookies:
+
+```bash
+html2md convert https://private-site.com/protected-page
+```
+
+### Batch Processing Documentation Links
+
+Create a structured documentation site from a collection of markdown links:
+
+```bash
+html2md batch incomplete-docs/*.txt --output-dir documentation
+```
+
+This will:
+1. Extract all URLs from the provided markdown files
+2. Convert each URL's HTML content to markdown
+3. Save the files in a structured directory layout
+4. Update links between files to maintain correct references
+
+## License
+
+MIT

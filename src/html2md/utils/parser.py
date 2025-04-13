@@ -1,4 +1,10 @@
+import logging
+import os
 import re
+from urllib.parse import urlparse
+
+# Setup logger
+logger = logging.getLogger("html2md")
 
 
 def find_nth_occurrence(text: str, substring: str, n: int) -> int:
@@ -24,3 +30,96 @@ def find_nth_occurrence(text: str, substring: str, n: int) -> int:
     matches = [match.start() for match in re.finditer(re.escape(substring), text)]
 
     return matches[n - 1] if len(matches) >= n else -1
+
+
+def extract_urls_from_markdown(markdown_content):
+    """
+    Extract URLs from markdown content using regex.
+
+    Args:
+        markdown_content (str): Markdown content to extract URLs from.
+
+    Returns:
+        list: List of URLs found in the markdown.
+    """
+    # Regex pattern to match markdown links [text](url)
+    pattern = r"\[.*?\]\((https?://[^\s)]+)\)"
+
+    # Find all matches
+    matches = re.findall(pattern, markdown_content)
+
+    # Log the number of URLs found
+    logger.info(f"Found {len(matches)} URLs in markdown content")
+
+    return matches
+
+
+def get_urls_from_file(file_path):
+    """
+    Read a file and extract URLs from its content.
+
+    Args:
+        file_path (str): Path to the markdown file.
+
+    Returns:
+        list: List of URLs found in the file.
+    """
+    try:
+        # Check if file exists
+        if not os.path.exists(file_path):
+            logger.error(f"File not found: {file_path}")
+            return []
+
+        # Read the file content
+        with open(file_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Extract URLs from the content
+        urls = extract_urls_from_markdown(content)
+        logger.info(f"Extracted {len(urls)} URLs from {file_path}")
+
+        return urls
+
+    except Exception as e:
+        logger.error(f"Error reading file {file_path}: {str(e)}")
+        return []
+
+
+def generate_safe_filename(url):
+    """
+    Generate a safe filename from a URL.
+
+    Args:
+        url (str): URL to convert to a safe filename.
+
+    Returns:
+        str: Safe filename based on the URL.
+    """
+    parsed = urlparse(url)
+
+    # Create a base for the filename from the netloc and path
+    base = parsed.netloc + parsed.path
+
+    # Include query parameters if present
+    if parsed.query:
+        base += "_" + parsed.query
+
+    # Include fragment if present
+    if parsed.fragment:
+        base += "_" + parsed.fragment
+
+    # Remove any special characters and replace with underscores
+    safe_name = re.sub(r"[^\w\-_.]", "_", base)
+
+    # Remove any leading or trailing underscores
+    safe_name = safe_name.strip("_")
+
+    # Ensure the filename is not too long
+    if len(safe_name) > 100:
+        safe_name = safe_name[:100]
+
+    # Add .md extension
+    if not safe_name.endswith(".md"):
+        safe_name += ".md"
+
+    return safe_name
