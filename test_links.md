@@ -1,4 +1,1 @@
-# Test Links
-
-[Documentation for Visual Studio Code](https://code.visualstudio.com/docs)
-[Visual Studio Code on Linux](https://code.visualstudio.com/docs/setup/linux)
+# Links\n- [Example](https://example.com)\n- [GitHub](https://github.com)

@@ -37,6 +37,8 @@ types-requests = "^2.32.0.20250328"
 
 [tool.poetry.scripts]
 html2md = "html2md.cli.modern_ui:entry_point"
+html2md-classic = "html2md.cli.main:main"
+html2md-config = "html2md.cli.config_manager:entry_point"
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

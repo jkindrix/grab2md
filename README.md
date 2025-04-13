@@ -100,6 +100,38 @@ The modern UI includes these enhancements:
 - Rich formatting for better readability
 - Silent logging (logs go to files, not the console)
 
+## Configuration Management
+
+html2md comes with a dedicated configuration management tool:
+
+```bash
+html2md-config [command]
+```
+
+### Available Configuration Commands
+
+- `show`: Display the current configuration
+- `path`: Show the path to the configuration file
+- `set`: Set a configuration value
+- `get`: Get a configuration value
+- `delete`: Delete a configuration value
+- `add-domain`: Interactive wizard to add domain-specific configuration
+- `list-domains`: List all configured domains with their settings
+- `reset`: Reset the configuration to default values
+
+### Example: Adding Domain-Specific Trimming Rules
+
+```bash
+# Add domain-specific rules interactively
+html2md-config add-domain
+
+# List all configured domains
+html2md-config list-domains
+
+# Set a specific configuration value
+html2md-config set domains.example.com.footer_marker "Copyright"
+```
+
 ## Examples
 
 ### Converting a URL with Authentication
