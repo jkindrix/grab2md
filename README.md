@@ -102,34 +102,34 @@ The modern UI includes these enhancements:
 
 ## Configuration Management
 
-html2md comes with a dedicated configuration management tool:
+html2md includes configuration management as subcommands:
 
 ```bash
-html2md-config [command]
+html2md config [command]
 ```
 
 ### Available Configuration Commands
 
-- `show`: Display the current configuration
-- `path`: Show the path to the configuration file
-- `set`: Set a configuration value
-- `get`: Get a configuration value
-- `delete`: Delete a configuration value
-- `add-domain`: Interactive wizard to add domain-specific configuration
-- `list-domains`: List all configured domains with their settings
-- `reset`: Reset the configuration to default values
+- `config show`: Display the current configuration
+- `config path`: Show the path to the configuration file
+- `config set`: Set a configuration value
+- `config get`: Get a configuration value
+- `config delete`: Delete a configuration value
+- `config add-domain`: Interactive wizard to add domain-specific configuration
+- `config list-domains`: List all configured domains with their settings
+- `config reset`: Reset the configuration to default values
 
 ### Example: Adding Domain-Specific Trimming Rules
 
 ```bash
 # Add domain-specific rules interactively
-html2md-config add-domain
+html2md config add-domain
 
 # List all configured domains
-html2md-config list-domains
+html2md config list-domains
 
 # Set a specific configuration value
-html2md-config set domains.example.com.footer_marker "Copyright"
+html2md config set domains.example.com.footer_marker "Copyright"
 ```
 
 ## Examples
