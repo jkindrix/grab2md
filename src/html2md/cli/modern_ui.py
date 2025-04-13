@@ -103,6 +103,15 @@ def process_single_with_progress(
                     progress.update(task_id, description=f"Saving to {output}")
                     with open(output, "w", encoding="utf-8") as f:
                         f.write(markdown_result)
+                    # Show more information about what happened
+                    progress.stop()
+                    console.print(
+                        f"[bold green]✓[/bold green] Downloaded and converted [bold]{source}[/bold]"
+                    )
+                    console.print(
+                        f"[bold green]✓[/bold green] Saved output to [bold]{output}[/bold]"
+                    )
+                    progress.start()
                     logger.info(f"Successfully processed URL: {source}")
                 else:
                     # Print to console
@@ -161,6 +170,15 @@ def process_single_with_progress(
                     progress.update(task_id, description=f"Saving to {output}")
                     with open(output, "w", encoding="utf-8") as f:
                         f.write(markdown_result)
+                    # Show more information about what happened
+                    progress.stop()
+                    console.print(
+                        f"[bold green]✓[/bold green] Converted local file [bold]{file_path}[/bold]"
+                    )
+                    console.print(
+                        f"[bold green]✓[/bold green] Saved output to [bold]{output}[/bold]"
+                    )
+                    progress.start()
                     logger.info(f"Successfully processed local file: {file_path}")
                 else:
                     # Print to console
@@ -310,13 +328,36 @@ def batch_command(
         BarColumn(),
         TextColumn("[bold]{task.completed}[/bold]"),
         console=console,
+        expand=True,  # Make progress bar take full width
     ) as progress:
         task = progress.add_task("Extracting URLs...", total=None)
 
         try:
-            # Create a custom wrapper function to update progress
+            # Create a custom wrapper function to update progress with more user feedback
             def progress_callback(message, url=None, status=None):
+                # Update the progress bar
                 progress.update(task, description=message)
+
+                # For certain informational messages, also print them
+                if status in ["info", "warning"]:
+                    # Pause the progress display temporarily
+                    progress.stop()
+
+                    if status == "warning":
+                        console.print(f"[yellow]⚠ {message}[/yellow]")
+                    elif "URLs to process" in message:
+                        console.print("[blue]Finding URLs in file:[/blue]")
+                    elif message.startswith("  "):  # This is a URL in the list
+                        # Extract just the URL, not the index
+                        url_part = (
+                            message.split(". ", 1)[1] if ". " in message else message
+                        )
+                        console.print(f"  [dim]{url_part.strip()}[/dim]")
+                    else:
+                        console.print(f"[blue]ℹ[/blue] {message}")
+
+                    # Resume the progress display
+                    progress.start()
 
             # Process the files with callback for updates
             processed_count = process_markdown_links(
@@ -339,9 +380,29 @@ def batch_command(
             )
             raise typer.Exit(1)
 
-    # Show summary of processing results
+    # Show summary of processing results with more detail
     console.print(
         f"\n✨ [bold green]Successfully processed {processed_count} URLs[/bold green]"
+    )
+
+    # List the files that were created
+    console.print("\n[bold blue]Files created:[/bold blue]")
+    created_files = []
+
+    # We need to get the url_to_file_mapping from the batch processor
+    # But since we can't, we'll walk the output directory and list all created markdown files
+    for root, dirs, files in os.walk(output_dir):
+        for file in files:
+            if file.endswith(".md"):
+                file_path = os.path.join(root, file)
+                rel_path = os.path.relpath(file_path, output_dir)
+                created_files.append(file_path)
+
+                # Just show the file path
+                console.print(f"[green]✓[/green] [bold]{rel_path}[/bold]")
+
+    console.print(
+        f"\n[bold green]Total files created: {len(created_files)}[/bold green]"
     )
 
     # Show output directory structure

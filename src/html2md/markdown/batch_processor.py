@@ -114,9 +114,22 @@ def process_markdown_links(source_files, output_dir, trim=True, progress_callbac
         urls = get_urls_from_file(source_file)
         if not urls:
             update_progress(f"No URLs found in file: {source_file}", status="warning")
+            update_progress(
+                "This file may contain URLs in a format that's not being detected.",
+                status="info",
+            )
+            update_progress(
+                "Supported formats: Markdown links, plain URLs, and HTML links.",
+                status="info",
+            )
             continue
 
         update_progress(f"Found {len(urls)} URLs in {source_file}")
+
+        # Log all found URLs for visibility
+        update_progress("URLs to process:", status="info")
+        for i, url in enumerate(urls, 1):
+            update_progress(f"  {i}. {url}", status="info")
 
         # Process each URL
         for index, url in enumerate(urls):

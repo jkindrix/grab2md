@@ -35,6 +35,7 @@ def find_nth_occurrence(text: str, substring: str, n: int) -> int:
 def extract_urls_from_markdown(markdown_content):
     """
     Extract URLs from markdown content using regex.
+    Supports multiple URL formats including markdown links, plain URLs, and URLs in bullet points.
 
     Args:
         markdown_content (str): Markdown content to extract URLs from.
@@ -42,16 +43,34 @@ def extract_urls_from_markdown(markdown_content):
     Returns:
         list: List of URLs found in the markdown.
     """
-    # Regex pattern to match markdown links [text](url)
-    pattern = r"\[.*?\]\((https?://[^\s)]+)\)"
+    urls = []
 
-    # Find all matches
-    matches = re.findall(pattern, markdown_content)
+    # Pattern 1: Markdown links [text](url)
+    pattern1 = r"\[.*?\]\((https?://[^\s)]+)\)"
+    urls.extend(re.findall(pattern1, markdown_content))
+
+    # Pattern 2: Plain URLs starting with http:// or https://
+    # Exclude URLs that are already part of markdown links
+    content_without_md_links = re.sub(
+        r"\[.*?\]\(https?://[^\s)]+\)", "", markdown_content
+    )
+    pattern2 = r"(https?://[^\s)<>\"']+)"
+    urls.extend(re.findall(pattern2, content_without_md_links))
+
+    # Pattern 3: URLs in HTML href attributes
+    pattern3 = r'href=[\'"]?(https?://[^\'"<>\s]+)'
+    urls.extend(re.findall(pattern3, markdown_content))
+
+    # Remove duplicates while preserving order
+    unique_urls = []
+    for url in urls:
+        if url not in unique_urls:
+            unique_urls.append(url)
 
     # Log the number of URLs found
-    logger.info(f"Found {len(matches)} URLs in markdown content")
+    logger.info(f"Found {len(unique_urls)} URLs in markdown content")
 
-    return matches
+    return unique_urls
 
 
 def get_urls_from_file(file_path):
