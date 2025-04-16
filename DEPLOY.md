@@ -57,6 +57,9 @@ html2md convert https://example.com --output example.md
 
 # Process a batch of URLs from a file
 html2md batch urls.txt --output-dir docs
+
+# Process batch URLs and output directly to domain-named directories
+html2md batch urls.txt --output-dir docs --flatten
 ```
 
 For the classic interface:
