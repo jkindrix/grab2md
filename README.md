@@ -88,17 +88,23 @@ html2md batch "docs/*.md" --output-dir output
 - `--output-dir DIR, -o DIR`: Directory to save the output files and folders (default: "output")
 - `--trim/--no-trim`: Enable/disable trimming based on domain-specific rules
 - `--flatten`: Output files directly to domain directories (e.g., 'docs.github.com/')
+- `--visualize`: Display a visual representation of the output directory structure
+- `--report FILE`: Generate a detailed Markdown report of the process
+- `--quiet`: Reduce output verbosity, showing only essential information
 
 ## UI Features
 
 The modern UI includes these enhancements:
 
-- Beautiful colored output with syntax highlighting
-- Progress spinners and bars for long-running operations
-- Detailed status updates during batch processing
-- Summary tables showing results of operations
-- File and directory counts for batch operations
-- Rich formatting for better readability
+- Beautiful colored output with adaptive theme and syntax highlighting
+- Progress spinners and bars with time estimates for long-running operations
+- Detailed status updates with rich emoji indicators during batch processing
+- Interactive directory tree visualization in `--visualize` mode
+- Summary tables and panels showing detailed operation results
+- File and directory counts with intelligent display limits
+- Rich formatting with semantic styling for better readability
+- Terminal capability detection for optimal rendering in any environment
+- Detailed error handling with debug mode support
 - Silent logging (logs go to files, not the console)
 
 ## Configuration Management
@@ -157,13 +163,26 @@ For a simpler output structure, use the flatten option:
 html2md batch urls.txt --output-dir documentation --flatten
 ```
 
+For a rich visual display of the results:
+
+```bash
+html2md batch urls.txt --output-dir documentation --visualize
+```
+
+Or generate a markdown report file along with the output:
+
+```bash
+html2md batch urls.txt --output-dir documentation --report processing-report.md
+```
+
 This will:
 1. Extract all URLs from the provided files (including plain URL lists)
 2. Convert each URL's HTML content to markdown
 3. Save the files in a structured directory layout
 4. Update links between files to maintain correct references
+5. Provide beautiful visuals and detailed status updates throughout
 
-All with beautiful progress indicators and detailed status updates!
+All with intuitive progress indicators and intelligent terminal adaptations!
 
 ## License
 
