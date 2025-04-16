@@ -281,6 +281,11 @@ def batch_command(
         "--trim/--no-trim",
         help="Enable/disable trimming based on domain-specific rules.",
     ),
+    flatten_output: bool = typer.Option(
+        False,
+        "--flatten",
+        help="Output files directly to domain directories (e.g., 'docs.github.com/')",
+    ),
     log_level: LogLevel = typer.Option(
         LogLevel.INFO, "--log-level", help="Set logging level."
     ),
@@ -365,6 +370,7 @@ def batch_command(
                 output_dir,
                 trim=trim,
                 progress_callback=progress_callback,
+                flatten_output=flatten_output,
             )
 
             # Set completed state

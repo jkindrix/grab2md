@@ -98,7 +98,7 @@ def process_single(source, trim=True, output=None, no_cookies=False, local=False
     return False
 
 
-def process_batch(input_files, output_dir, trim=True):
+def process_batch(input_files, output_dir, trim=True, flatten_output=False):
     """Process a batch of markdown files with links to convert."""
     # Expand any glob patterns in input files
     expanded_files = []
@@ -115,7 +115,9 @@ def process_batch(input_files, output_dir, trim=True):
 
     # Process the files
     try:
-        processed_count = process_markdown_links(expanded_files, output_dir, trim)
+        processed_count = process_markdown_links(
+            expanded_files, output_dir, trim, flatten_output=flatten_output
+        )
         logger.info(f"Batch processing complete. Processed {processed_count} URLs.")
         return processed_count > 0
     except Exception as e:
@@ -179,6 +181,12 @@ def main():
         dest="trim",
         help="Disable trimming based on domain-specific rules.",
     )
+    batch_parser.add_argument(
+        "--flatten",
+        action="store_true",
+        dest="flatten_output",
+        help="Output files directly to domain directories (e.g., 'docs.github.com/')",
+    )
 
     # Common arguments
     parser.add_argument(
@@ -214,7 +222,12 @@ def main():
                 local=args.local,
             )
     elif args.command == "batch":
-        process_batch(args.input_files, args.output_dir, args.trim)
+        process_batch(
+            args.input_files,
+            args.output_dir,
+            args.trim,
+            flatten_output=getattr(args, "flatten_output", False),
+        )
 
 
 if __name__ == "__main__":

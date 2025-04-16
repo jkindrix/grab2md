@@ -25,13 +25,15 @@ def build_headers(url):
     }
 
 
-def create_directory_structure(output_dir, url):
+def create_directory_structure(output_dir, url, flatten_domain=False):
     """
     Create a directory structure based on the URL's domain.
 
     Args:
         output_dir (str): Base output directory
         url (str): URL to create structure for
+        flatten_domain (bool, optional): If True, uses the domain name directly as output directory
+                                         instead of creating a subdirectory structure. Defaults to False.
 
     Returns:
         str: Path to the directory where the file should be saved
@@ -39,16 +41,24 @@ def create_directory_structure(output_dir, url):
     parsed_url = urlparse(url)
     domain = parsed_url.netloc
 
-    # Create domain directory
-    domain_dir = os.path.join(output_dir, domain)
+    if flatten_domain:
+        # Just use the domain as the output directory
+        domain_dir = domain
 
-    # Create path directories if they exist
-    path_parts = parsed_url.path.strip("/").split("/")
-    if path_parts and path_parts[0]:
-        # If there are path components, create directories for them
-        for i in range(len(path_parts) - 1):  # Exclude the last part (filename)
-            if path_parts[i]:
-                domain_dir = os.path.join(domain_dir, path_parts[i])
+        # Check if an absolute output path was provided
+        if os.path.isabs(output_dir):
+            domain_dir = os.path.join(output_dir, domain_dir)
+    else:
+        # Create domain directory as a subdirectory
+        domain_dir = os.path.join(output_dir, domain)
+
+        # Create path directories if they exist
+        path_parts = parsed_url.path.strip("/").split("/")
+        if path_parts and path_parts[0]:
+            # If there are path components, create directories for them
+            for i in range(len(path_parts) - 1):  # Exclude the last part (filename)
+                if path_parts[i]:
+                    domain_dir = os.path.join(domain_dir, path_parts[i])
 
     # Create the directories if they don't exist
     os.makedirs(domain_dir, exist_ok=True)
@@ -80,7 +90,9 @@ def rewrite_links(content, url_mapping, base_output_dir):
     return content
 
 
-def process_markdown_links(source_files, output_dir, trim=True, progress_callback=None):
+def process_markdown_links(
+    source_files, output_dir, trim=True, progress_callback=None, flatten_output=False
+):
     """
     Process markdown files, extract URLs, and convert each URL to markdown.
 
@@ -89,6 +101,8 @@ def process_markdown_links(source_files, output_dir, trim=True, progress_callbac
         output_dir (str): Directory to save the output files
         trim (bool, optional): Whether to trim the markdown. Defaults to True.
         progress_callback (callable, optional): Function to call with progress updates
+        flatten_output (bool, optional): If True, creates output directories directly
+                                        named after domain. Defaults to False.
 
     Returns:
         int: Number of processed URLs
@@ -146,7 +160,9 @@ def process_markdown_links(source_files, output_dir, trim=True, progress_callbac
             )
 
             # Create directory structure for the URL
-            url_dir = create_directory_structure(output_dir, url)
+            url_dir = create_directory_structure(
+                output_dir, url, flatten_domain=flatten_output
+            )
 
             # Generate a safe filename for the URL
             safe_filename = generate_safe_filename(url)
