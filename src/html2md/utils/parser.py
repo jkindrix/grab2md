@@ -61,6 +61,10 @@ def extract_urls_from_markdown(markdown_content):
     pattern3 = r'href=[\'"]?(https?://[^\'"<>\s]+)'
     urls.extend(re.findall(pattern3, markdown_content))
 
+    # Pattern 4: One URL per line (common in URL list files)
+    pattern4 = r"^(https?://[^\s)<>\"']+)$"
+    urls.extend(re.findall(pattern4, markdown_content, re.MULTILINE))
+
     # Remove duplicates while preserving order
     unique_urls = []
     for url in urls:
