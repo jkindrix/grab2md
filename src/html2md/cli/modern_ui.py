@@ -6,17 +6,32 @@ import glob
 import json
 import logging
 import os
+import platform
+import sys
+import time
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
 
 import typer
-from rich.console import Console
+from rich.console import Console, Group
+from rich.layout import Layout
 from rich.panel import Panel
-from rich.progress import BarColumn, Progress, SpinnerColumn, TaskID, TextColumn
+from rich.progress import (
+    BarColumn,
+    MofNCompleteColumn,
+    Progress,
+    SpinnerColumn,
+    TaskID,
+    TextColumn,
+    TimeElapsedColumn,
+)
 from rich.prompt import Confirm, Prompt
 from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
+from rich.theme import Theme
+from rich.tree import Tree
 
 from html2md.config.loader import (
     CONFIG_FILE,
@@ -29,11 +44,54 @@ from html2md.markdown.converter import html_to_markdown, local_html_to_markdown
 from html2md.utils.logger import setup_logging
 from html2md.utils.parser import is_url
 
+# Create a custom theme with enhanced colors
+html2md_theme = Theme(
+    {
+        "info": "cyan",
+        "warning": "yellow",
+        "error": "bold red",
+        "success": "bold green",
+        "command": "bold magenta",
+        "url": "underline blue",
+        "filename": "bold cyan",
+        "directory": "bold blue",
+        "count": "bold yellow",
+        "header": "bold white on blue",
+        "subheader": "bold cyan",
+    }
+)
+
 # Configure logger to use a file instead of stdout
 logger = setup_logging(console_output=False)
 
-# Create Rich console for beautiful output
-console = Console()
+# Create Rich console with the custom theme
+console = Console(theme=html2md_theme)
+
+# Define system information
+SYSTEM_INFO = {
+    "system": platform.system(),
+    "release": platform.release(),
+    "version": platform.version(),
+    "python": platform.python_version(),
+}
+
+# Define emojis for different statuses
+STATUS_EMOJI = {
+    "success": "✅",
+    "error": "❌",
+    "warning": "⚠️",
+    "info": "ℹ️",
+    "processing": "🔄",
+    "download": "📥",
+    "upload": "📤",
+    "config": "⚙️",
+    "markdown": "📝",
+    "html": "🌐",
+    "batch": "📚",
+    "convert": "🔄",
+    "file": "📄",
+    "directory": "📁",
+}
 
 # Create Typer app
 app = typer.Typer(
@@ -46,6 +104,79 @@ config_app = typer.Typer(
     help="Manage html2md configuration settings.",
     add_completion=False,
 )
+
+
+# Create a custom class for rich progress display with estimated time
+class EnhancedProgress(Progress):
+    """Enhanced progress display with custom styling and additional columns."""
+
+    def __init__(self):
+        super().__init__(
+            SpinnerColumn(),
+            TextColumn("[bold blue]{task.description}[/bold blue]"),
+            BarColumn(bar_width=40, style="cyan", complete_style="green"),
+            MofNCompleteColumn(),
+            TextColumn("•"),
+            TimeElapsedColumn(),
+        )
+
+
+def show_welcome_banner():
+    """Display a beautiful welcome banner with system information."""
+    title = Text("HTML2MD", style="bold white on blue")
+    subtitle = Text("Convert HTML to Markdown with Style", style="italic cyan")
+
+    # Create version information
+    version_info = Table.grid(padding=(0, 1))
+    version_info.add_row("Version:", "1.0.0")
+    version_info.add_row("Python:", SYSTEM_INFO["python"])
+    version_info.add_row("System:", f"{SYSTEM_INFO['system']} {SYSTEM_INFO['release']}")
+
+    # Create a help hint
+    help_text = Text("\nUse --help with any command for more information", style="dim")
+
+    # Combine all elements
+    banner_content = Group(title, subtitle, Text(), version_info, help_text)
+    banner = Panel(
+        banner_content,
+        border_style="blue",
+        padding=(1, 2),
+        title="Welcome to HTML2MD",
+        subtitle="https://github.com/jkindrix/html2md",
+    )
+
+    console.print(banner)
+
+
+def display_directory_tree(path, max_depth=3):
+    """Display a directory structure as a rich tree."""
+    root = Tree(f"📁 {path}", style="bold blue")
+
+    def add_directory(tree, path, depth=0):
+        if depth >= max_depth:
+            tree.add("...")
+            return
+
+        for item in sorted(os.listdir(path)):
+            item_path = os.path.join(path, item)
+            if os.path.isdir(item_path):
+                branch = tree.add(f"📁 {item}", style="bold blue")
+                if depth < max_depth - 1:
+                    add_directory(branch, item_path, depth + 1)
+            else:
+                icon = "📄"
+                if item.endswith(".md"):
+                    icon = "📝"
+                elif item.endswith(".html"):
+                    icon = "🌐"
+                tree.add(f"{icon} {item}", style="green")
+
+    try:
+        add_directory(root, path)
+        return root
+    except Exception as e:
+        return Text(f"Error displaying directory tree: {str(e)}", style="bold red")
+
 
 # Add config app as a subcommand
 app.add_typer(config_app, name="config")
@@ -286,6 +417,21 @@ def batch_command(
         "--flatten",
         help="Output files directly to domain directories (e.g., 'docs.github.com/')",
     ),
+    visualize: bool = typer.Option(
+        False,
+        "--visualize",
+        help="Display a visual representation of the output directory structure.",
+    ),
+    report: Optional[Path] = typer.Option(
+        None,
+        "--report",
+        help="Generate a detailed Markdown report of the process.",
+    ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        help="Reduce output verbosity, showing only essential information.",
+    ),
     log_level: LogLevel = typer.Option(
         LogLevel.INFO, "--log-level", help="Set logging level."
     ),
@@ -293,13 +439,42 @@ def batch_command(
     """Process markdown files with links and create modular output."""
     set_log_level(log_level)
 
-    # Display a beautiful header
-    console.print(
-        Panel.fit(
-            "📚 [bold magenta]html2md batch[/bold magenta] - Markdown Link Processor",
-            border_style="magenta",
+    # Start time for processing report
+    start_time = time.time()
+
+    # Create layout for more advanced display
+    if not quiet:
+        layout = Layout()
+        layout.split(
+            Layout(name="header", size=3),
+            Layout(name="main", ratio=1),
         )
-    )
+
+        # Create header with styled title and stats
+        header_text = Text()
+        header_text.append("📚 ", style="bold")
+        header_text.append("HTML2MD BATCH PROCESSOR", style="bold magenta")
+        header_text.append(
+            " - Convert URLs to structured Markdown", style="italic cyan"
+        )
+
+        layout["header"].update(
+            Panel(
+                header_text,
+                border_style="magenta",
+                padding=(1, 2),
+            )
+        )
+
+        console.print(layout)
+    else:
+        # Display minimal header in quiet mode
+        console.print(
+            Panel.fit(
+                "📚 [bold magenta]html2md batch[/bold magenta] - Markdown Link Processor",
+                border_style="magenta",
+            )
+        )
 
     # Expand glob patterns
     expanded_files = []
@@ -324,17 +499,10 @@ def batch_command(
     os.makedirs(output_dir, exist_ok=True)
     console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
 
-    # Process files with live progress
+    # Process files with enhanced live progress
     console.print("\n[bold]Starting batch processing...[/bold]")
 
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[bold purple]{task.description}[/bold purple]"),
-        BarColumn(),
-        TextColumn("[bold]{task.completed}[/bold]"),
-        console=console,
-        expand=True,  # Make progress bar take full width
-    ) as progress:
+    with EnhancedProgress() as progress:
         task = progress.add_task("Extracting URLs...", total=None)
 
         try:
@@ -391,8 +559,8 @@ def batch_command(
         f"\n✨ [bold green]Successfully processed {processed_count} URLs[/bold green]"
     )
 
-    # List the files that were created
-    console.print("\n[bold blue]Files created:[/bold blue]")
+    # Generate summary information
+    processing_time = time.time() - start_time
     created_files = []
 
     # We need to get the url_to_file_mapping from the batch processor
@@ -402,38 +570,146 @@ def batch_command(
             if file.endswith(".md"):
                 file_path = os.path.join(root, file)
                 rel_path = os.path.relpath(file_path, output_dir)
-                created_files.append(file_path)
-
-                # Just show the file path
-                console.print(f"[green]✓[/green] [bold]{rel_path}[/bold]")
-
-    console.print(
-        f"\n[bold green]Total files created: {len(created_files)}[/bold green]"
-    )
-
-    # Show output directory structure
-    console.print("\n[bold blue]Output directory structure:[/bold blue]")
+                created_files.append((file_path, rel_path))
 
     # Count output files and directories
-    file_count = 0
-    dir_count = 0
+    file_count = len(created_files)
 
+    dir_count = 0
     for root, dirs, files in os.walk(output_dir):
         dir_count += len(dirs)
-        file_count += len(files)
 
-    # Create a table to show the structure
-    table = Table(show_header=True)
-    table.add_column("Type", style="cyan")
-    table.add_column("Count", style="green")
+    # Display the results based on the visualization mode
+    if visualize and not quiet and file_count > 0:
+        # Create an enhanced visual display of results
+        results_layout = Layout()
+        results_layout.split_column(
+            Layout(name="summary", size=4),
+            Layout(name="files", ratio=1),
+            Layout(name="directory", ratio=2 if dir_count > 0 else 0),
+        )
 
-    table.add_row("Directories", str(dir_count))
-    table.add_row("Files", str(file_count))
+        # Summary panel with statistics and timing
+        summary_table = Table.grid(padding=1)
+        summary_table.add_column(style="bold blue")
+        summary_table.add_column(style="green")
 
-    console.print(table)
+        summary_table.add_row(
+            "Total URLs Processed:", f"[count]{processed_count}[/count]"
+        )
+        summary_table.add_row("Files Created:", f"[count]{file_count}[/count]")
+        summary_table.add_row("Directories Created:", f"[count]{dir_count}[/count]")
+        summary_table.add_row(
+            "Processing Time:", f"[count]{processing_time:.2f}[/count] seconds"
+        )
 
+        summary_panel = Panel(
+            summary_table,
+            title="Processing Summary",
+            border_style="green",
+            padding=(1, 2),
+        )
+        results_layout["summary"].update(summary_panel)
+
+        # Files list in a scrollable panel (show sample if many files)
+        if file_count > 0:
+            files_content = Text()
+            max_files_to_show = min(10, file_count)
+
+            for i, (_, rel_path) in enumerate(created_files[:max_files_to_show]):
+                files_content.append(f"{STATUS_EMOJI['success']} ", style="green")
+                files_content.append(rel_path, style="filename")
+                files_content.append("\n")
+
+            if file_count > max_files_to_show:
+                files_content.append(
+                    f"\n... and {file_count - max_files_to_show} more files",
+                    style="dim",
+                )
+
+            files_panel = Panel(
+                files_content,
+                title=f"Files Created ({file_count} total)",
+                border_style="blue",
+                padding=(1, 2),
+            )
+            results_layout["files"].update(files_panel)
+
+        # Directory tree visualization
+        if dir_count > 0:
+            tree = display_directory_tree(output_dir)
+            dir_panel = Panel(
+                tree,
+                title="Directory Structure",
+                border_style="cyan",
+                padding=(1, 2),
+            )
+            results_layout["directory"].update(dir_panel)
+
+        console.print("\n")
+        console.print(results_layout)
+
+    else:
+        # Standard output for non-visual mode
+        if not quiet:
+            console.print("\n[bold blue]Files created:[/bold blue]")
+
+            # Just show first few files with count
+            max_files_to_show = min(5, file_count)
+            for _, rel_path in created_files[:max_files_to_show]:
+                console.print(f"[green]✓[/green] [bold]{rel_path}[/bold]")
+
+            if file_count > max_files_to_show:
+                console.print(f"... and {file_count - max_files_to_show} more files")
+
+            console.print(
+                f"\n[bold green]Total files created: {file_count}[/bold green]"
+            )
+
+            # Show simple output directory structure
+            console.print("\n[bold blue]Output directory structure:[/bold blue]")
+
+            # Create a table to show the structure
+            table = Table(show_header=True)
+            table.add_column("Type", style="cyan")
+            table.add_column("Count", style="green")
+
+            table.add_row("Directories", str(dir_count))
+            table.add_row("Files", str(file_count))
+
+            console.print(table)
+
+    # Generate report if requested
+    if report is not None:
+        report_content = f"""# HTML2MD Batch Processing Report
+
+## Summary
+- **Date:** {time.strftime('%Y-%m-%d %H:%M:%S')}
+- **Total URLs Processed:** {processed_count}
+- **Files Created:** {file_count}
+- **Directories Created:** {dir_count}
+- **Processing Time:** {processing_time:.2f} seconds
+- **Output Directory:** {output_dir}
+- **Options Used:**
+  - Trim: {trim}
+  - Flatten Output: {flatten_output}
+
+## Files Created
+"""
+        # Add list of all files created
+        for _, rel_path in created_files:
+            report_content += f"- {rel_path}\n"
+
+        # Save report
+        with open(report, "w") as f:
+            f.write(report_content)
+        console.print(
+            f"\n[success]Report saved to: [filename]{report}[/filename][/success]"
+        )
+
+    # Final success message
     console.print(
-        f"\n[bold green]Batch processing complete! Output saved to {output_dir}[/bold green]"
+        f"\n[success]Batch processing complete! Output saved to [directory]{output_dir}[/directory][/success]"
     )
 
 
@@ -442,9 +718,16 @@ def main(
     log_level: LogLevel = typer.Option(
         LogLevel.INFO, "--log-level", help="Set logging level."
     ),
+    no_banner: bool = typer.Option(
+        False, "--no-banner", help="Don't display the welcome banner."
+    ),
 ):
     """Main entry point for the application."""
     set_log_level(log_level)
+
+    # Show welcome banner unless disabled
+    if not no_banner and typer.get_app_dir("html2md") not in sys.argv[0]:
+        show_welcome_banner()
 
 
 # Configuration management commands
@@ -728,6 +1011,67 @@ def reset_config():
     console.print(Panel(syntax, title="Default Configuration", border_style="yellow"))
 
 
+def detect_color_support():
+    """Detect if the terminal supports colors and how many."""
+    # Check if NO_COLOR environment variable is set (respecting no-color.org standard)
+    if os.environ.get("NO_COLOR") is not None:
+        return 0
+
+    # Check for common CI environments that often have color support
+    if os.environ.get("CI") or os.environ.get("GITHUB_ACTIONS"):
+        return 256
+
+    # Use platform detection
+    if platform.system() == "Windows":
+        # Check for Windows Terminal or ConEmu which have good color support
+        if os.environ.get("WT_SESSION") or os.environ.get("ConEmuANSI") == "ON":
+            return 256
+        # Check for terminals that support 16 colors
+        if os.environ.get("TERM") in ["xterm", "xterm-color"]:
+            return 16
+        # Default minimal windows cmd.exe (unless ANSICON or similar is installed)
+        if os.environ.get("ANSICON"):
+            return 16
+        return 0
+
+    # Most modern Unix terminals support at least 16 colors, many support 256
+    if os.environ.get("TERM") in ["xterm-256color", "screen-256color"]:
+        return 256
+    if os.environ.get("COLORTERM") in ["truecolor", "24bit"]:
+        return 16777216  # 24-bit color
+
+    # Default to 16 colors for most terminals
+    return 16
+
+
 def entry_point():
     """Entry point for the CLI."""
-    app()
+    # Configure color detection
+    color_system = "auto"
+    color_level = detect_color_support()
+
+    if color_level == 0:
+        color_system = None
+    elif color_level == 16:
+        color_system = "standard"
+    elif color_level == 256:
+        color_system = "256"
+    elif color_level >= 16777216:
+        color_system = "truecolor"
+
+    # Update console with detected color system
+    global console
+    console = Console(theme=html2md_theme, color_system=color_system)
+
+    # Run the app
+    try:
+        app()
+    except Exception as e:
+        console.print(f"[error]Error: {str(e)}[/error]")
+        if os.environ.get("HTML2MD_DEBUG"):
+            console.print_exception(show_locals=True)
+        else:
+            console.print(
+                "[dim]Run with HTML2MD_DEBUG=1 for detailed error information[/dim]"
+            )
+        sys.exit(1)
