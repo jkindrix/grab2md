@@ -41,6 +41,7 @@ from html2md.config.loader import (
 from html2md.cookies.session_manager import get_session
 from html2md.markdown.batch_processor import build_headers, process_markdown_links
 from html2md.markdown.converter import html_to_markdown, local_html_to_markdown
+from html2md.markdown.crawler import crawl_website
 from html2md.utils.logger import setup_logging
 from html2md.utils.parser import is_url
 
@@ -89,8 +90,12 @@ STATUS_EMOJI = {
     "html": "🌐",
     "batch": "📚",
     "convert": "🔄",
+    "crawl": "🕸️",
     "file": "📄",
     "directory": "📁",
+    "link": "🔗",
+    "queued": "⏳",
+    "visited": "👁️",
 }
 
 # Create Typer app
@@ -710,6 +715,299 @@ def batch_command(
     # Final success message
     console.print(
         f"\n[success]Batch processing complete! Output saved to [directory]{output_dir}[/directory][/success]"
+    )
+
+
+@app.command(name="crawl")
+def crawl_command(
+    start_urls: List[str] = typer.Argument(..., help="Starting URLs to crawl."),
+    output_dir: Path = typer.Option(
+        "output",
+        "--output-dir",
+        "-o",
+        help="Directory to save output files and folders.",
+    ),
+    follow_option: str = typer.Option(
+        "domain-only",
+        "--follow",
+        help="How to follow links. Options: 'domain-only', 'host-only', 'subdomain', or a regex pattern.",
+    ),
+    max_depth: int = typer.Option(
+        3, "--max-depth", help="Maximum link depth to follow."
+    ),
+    max_pages: int = typer.Option(
+        100, "--max-pages", help="Maximum number of pages to crawl."
+    ),
+    trim: bool = typer.Option(
+        True,
+        "--trim/--no-trim",
+        help="Enable/disable trimming based on domain-specific rules.",
+    ),
+    flatten_output: bool = typer.Option(
+        False,
+        "--flatten",
+        help="Output files directly to domain directories (e.g., 'docs.github.com/')",
+    ),
+    visualize: bool = typer.Option(
+        False,
+        "--visualize",
+        help="Display a visual representation of the output directory structure.",
+    ),
+    quiet: bool = typer.Option(
+        False,
+        "--quiet",
+        help="Reduce output verbosity, showing only essential information.",
+    ),
+    log_level: LogLevel = typer.Option(
+        LogLevel.INFO, "--log-level", help="Set logging level."
+    ),
+):
+    """Recursively crawl websites from starting URLs and convert to markdown."""
+    set_log_level(log_level)
+
+    # Start time for processing report
+    start_time = time.time()
+
+    # Create layout for more advanced display
+    if not quiet:
+        layout = Layout()
+        layout.split(
+            Layout(name="header", size=3),
+            Layout(name="main", ratio=1),
+        )
+
+        # Create header with styled title and stats
+        header_text = Text()
+        header_text.append("🕸️ ", style="bold")
+        header_text.append("HTML2MD WEBSITE CRAWLER", style="bold blue")
+        header_text.append(
+            " - Recursively convert websites to Markdown", style="italic cyan"
+        )
+
+        layout["header"].update(
+            Panel(
+                header_text,
+                border_style="blue",
+                padding=(1, 2),
+            )
+        )
+
+        console.print(layout)
+    else:
+        # Display minimal header in quiet mode
+        console.print(
+            Panel.fit(
+                "🕸️ [bold blue]html2md crawl[/bold blue] - Website Crawler",
+                border_style="blue",
+            )
+        )
+
+    # Create output directory
+    os.makedirs(output_dir, exist_ok=True)
+    console.print(f"[bold blue]Output directory:[/bold blue] {output_dir}")
+
+    # Set up progress display for crawling
+    processed_total = 0
+    total_urls_processed = 0
+    url_to_file_mappings = {}
+
+    for start_url in start_urls:
+        if not is_url(start_url):
+            console.print(f"[bold red]❌ Invalid URL: {start_url}[/bold red]")
+            continue
+
+        console.print(f"\n[bold blue]Starting crawl from:[/bold blue] {start_url}")
+        console.print(f"[bold]Follow option:[/bold] {follow_option}")
+        console.print(f"[bold]Maximum depth:[/bold] {max_depth}")
+        console.print(f"[bold]Maximum pages:[/bold] {max_pages}")
+
+        with EnhancedProgress() as progress:
+            task = progress.add_task(f"Crawling {start_url}...", total=None)
+
+            # Create a custom wrapper function to update progress with more user feedback
+            def progress_callback(message, url=None, status=None):
+                # Update the progress bar
+                progress.update(task, description=message)
+
+                # For certain messages, also print them
+                if (
+                    url
+                    and status
+                    in ["queued", "processing", "failed", "saved", "extracting_links"]
+                    and not quiet
+                ):
+                    # Pause the progress display temporarily
+                    progress.stop()
+
+                    if status == "queued":
+                        console.print(
+                            f"  {STATUS_EMOJI['queued']} [dim]Queued: {url}[/dim]"
+                        )
+                    elif status == "processing":
+                        console.print(
+                            f"  {STATUS_EMOJI['processing']} Processing: {url}"
+                        )
+                    elif status == "failed":
+                        console.print(
+                            f"  {STATUS_EMOJI['error']} [red]Failed: {url}[/red]"
+                        )
+                    elif status == "saved":
+                        console.print(
+                            f"  {STATUS_EMOJI['success']} [green]Saved: {url}[/green]"
+                        )
+                    elif status == "extracting_links":
+                        message_parts = message.split(": ", 1)
+                        if len(message_parts) > 1:
+                            console.print(
+                                f"  {STATUS_EMOJI['link']} {message_parts[1]}"
+                            )
+
+                    # Resume the progress display
+                    progress.start()
+
+            try:
+                # Crawl the website
+                processed_count, url_mapping = crawl_website(
+                    start_url,
+                    output_dir,
+                    follow_option=follow_option,
+                    max_depth=max_depth,
+                    max_pages=max_pages,
+                    trim=trim,
+                    progress_callback=progress_callback,
+                    flatten_output=flatten_output,
+                )
+
+                # Update totals
+                processed_total += 1
+                total_urls_processed += processed_count
+                url_to_file_mappings.update(url_mapping)
+
+                # Set completed state
+                progress.update(
+                    task,
+                    description=f"✅ Completed crawling {start_url} - Processed {processed_count} pages",
+                )
+
+            except Exception as e:
+                logger.error(f"Error during recursive crawling of {start_url}: {e}")
+                progress.update(task, description=f"❌ Error: {str(e)}")
+                console.print(
+                    f"[bold red]Error during crawling {start_url}: {str(e)}[/bold red]"
+                )
+
+    # Show summary of processing results with more detail
+    if processed_total > 0:
+        msg = f"\n✨ [bold green]Successfully processed {total_urls_processed} pages"
+        msg += f" from {processed_total}/{len(start_urls)} URLs[/bold green]"
+        console.print(msg)
+
+        # Generate summary information
+        processing_time = time.time() - start_time
+        file_count = len(url_to_file_mappings)
+
+        dir_count = 0
+        for root, dirs, files in os.walk(output_dir):
+            dir_count += len(dirs)
+
+        # Display the results based on the visualization mode
+        if visualize and not quiet and file_count > 0:
+            # Create an enhanced visual display of results
+            results_layout = Layout()
+            results_layout.split_column(
+                Layout(name="summary", size=4),
+                Layout(name="files", ratio=1),
+                Layout(name="directory", ratio=2 if dir_count > 0 else 0),
+            )
+
+            # Summary panel with statistics and timing
+            summary_table = Table.grid(padding=1)
+            summary_table.add_column(style="bold blue")
+            summary_table.add_column(style="green")
+
+            summary_table.add_row(
+                "Total URLs Crawled:", f"[count]{total_urls_processed}[/count]"
+            )
+            summary_table.add_row("Files Created:", f"[count]{file_count}[/count]")
+            summary_table.add_row("Directories Created:", f"[count]{dir_count}[/count]")
+            summary_table.add_row(
+                "Processing Time:", f"[count]{processing_time:.2f}[/count] seconds"
+            )
+
+            summary_panel = Panel(
+                summary_table,
+                title="Crawling Summary",
+                border_style="green",
+                padding=(1, 2),
+            )
+            results_layout["summary"].update(summary_panel)
+
+            # Files list in a scrollable panel (show sample if many files)
+            if file_count > 0:
+                files_content = Text()
+                max_files_to_show = min(10, file_count)
+
+                for i, (url, path) in enumerate(
+                    list(url_to_file_mappings.items())[:max_files_to_show]
+                ):
+                    files_content.append(f"{STATUS_EMOJI['success']} ", style="green")
+                    rel_path = os.path.relpath(path, output_dir)
+                    files_content.append(rel_path, style="filename")
+                    files_content.append("\n")
+
+                if file_count > max_files_to_show:
+                    files_content.append(
+                        f"\n... and {file_count - max_files_to_show} more files",
+                        style="dim",
+                    )
+
+                files_panel = Panel(
+                    files_content,
+                    title=f"Files Created ({file_count} total)",
+                    border_style="blue",
+                    padding=(1, 2),
+                )
+                results_layout["files"].update(files_panel)
+
+            # Directory tree visualization
+            if dir_count > 0:
+                tree = display_directory_tree(output_dir)
+                dir_panel = Panel(
+                    tree,
+                    title="Directory Structure",
+                    border_style="cyan",
+                    padding=(1, 2),
+                )
+                results_layout["directory"].update(dir_panel)
+
+            console.print("\n")
+            console.print(results_layout)
+
+        else:
+            # Standard output for non-visual mode
+            if not quiet:
+                console.print("\n[bold blue]Files created:[/bold blue]")
+
+                # Just show first few files with count
+                max_files_to_show = min(5, file_count)
+                for i, (url, path) in enumerate(
+                    list(url_to_file_mappings.items())[:max_files_to_show]
+                ):
+                    rel_path = os.path.relpath(path, output_dir)
+                    console.print(f"[green]✓[/green] [bold]{rel_path}[/bold]")
+
+                if file_count > max_files_to_show:
+                    console.print(
+                        f"... and {file_count - max_files_to_show} more files"
+                    )
+
+                console.print(
+                    f"\n[bold green]Total files created: {file_count}[/bold green]"
+                )
+
+    # Final success message
+    console.print(
+        f"\n[success]Website crawling complete! Output saved to [directory]{output_dir}[/directory][/success]"
     )
 
 

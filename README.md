@@ -9,6 +9,7 @@ A command-line utility for converting HTML content to Markdown.
 - Support for cookie-based authentication
 - Domain-specific content trimming
 - Batch processing of markdown files containing links
+- Recursive website crawling with link following
 - Modular output with preserved link structure
 - Beautiful modern UI with progress indicators
 - Chrome extension for instant web page conversion
@@ -92,6 +93,15 @@ html2md batch "docs/*.md" --output-dir output
 - `--visualize`: Display a visual representation of the output directory structure
 - `--report FILE`: Generate a detailed Markdown report of the process
 - `--quiet`: Reduce output verbosity, showing only essential information
+
+### Crawl Command Options
+
+- `--output-dir DIR, -o DIR`: Directory to save the output files and folders (default: "output")
+- `--follow`: How to follow links. Options: 'domain-only', 'host-only', 'subdomain', or a regex pattern (default: domain-only)
+- `--max-depth`: Maximum link depth to follow (default: 3)
+- `--max-pages`: Maximum number of pages to crawl (default: 100)
+- `--trim/--no-trim`: Enable/disable trimming based on domain-specific rules
+- `--flatten`: Output files directly to domain directories (e.g., 'docs.github.com/')
 
 ## UI Features
 
@@ -184,6 +194,52 @@ This will:
 5. Provide beautiful visuals and detailed status updates throughout
 
 All with intuitive progress indicators and intelligent terminal adaptations!
+
+### Recursive Website Crawling
+
+Recursively crawl a website, converting each page to markdown:
+
+```bash
+html2md crawl https://docs.example.com/ --output-dir documentation
+```
+
+Crawl a website but only follow links to the same domain:
+
+```bash
+html2md crawl https://docs.example.com/ --follow domain-only
+```
+
+Crawl a website including its subdomains:
+
+```bash
+html2md crawl https://docs.example.com/ --follow subdomain
+```
+
+Crawl with a custom regex pattern to follow only specific links:
+
+```bash
+html2md crawl https://docs.example.com/ --follow "^https://docs\.example\.com/api/.*"
+```
+
+Set crawling limits for depth and number of pages:
+
+```bash
+html2md crawl https://docs.example.com/ --max-depth 5 --max-pages 500
+```
+
+Crawl with various options combined:
+
+```bash
+html2md crawl https://docs.example.com/ --follow subdomain --max-depth 4 --max-pages 200 --output-dir docs --flatten
+```
+
+This will:
+1. Recursively crawl the website starting from the URL
+2. Follow links according to the specified pattern
+3. Convert each page to markdown up to the specified depth and page limit
+4. Save files in a structured directory layout
+5. Rewrite all links between pages to maintain working references
+6. Provide beautiful visuals and detailed status updates throughout
 
 ## Chrome Extension
 

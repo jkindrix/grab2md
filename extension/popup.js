@@ -17,6 +17,19 @@ const saveSettingsBtn = document.getElementById('save-settings');
 const resetDefaultsBtn = document.getElementById('reset-defaults');
 const cliLink = document.getElementById('cli-link');
 
+// URL Capture Elements
+const scanUrlsButton = document.getElementById('scan-urls-button');
+const urlResults = document.getElementById('url-results');
+const urlList = document.getElementById('url-list');
+const urlCount = document.getElementById('url-count');
+const selectAllButton = document.getElementById('select-all');
+const deselectAllButton = document.getElementById('deselect-all');
+const captureSelectedButton = document.getElementById('capture-selected');
+const captureProgress = document.getElementById('capture-progress');
+const progressBar = document.getElementById('progress-bar');
+const progressStatus = document.getElementById('progress-status');
+const stopCaptureButton = document.getElementById('stop-capture');
+
 // Default settings
 const defaultSettings = {
   theme: 'light',
@@ -30,6 +43,14 @@ const defaultSettings = {
     includeTables: true,
     codeBlocks: true,
     inlineLinks: true
+  },
+  urlCaptureOptions: {
+    urlFilter: '.*',
+    maxDepth: 1,
+    domainOption: 'current-domain',
+    maxPages: 20,
+    onlyVisibleLinks: true,
+    skipMedia: true
   },
   cliPath: ''
 };
@@ -193,6 +214,95 @@ function setupEventListeners() {
     e.preventDefault();
     chrome.tabs.create({ url: 'https://github.com/jkindrix/html2md' });
   });
+
+  // URL Capture Tab Functionality
+  if (scanUrlsButton) {
+    // Scan URLs button
+    scanUrlsButton.addEventListener('click', handleUrlScan);
+
+    // Select/Deselect All buttons
+    selectAllButton.addEventListener('click', () => {
+      const checkboxes = document.querySelectorAll('.url-item input[type="checkbox"]');
+      checkboxes.forEach(checkbox => checkbox.checked = true);
+    });
+
+    deselectAllButton.addEventListener('click', () => {
+      const checkboxes = document.querySelectorAll('.url-item input[type="checkbox"]');
+      checkboxes.forEach(checkbox => checkbox.checked = false);
+    });
+
+    // Capture Selected URLs button
+    captureSelectedButton.addEventListener('click', handleCaptureSelected);
+
+    // Stop Capture button
+    stopCaptureButton.addEventListener('click', stopCapture);
+  }
+
+  // Tab navigation with accessibility support
+  const tabButtons = document.querySelectorAll('.tab-button');
+  tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      // Get the tab ID
+      const tabId = button.getAttribute('data-tab');
+
+      // Update all tab buttons (remove active state and aria-selected)
+      document.querySelectorAll('.tab-button').forEach(btn => {
+        btn.classList.remove('active');
+        btn.setAttribute('aria-selected', 'false');
+        btn.tabIndex = -1;
+      });
+
+      // Update all tab panels (remove active state)
+      document.querySelectorAll('.tab-pane').forEach(pane => {
+        pane.classList.remove('active');
+        pane.tabIndex = -1;
+      });
+
+      // Activate the selected tab button
+      button.classList.add('active');
+      button.setAttribute('aria-selected', 'true');
+      button.tabIndex = 0;
+
+      // Activate the corresponding tab panel
+      const panel = document.getElementById(tabId);
+      panel.classList.add('active');
+      panel.tabIndex = 0;
+
+      // Set focus to the panel if using keyboard
+      if (window.keyboardNavigation) {
+        panel.focus();
+      }
+    });
+
+    // Handle keyboard navigation
+    button.addEventListener('keydown', (e) => {
+      // Set a flag to indicate keyboard navigation
+      window.keyboardNavigation = true;
+
+      // Left/right keys to navigate between tabs
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+        e.preventDefault();
+
+        const buttons = Array.from(tabButtons);
+        const currentIndex = buttons.indexOf(button);
+        let newIndex;
+
+        if (e.key === 'ArrowRight') {
+          newIndex = (currentIndex + 1) % buttons.length;
+        } else {
+          newIndex = (currentIndex - 1 + buttons.length) % buttons.length;
+        }
+
+        buttons[newIndex].click();
+        buttons[newIndex].focus();
+      }
+    });
+  });
+
+  // Reset keyboard navigation flag on mouse use
+  document.addEventListener('mousedown', () => {
+    window.keyboardNavigation = false;
+  });
 }
 
 // Update settings object from form values
@@ -221,6 +331,12 @@ function handleConversion() {
   const conversionMode = conversionModeSelect.value;
   const trimContent = trimContentCheckbox.checked;
   const outputAction = outputActionSelect.value;
+
+  // Special handling for element selection mode
+  if (conversionMode === 'element') {
+    activateElementSelector();
+    return;
+  }
 
   showStatus('Converting...', 'processing');
   showSpinner(true);
@@ -259,6 +375,283 @@ function handleConversion() {
       showSpinner(false);
     });
   });
+}
+
+/**
+ * Activate element selector mode
+ * Injects a content script that allows the user to visually select elements
+ */
+function activateElementSelector() {
+  showStatus('Click on any element to convert it', 'info');
+
+  // Get the active tab
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    const tab = tabs[0];
+
+    // Inject element selector script
+    chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      function: injectElementSelector,
+      args: []
+    })
+    .then(() => {
+      // Minimize the popup to show the page
+      window.close();
+    })
+    .catch(error => {
+      showStatus('Error: ' + error.message, 'error');
+    });
+  });
+}
+
+/**
+ * Injects the element selector into the active page
+ * This is injected as a content script
+ */
+function injectElementSelector() {
+  // Exit if the selector is already active
+  if (document.querySelector('#html2md-element-selector')) {
+    return;
+  }
+
+  // Create styles for highlighting and overlays
+  const style = document.createElement('style');
+  style.id = 'html2md-selector-style';
+  style.textContent = `
+    .html2md-highlight {
+      outline: 2px dashed #4f46e5 !important;
+      outline-offset: 2px !important;
+      background-color: rgba(99, 102, 241, 0.1) !important;
+      transition: all 0.2s ease-in-out !important;
+      cursor: pointer !important;
+    }
+
+    #html2md-selector-tooltip {
+      position: fixed;
+      background-color: #4f46e5;
+      color: white;
+      padding: 6px 10px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-family: system-ui, -apple-system, sans-serif;
+      pointer-events: none;
+      z-index: 2147483647;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+      max-width: 300px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #html2md-selector-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0,0,0,0.5);
+      z-index: 2147483646;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+    }
+
+    #html2md-selector-modal {
+      background-color: white;
+      border-radius: 8px;
+      padding: 20px;
+      width: 300px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      font-family: system-ui, -apple-system, sans-serif;
+    }
+
+    #html2md-selector-modal h3 {
+      margin-top: 0;
+      margin-bottom: 15px;
+      font-size: 18px;
+      color: #333;
+    }
+
+    #html2md-selector-modal .html2md-buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 15px;
+    }
+
+    #html2md-selector-modal button {
+      padding: 8px 12px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    #html2md-selector-modal .html2md-primary-button {
+      background-color: #4f46e5;
+      color: white;
+    }
+
+    #html2md-selector-modal .html2md-secondary-button {
+      background-color: #e5e7eb;
+      color: #374151;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Create tooltip
+  const tooltip = document.createElement('div');
+  tooltip.id = 'html2md-selector-tooltip';
+  tooltip.style.display = 'none';
+  document.body.appendChild(tooltip);
+
+  // Create overlay for confirmation
+  const overlay = document.createElement('div');
+  overlay.id = 'html2md-selector-overlay';
+  overlay.innerHTML = `
+    <div id="html2md-selector-modal">
+      <h3>Convert Element</h3>
+      <p>Convert this element to Markdown?</p>
+      <div class="html2md-buttons">
+        <button class="html2md-secondary-button" id="html2md-cancel-btn">Cancel</button>
+        <button class="html2md-primary-button" id="html2md-convert-btn">Convert</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  // Marker div to identify that selector is active
+  const marker = document.createElement('div');
+  marker.id = 'html2md-element-selector';
+  marker.style.display = 'none';
+  document.body.appendChild(marker);
+
+  let currentElement = null;
+  let previousElement = null;
+
+  // Handle mousemove to highlight elements
+  document.addEventListener('mousemove', function(e) {
+    // Skip html2md elements
+    if (e.target.id?.startsWith('html2md-') ||
+        e.target.closest('#html2md-selector-modal')) {
+      return;
+    }
+
+    const x = e.clientX;
+    const y = e.clientY;
+    currentElement = document.elementFromPoint(x, y);
+
+    // Update tooltip position
+    tooltip.style.left = `${x + 15}px`;
+    tooltip.style.top = `${y + 15}px`;
+
+    // Update tooltip content and highlight
+    if (currentElement && currentElement !== previousElement) {
+      // Remove highlight from previous element
+      if (previousElement) {
+        previousElement.classList.remove('html2md-highlight');
+      }
+
+      // Add highlight to current element
+      currentElement.classList.add('html2md-highlight');
+      previousElement = currentElement;
+
+      // Update tooltip
+      let elementType = currentElement.tagName.toLowerCase();
+      if (currentElement.id) {
+        elementType += `#${currentElement.id}`;
+      } else if (currentElement.className) {
+        const classNames = Array.from(currentElement.classList)
+          .filter(c => !c.startsWith('html2md-'))
+          .join('.');
+        if (classNames) {
+          elementType += `.${classNames}`;
+        }
+      }
+
+      tooltip.textContent = elementType;
+      tooltip.style.display = 'block';
+    }
+  });
+
+  // Handle click to select an element
+  document.addEventListener('click', function(e) {
+    // Skip html2md elements
+    if (e.target.id?.startsWith('html2md-') ||
+        e.target.closest('#html2md-selector-modal')) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (currentElement) {
+      // Show confirmation
+      overlay.style.opacity = '1';
+      overlay.style.visibility = 'visible';
+
+      // Store reference to the selected element
+      window.html2mdSelectedElement = currentElement;
+    }
+  }, true);
+
+  // Handle confirmation buttons
+  document.getElementById('html2md-convert-btn').addEventListener('click', function() {
+    const selectedElement = window.html2mdSelectedElement;
+
+    if (selectedElement) {
+      // Extract HTML content
+      const htmlContent = selectedElement.outerHTML;
+
+      // Send to background script for conversion
+      chrome.runtime.sendMessage({
+        action: 'convertElement',
+        html: htmlContent,
+        tag: selectedElement.tagName.toLowerCase(),
+        title: document.title
+      });
+    }
+
+    // Clean up
+    cleanupSelector();
+  });
+
+  document.getElementById('html2md-cancel-btn').addEventListener('click', cleanupSelector);
+
+  // Escape key to cancel
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      cleanupSelector();
+    }
+  });
+
+  // Function to clean up selector
+  function cleanupSelector() {
+    // Hide overlay
+    overlay.style.opacity = '0';
+    overlay.style.visibility = 'hidden';
+
+    // Remove highlight from current element
+    if (currentElement) {
+      currentElement.classList.remove('html2md-highlight');
+    }
+
+    // Hide tooltip
+    tooltip.style.display = 'none';
+
+    // Remove event listeners and elements after a short delay
+    setTimeout(() => {
+      document.head.removeChild(style);
+      document.body.removeChild(tooltip);
+      document.body.removeChild(overlay);
+      document.body.removeChild(marker);
+
+      delete window.html2mdSelectedElement;
+    }, 300);
+  }
 }
 
 // Extract content from the page based on mode
@@ -394,37 +787,570 @@ function downloadMarkdown(markdown = null, pageTitle = 'page') {
   });
 }
 
-// Show status message
+/**
+ * Show status message to the user
+ * @param {string} message - Message to display
+ * @param {string} type - Message type (info, success, warning, error)
+ */
 function showStatus(message, type = 'info') {
   statusMessage.textContent = message;
 
   // Reset styles
   statusMessage.className = '';
+  statusMessage.style.color = '';
 
-  // Apply style based on message type
-  switch(type) {
-    case 'error':
-      statusMessage.style.color = 'var(--error-color)';
-      break;
-    case 'success':
-      statusMessage.style.color = 'var(--success-color)';
-      break;
-    case 'warning':
-      statusMessage.style.color = 'var(--warning-color)';
-      break;
-    default:
-      statusMessage.style.color = 'var(--text-muted)';
-  }
+  // Add class based on message type
+  statusMessage.classList.add(type);
 
-  // Auto-clear status after 3 seconds for success messages
-  if (type === 'success') {
-    setTimeout(() => {
+  // Auto-clear status after some time for non-error messages
+  if (type !== 'error') {
+    const clearDelay = type === 'warning' ? 5000 : 3000;
+
+    // Clear any existing timers
+    if (window.statusTimer) {
+      clearTimeout(window.statusTimer);
+    }
+
+    // Set new timer
+    window.statusTimer = setTimeout(() => {
       statusMessage.textContent = '';
-    }, 3000);
+      statusMessage.className = '';
+    }, clearDelay);
   }
 }
 
 // Show or hide the spinner
 function showSpinner(show) {
   spinner.style.display = show ? 'block' : 'none';
+}
+
+/**
+ * Handle URL scanning from the current page
+ * Scans the page for URLs matching user-defined filters
+ */
+function handleUrlScan() {
+  // Get URL capture settings from form
+  const settings = getUrlCaptureSettings();
+
+  // Show scanning status
+  showStatus('Scanning page for URLs...', 'processing');
+  showSpinner(true);
+
+  // Get the active tab
+  chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+    if (!tabs || tabs.length === 0) {
+      showStatus('Error: Could not get active tab', 'error');
+      showSpinner(false);
+      return;
+    }
+
+    const tab = tabs[0];
+
+    // Inject script to scan for URLs
+    chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: scanPageForUrls,
+      args: [settings]
+    })
+    .then(results => {
+      if (!results || !results[0] || !results[0].result) {
+        throw new Error('Failed to get results from page scan');
+      }
+
+      const urls = results[0].result;
+
+      if (urls.length === 0) {
+        showStatus('No matching URLs found on the page', 'warning');
+        showSpinner(false);
+        return;
+      }
+
+      // Display the URLs in the UI
+      displayUrls(urls);
+      showStatus(`Found ${urls.length} URLs`, 'success');
+      showSpinner(false);
+    })
+    .catch(error => {
+      console.error('URL scanning error:', error);
+      showStatus('Error scanning for URLs: ' + error.message, 'error');
+      showSpinner(false);
+    });
+  });
+}
+
+/**
+ * Get URL capture settings from the form
+ * @returns {Object} URL capture settings
+ */
+function getUrlCaptureSettings() {
+  return {
+    urlFilter: document.getElementById('url-filter').value || '.*',
+    onlyVisibleLinks: document.getElementById('only-visible-links').checked,
+    skipMedia: document.getElementById('skip-media').checked,
+    maxDepth: parseInt(document.getElementById('capture-depth').value, 10),
+    domainOption: document.getElementById('domain-option').value,
+    maxPages: parseInt(document.getElementById('max-pages').value, 10),
+    trim: trimContentCheckbox.checked
+  };
+}
+
+/**
+ * Scan page for URLs matching specific criteria
+ * @param {Object} settings - URL capture settings
+ * @returns {Array} Array of URL objects
+ */
+function scanPageForUrls(settings) {
+  const {urlFilter, onlyVisibleLinks, skipMedia, domainOption} = settings;
+
+  /**
+   * Check if an element is visible
+   * @param {Element} element - DOM element to check
+   * @returns {Boolean} True if element is visible
+   */
+  function isVisible(element) {
+    // Fast path for obviously invisible elements
+    if (!element.offsetParent && element.offsetWidth === 0 && element.offsetHeight === 0) {
+      return false;
+    }
+
+    // Check computed style
+    const style = window.getComputedStyle(element);
+    if (style.display === 'none' || style.visibility === 'hidden' || parseFloat(style.opacity) === 0) {
+      return false;
+    }
+
+    // Check if element is in viewport
+    const rect = element.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Check if a URL is a media file
+   * @param {String} url - URL to check
+   * @returns {Boolean} True if URL is a media file
+   */
+  function isMediaUrl(url) {
+    const mediaExtensions = [
+      // Images
+      '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.svg', '.webp', '.ico', '.tiff',
+      // Videos
+      '.mp4', '.webm', '.ogg', '.mov', '.avi', '.wmv', '.flv', '.mkv',
+      // Audio
+      '.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a',
+      // Documents
+      '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.odt', '.ods', '.odp',
+      // Archives
+      '.zip', '.rar', '.tar', '.gz', '.7z'
+    ];
+
+    try {
+      // Check if URL ends with one of the media extensions
+      const urlObj = new URL(url);
+      const path = urlObj.pathname.toLowerCase();
+      return mediaExtensions.some(ext => path.endsWith(ext));
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Check if a URL should be included based on domain options
+   * @param {String} url - URL to check
+   * @returns {Boolean} True if URL should be included
+   */
+  function shouldIncludeUrl(url) {
+    try {
+      const urlObj = new URL(url);
+      const pageHostname = window.location.hostname;
+
+      switch (domainOption) {
+        case 'current-domain':
+          // Only include URLs from the exact same domain
+          return urlObj.hostname === pageHostname;
+
+        case 'include-subdomains':
+          // Include current domain and subdomains
+          const pageDomain = getDomainFromHostname(pageHostname);
+          const urlDomain = getDomainFromHostname(urlObj.hostname);
+          return pageDomain === urlDomain;
+
+        case 'any-domain':
+          // Include all domains
+          return true;
+
+        default:
+          return true;
+      }
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /**
+   * Extract domain from hostname
+   * @param {String} hostname - Hostname to extract domain from
+   * @returns {String} Domain name
+   */
+  function getDomainFromHostname(hostname) {
+    const parts = hostname.split('.');
+    if (parts.length <= 2) return hostname;
+
+    // Get the last two parts (e.g., example.com from sub.example.com)
+    return parts.slice(-2).join('.');
+  }
+
+  // Attempt to match URLs using the provided filter
+  let urlRegex;
+  try {
+    urlRegex = new RegExp(urlFilter);
+  } catch (e) {
+    console.error('Invalid regex pattern:', e);
+    urlRegex = /.*/; // Default to match all if invalid
+  }
+
+  // Get all links
+  const links = document.querySelectorAll('a[href]');
+
+  // Collection for found URLs
+  const foundUrls = [];
+
+  // Process each link
+  links.forEach(link => {
+    try {
+      // Skip if link is not visible and onlyVisibleLinks is true
+      if (onlyVisibleLinks && !isVisible(link)) return;
+
+      // Get absolute URL
+      const href = link.href;
+
+      // Skip non-HTTP(S) links
+      if (!href || !href.startsWith('http')) return;
+
+      // Skip media files if skipMedia is true
+      if (skipMedia && isMediaUrl(href)) return;
+
+      // Apply domain filtering
+      if (!shouldIncludeUrl(href)) return;
+
+      // Apply regex filter
+      if (urlRegex.test(href)) {
+        // Get the link text or use the URL as fallback
+        let linkText = link.textContent.trim();
+        if (!linkText) {
+          // Try to find any child image alt text to use as link description
+          const img = link.querySelector('img[alt]');
+          linkText = img && img.alt ? img.alt : href;
+        }
+
+        // Add URL with metadata
+        foundUrls.push({
+          url: href,
+          text: linkText,
+          isExternal: new URL(href).hostname !== window.location.hostname,
+          sourcePage: window.location.href,
+          discoveredAt: new Date().toISOString()
+        });
+      }
+    } catch (error) {
+      console.warn('Error processing link:', error);
+    }
+  });
+
+  // Remove duplicates by URL
+  const uniqueUrls = [];
+  const seen = new Set();
+
+  foundUrls.forEach(item => {
+    if (!seen.has(item.url)) {
+      seen.add(item.url);
+      uniqueUrls.push(item);
+    }
+  });
+
+  return uniqueUrls;
+}
+
+/**
+ * Display URLs in the popup
+ * @param {Array} urls - Array of URL objects
+ */
+function displayUrls(urls) {
+  // Clear previous results
+  urlList.innerHTML = '';
+
+  // Update URL count
+  urlCount.textContent = `(${urls.length})`;
+
+  // Group URLs by domain for better organization
+  const urlsByDomain = groupUrlsByDomain(urls);
+
+  // Sort domains by count (descending)
+  const sortedDomains = Object.keys(urlsByDomain).sort((a, b) => {
+    return urlsByDomain[b].length - urlsByDomain[a].length;
+  });
+
+  // Create domain headers and URL items
+  sortedDomains.forEach(domain => {
+    const domainUrls = urlsByDomain[domain];
+
+    // Create domain header
+    const domainHeader = document.createElement('div');
+    domainHeader.className = 'domain-header';
+    domainHeader.innerHTML = `
+      <div class="domain-name">${domain} <span class="domain-count">(${domainUrls.length})</span></div>
+      <div class="domain-actions">
+        <button class="small-button select-domain">Select All</button>
+        <button class="small-button deselect-domain">Deselect All</button>
+      </div>
+    `;
+
+    // Add header click handlers
+    const selectDomainBtn = domainHeader.querySelector('.select-domain');
+    const deselectDomainBtn = domainHeader.querySelector('.deselect-domain');
+
+    selectDomainBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const checkboxes = domainUrls.map(url => document.getElementById(`url-${urls.indexOf(url)}`));
+      checkboxes.forEach(checkbox => checkbox.checked = true);
+    });
+
+    deselectDomainBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const checkboxes = domainUrls.map(url => document.getElementById(`url-${urls.indexOf(url)}`));
+      checkboxes.forEach(checkbox => checkbox.checked = false);
+    });
+
+    urlList.appendChild(domainHeader);
+
+    // Create URL items for this domain
+    domainUrls.forEach(urlItem => {
+      const index = urls.indexOf(urlItem);
+      const listItem = createUrlListItem(urlItem, index);
+      urlList.appendChild(listItem);
+    });
+  });
+
+  // Show results container
+  urlResults.classList.remove('hidden');
+}
+
+/**
+ * Group URLs by domain
+ * @param {Array} urls - Array of URL objects
+ * @returns {Object} Object with domains as keys and URL arrays as values
+ */
+function groupUrlsByDomain(urls) {
+  const groups = {};
+
+  urls.forEach(urlItem => {
+    try {
+      const domain = new URL(urlItem.url).hostname;
+      if (!groups[domain]) {
+        groups[domain] = [];
+      }
+      groups[domain].push(urlItem);
+    } catch (e) {
+      // Handle malformed URLs
+      if (!groups['Other']) groups['Other'] = [];
+      groups['Other'].push(urlItem);
+    }
+  });
+
+  return groups;
+}
+
+/**
+ * Create a list item for a URL
+ * @param {Object} urlItem - URL object with metadata
+ * @param {Number} index - Index in the URL array
+ * @returns {Element} DOM element for the URL item
+ */
+function createUrlListItem(urlItem, index) {
+  const listItem = document.createElement('div');
+  listItem.className = 'url-item';
+
+  // Create checkbox
+  const checkbox = document.createElement('input');
+  checkbox.type = 'checkbox';
+  checkbox.id = `url-${index}`;
+  checkbox.value = urlItem.url;
+  checkbox.dataset.index = index;
+  checkbox.checked = true; // Default to checked
+
+  // Create label with URL info
+  const label = document.createElement('label');
+  label.htmlFor = `url-${index}`;
+
+  // URL text
+  const urlText = document.createElement('span');
+  urlText.className = 'url-text';
+  urlText.textContent = urlItem.text;
+
+  // URL itself
+  const urlLink = document.createElement('span');
+  urlLink.className = 'url-link';
+
+  // Truncate URL for display if too long
+  let displayUrl = urlItem.url;
+  if (displayUrl.length > 50) {
+    displayUrl = displayUrl.substring(0, 47) + '...';
+  }
+  urlLink.textContent = displayUrl;
+  urlLink.title = urlItem.url; // Show full URL on hover
+
+  // Add badge for external links
+  if (urlItem.isExternal) {
+    const badge = document.createElement('span');
+    badge.className = 'external-badge';
+    badge.textContent = 'external';
+    urlLink.appendChild(badge);
+  }
+
+  // Add control buttons (preview, copy)
+  const controls = document.createElement('div');
+  controls.className = 'url-controls';
+
+  // Preview button
+  const previewBtn = document.createElement('button');
+  previewBtn.className = 'url-control-btn preview-btn';
+  previewBtn.title = 'Preview this URL';
+  previewBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24"><path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>';
+
+  previewBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    chrome.tabs.create({ url: urlItem.url, active: false });
+  });
+
+  controls.appendChild(previewBtn);
+
+  // Assemble the label
+  label.appendChild(urlText);
+  label.appendChild(urlLink);
+  label.appendChild(controls);
+
+  // Add to list item
+  listItem.appendChild(checkbox);
+  listItem.appendChild(label);
+
+  return listItem;
+}
+
+/**
+ * Handle capturing selected URLs
+ * Processes selected URLs with batch conversion
+ */
+function handleCaptureSelected() {
+  // Get selected URLs
+  const selectedCheckboxes = document.querySelectorAll('.url-item input[type="checkbox"]:checked');
+  const urls = Array.from(selectedCheckboxes).map(checkbox => checkbox.value);
+
+  if (urls.length === 0) {
+    showStatus('No URLs selected', 'warning');
+    return;
+  }
+
+  // Hide URL results and show progress
+  urlResults.classList.add('hidden');
+  captureProgress.classList.remove('hidden');
+
+  // Get conversion options
+  const options = {
+    trim: trimContentCheckbox.checked,
+    output: 'download'
+  };
+
+  // Start batch processing
+  chrome.runtime.sendMessage({
+    action: 'batchConvertUrls',
+    urls: urls,
+    options: options
+  }, handleBatchResponse);
+
+  // Initialize progress tracking
+  window.captureInProgress = true;
+  updateProgress(0, urls.length);
+
+  // Listen for progress updates
+  chrome.runtime.onMessage.addListener(progressListener);
+}
+
+/**
+ * Handle batch processing response
+ * @param {Object} response - Response object from background script
+ */
+function handleBatchResponse(response) {
+  // Clean up listener
+  chrome.runtime.onMessage.removeListener(progressListener);
+  window.captureInProgress = false;
+
+  // Hide progress container
+  captureProgress.classList.add('hidden');
+
+  if (response && response.success) {
+    showStatus(`Converted ${response.processed} of ${response.total} URLs`, 'success');
+
+    // Show failures if any
+    const failures = response.results.filter(r => !r.success);
+    if (failures.length > 0) {
+      console.warn('Failed to convert these URLs:', failures);
+
+      // Maybe display failures to user
+      if (failures.length > 0) {
+        const failureMsg = `${failures.length} URL${failures.length > 1 ? 's' : ''} failed to convert. Check console for details.`;
+        setTimeout(() => showStatus(failureMsg, 'warning'), 3000);
+      }
+    }
+  } else {
+    showStatus('Error processing batch conversion', 'error');
+  }
+}
+
+/**
+ * Progress update listener for batch processing
+ * @param {Object} message - Message from background script
+ */
+function progressListener(message) {
+  if (message.action === 'batchProgress' && window.captureInProgress) {
+    updateProgress(message.current, message.total);
+
+    // Update status text with current URL
+    let currentUrl = message.url;
+    if (currentUrl && currentUrl.length > 40) {
+      currentUrl = currentUrl.substring(0, 37) + '...';
+    }
+
+    progressStatus.textContent = `Processing ${message.current}/${message.total}: ${currentUrl || ''}`;
+  }
+}
+
+/**
+ * Update progress bar
+ * @param {Number} current - Current progress
+ * @param {Number} total - Total items
+ */
+function updateProgress(current, total) {
+  const percentage = Math.min(100, Math.round((current / total) * 100));
+  progressBar.style.width = `${percentage}%`;
+  progressBar.setAttribute('aria-valuenow', percentage);
+  progressStatus.textContent = `Processing ${current}/${total}`;
+}
+
+/**
+ * Stop URL capture process
+ * Cancels the current batch operation
+ */
+function stopCapture() {
+  window.captureInProgress = false;
+  chrome.runtime.onMessage.removeListener(progressListener);
+
+  captureProgress.classList.add('hidden');
+  showStatus('Capture process stopped', 'warning');
+
+  // Notify background script to stop processing (if implemented)
+  chrome.runtime.sendMessage({ action: 'stopBatchProcess' });
 }

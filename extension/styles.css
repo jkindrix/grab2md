@@ -362,3 +362,353 @@ footer a:hover {
   color: var(--text-muted);
   margin-top: 4px;
 }
+
+/* URL Capture Tab Styles */
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 20px;
+}
+
+.tab-button {
+  padding: 8px 16px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.tab-button.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+.tab-pane {
+  display: none;
+}
+
+.tab-pane.active {
+  display: block;
+}
+
+.url-capture-options {
+  margin-bottom: 20px;
+}
+
+.capture-settings {
+  background-color: var(--bg-secondary);
+  padding: 15px;
+  border-radius: var(--border-radius);
+  margin-bottom: 15px;
+  border: 1px solid var(--border-color);
+}
+
+.setting-group {
+  margin-bottom: 15px;
+}
+
+.setting-help {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+input[type="number"] {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-color);
+  padding: 6px 10px;
+  border-radius: var(--border-radius);
+  font-size: 14px;
+  width: 70px;
+}
+
+.url-results {
+  margin-top: 20px;
+}
+
+.url-actions {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.small-button {
+  font-size: 12px;
+  padding: 4px 8px;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.url-list {
+  max-height: 250px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  margin-bottom: 15px;
+  background-color: var(--bg-color);
+}
+
+.url-item {
+  display: flex;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.url-item:last-child {
+  border-bottom: none;
+}
+
+.url-item:hover {
+  background-color: var(--bg-secondary);
+}
+
+.url-item input[type="checkbox"] {
+  margin-right: 10px;
+}
+
+.url-item label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+.url-text {
+  font-weight: 500;
+  margin-bottom: 3px;
+}
+
+.url-link {
+  font-size: 12px;
+  color: var(--text-muted);
+  word-break: break-all;
+  display: flex;
+  align-items: center;
+}
+
+.external-badge {
+  background-color: var(--warning-color);
+  color: white;
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 5px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+#capture-progress {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  padding: 15px;
+}
+
+.progress-container {
+  height: 10px;
+  background-color: var(--border-color);
+  border-radius: 5px;
+  overflow: hidden;
+  margin: 15px 0;
+}
+
+.progress-bar {
+  height: 100%;
+  background-color: var(--primary-color);
+  width: 0%;
+  transition: width 0.3s;
+}
+
+#progress-status {
+  font-size: 14px;
+  margin-bottom: 15px;
+  color: var(--text-muted);
+}
+
+.warning-button {
+  background-color: var(--error-color);
+  color: white;
+}
+
+/* Enhanced URL Capture UI Styles */
+.url-item {
+  position: relative;
+  padding: 10px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: flex-start;
+  transition: background-color 0.2s;
+}
+
+.url-item:last-child {
+  border-bottom: none;
+}
+
+.url-item:hover {
+  background-color: var(--bg-secondary);
+}
+
+.url-item input[type="checkbox"] {
+  margin-right: 10px;
+  margin-top: 4px;
+}
+
+.url-item label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  cursor: pointer;
+}
+
+/* URL Control Buttons */
+.url-controls {
+  display: flex;
+  margin-top: 5px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.url-item:hover .url-controls {
+  opacity: 1;
+}
+
+.url-control-btn {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  padding: 3px;
+  margin-right: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.url-control-btn svg {
+  fill: var(--text-muted);
+}
+
+.url-control-btn:hover {
+  background-color: var(--bg-color);
+  border-color: var(--primary-color);
+}
+
+.url-control-btn:hover svg {
+  fill: var(--primary-color);
+}
+
+/* Domain Grouping Headers */
+.domain-header {
+  background-color: var(--bg-secondary);
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-color);
+  font-weight: 500;
+  font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.domain-name {
+  display: flex;
+  align-items: center;
+}
+
+.domain-count {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: 5px;
+  font-weight: 400;
+}
+
+.domain-actions {
+  display: flex;
+  gap: 5px;
+}
+
+.domain-actions .small-button {
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+/* Improved progress tracking */
+#progress-status {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Color variables with RGB values for transparency */
+:root {
+  --primary-color-rgb: 99, 102, 241;
+  --success-color-rgb: 34, 197, 94;
+  --warning-color-rgb: 245, 158, 11;
+  --error-color-rgb: 239, 68, 68;
+}
+
+/* Status message improvements */
+#status-message.info {
+  background-color: rgba(var(--primary-color-rgb), 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+#status-message.success {
+  background-color: rgba(var(--success-color-rgb), 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+#status-message.warning {
+  background-color: rgba(var(--warning-color-rgb), 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+#status-message.error {
+  background-color: rgba(var(--error-color-rgb), 0.1);
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+/* Accessibility improvements */
+.progress-container {
+  position: relative;
+}
+
+.progress-bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  aria-live: polite;
+}
+
+/* Keyboard focus styles */
+button:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* Responsive fixes */
+@media (max-width: 400px) {
+  .container {
+    width: 100%;
+    padding: 12px;
+  }
+
+  .domain-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .domain-actions {
+    margin-top: 5px;
+  }
+}

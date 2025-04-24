@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 # Setup logger
 logger = logging.getLogger("html2md")
@@ -75,6 +75,86 @@ def extract_urls_from_markdown(markdown_content):
     logger.info(f"Found {len(unique_urls)} URLs in markdown content")
 
     return unique_urls
+
+
+def extract_links_from_html(html_content, base_url):
+    """
+    Extract all links from HTML content.
+
+    Args:
+        html_content (str): HTML content to extract links from
+        base_url (str): Base URL to resolve relative links
+
+    Returns:
+        list: List of absolute URLs found in the HTML
+    """
+    # Use a simple regex to find all href attributes
+    href_pattern = re.compile(r'href=[\'"]([^\'"]+)[\'"]')
+    relative_links = href_pattern.findall(html_content)
+
+    # Convert relative links to absolute URLs and filter out non-HTTP(S) links
+    absolute_urls = []
+    for link in relative_links:
+        # Skip javascript:, mailto:, tel: links, anchors, etc.
+        if link.startswith(("javascript:", "mailto:", "tel:", "#")):
+            continue
+
+        # Resolve relative links to absolute URLs
+        absolute_url = urljoin(base_url, link)
+
+        # Ensure it's an HTTP(S) URL
+        if absolute_url.startswith(("http://", "https://")):
+            absolute_urls.append(absolute_url)
+
+    # Remove duplicates while preserving order
+    unique_urls = []
+    for url in absolute_urls:
+        if url not in unique_urls:
+            unique_urls.append(url)
+
+    logger.info(f"Found {len(unique_urls)} links in HTML content from {base_url}")
+    return unique_urls
+
+
+def should_follow_link(url, base_url, follow_option):
+    """
+    Determine if a link should be followed based on the follow option.
+
+    Args:
+        url (str): The URL to check
+        base_url (str): The original base URL
+        follow_option (str): The follow option (domain-only, host-only, subdomain, or regex pattern)
+
+    Returns:
+        bool: True if the link should be followed, False otherwise
+    """
+    # Parse URLs
+    parsed_url = urlparse(url)
+    parsed_base = urlparse(base_url)
+
+    # Domain-only: Only follow links to the same domain
+    if follow_option == "domain-only":
+        return parsed_url.netloc == parsed_base.netloc
+
+    # Host-only: Only follow links to the same host (excluding subdomains)
+    elif follow_option == "host-only":
+        base_domain = ".".join(parsed_base.netloc.split(".")[-2:])
+        url_domain = ".".join(parsed_url.netloc.split(".")[-2:])
+        return url_domain == base_domain
+
+    # Subdomain: Follow links to the same domain and its subdomains
+    elif follow_option == "subdomain":
+        base_domain = ".".join(parsed_base.netloc.split(".")[-2:])
+        return parsed_url.netloc.endswith(base_domain)
+
+    # Regex pattern: Follow links matching the regex pattern
+    else:
+        try:
+            pattern = re.compile(follow_option)
+            return bool(pattern.search(url))
+        except re.error:
+            logger.error(f"Invalid regex pattern: {follow_option}")
+            return False
 
 
 def get_urls_from_file(file_path):

@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 from html2md.cookies.session_manager import get_session
 from html2md.markdown.batch_processor import process_markdown_links
 from html2md.markdown.converter import html_to_markdown, local_html_to_markdown
+from html2md.markdown.crawler import crawl_website
 from html2md.utils.logger import setup_logging
 
 logger = setup_logging()
@@ -125,6 +126,47 @@ def process_batch(input_files, output_dir, trim=True, flatten_output=False):
         return False
 
 
+def process_recursive(
+    start_urls,
+    output_dir,
+    follow_option="domain-only",
+    max_depth=3,
+    max_pages=100,
+    trim=True,
+    flatten_output=False,
+):
+    """Process URLs recursively, following links according to the follow option."""
+    total_processed = 0
+
+    for start_url in start_urls:
+        if not is_url(start_url):
+            logger.error(f"Invalid URL: {start_url}")
+            continue
+
+        try:
+            logger.info(f"Starting recursive crawl from: {start_url}")
+            processed_count, _ = crawl_website(
+                start_url,
+                output_dir,
+                follow_option=follow_option,
+                max_depth=max_depth,
+                max_pages=max_pages,
+                trim=trim,
+                flatten_output=flatten_output,
+            )
+            total_processed += processed_count
+            logger.info(
+                f"Crawling complete for {start_url}. Processed {processed_count} pages."
+            )
+        except Exception as e:
+            logger.error(f"Error during recursive processing of {start_url}: {e}")
+
+    logger.info(
+        f"Recursive processing complete. Total processed: {total_processed} pages."
+    )
+    return total_processed > 0
+
+
 def main():
     """Parse arguments and process URLs or local files."""
     parser = argparse.ArgumentParser(
@@ -188,6 +230,49 @@ def main():
         help="Output files directly to domain directories (e.g., 'docs.github.com/')",
     )
 
+    # Recursive crawling
+    crawl_parser = subparsers.add_parser(
+        "crawl",
+        help="Recursively crawl websites from starting URLs and convert to markdown",
+    )
+    crawl_parser.add_argument("start_urls", nargs="+", help="Starting URLs to crawl.")
+    crawl_parser.add_argument(
+        "--output-dir",
+        type=str,
+        default="output",
+        help="Directory to save the output files and folders. Default is 'output'.",
+    )
+    crawl_parser.add_argument(
+        "--follow",
+        type=str,
+        default="domain-only",
+        help="How to follow links. Options: 'domain-only', 'host-only', 'subdomain', or a regex pattern.",
+    )
+    crawl_parser.add_argument(
+        "--max-depth",
+        type=int,
+        default=3,
+        help="Maximum link depth to follow. Default is 3.",
+    )
+    crawl_parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=100,
+        help="Maximum number of pages to crawl. Default is 100.",
+    )
+    crawl_parser.add_argument(
+        "--no-trim",
+        action="store_false",
+        dest="trim",
+        help="Disable trimming based on domain-specific rules.",
+    )
+    crawl_parser.add_argument(
+        "--flatten",
+        action="store_true",
+        dest="flatten_output",
+        help="Output files directly to domain directories (e.g., 'docs.github.com/')",
+    )
+
     # Common arguments
     parser.add_argument(
         "--log-level",
@@ -227,6 +312,16 @@ def main():
             args.output_dir,
             args.trim,
             flatten_output=getattr(args, "flatten_output", False),
+        )
+    elif args.command == "crawl":
+        process_recursive(
+            args.start_urls,
+            args.output_dir,
+            follow_option=args.follow,
+            max_depth=args.max_depth,
+            max_pages=args.max_pages,
+            trim=args.trim,
+            flatten_output=args.flatten_output,
         )
 
 
