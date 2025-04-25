@@ -263,8 +263,14 @@ function convertHtmlToMarkdown(tab, htmlContent, trimContent, settings) {
  */
 function extractPageContent(mode, trim) {
   let content = '';
+  const currentUrl = window.location.href;
 
   try {
+    // Handle ChatGPT differently
+    if (currentUrl.includes('chatgpt.com/c/')) {
+      return extractChatGptContent();
+    }
+
     switch(mode) {
       case 'full-page':
         content = document.documentElement.outerHTML;
@@ -313,6 +319,76 @@ function extractPageContent(mode, trim) {
     return content;
   } catch (error) {
     console.error("Error extracting page content:", error);
+    return document.documentElement.outerHTML;
+  }
+}
+
+/**
+ * Extract content specifically from ChatGPT conversation page
+ * @returns {string} - Extracted HTML content optimized for ChatGPT
+ */
+function extractChatGptContent() {
+  try {
+    // Target the main thread container
+    const mainThread = document.querySelector('main .group');
+    if (!mainThread) return document.documentElement.outerHTML;
+
+    // Create a container for the processed content
+    const processedContent = document.createElement('div');
+
+    // Get all the message blocks
+    const messageBlocks = document.querySelectorAll('main .group');
+
+    // Process each message block
+    messageBlocks.forEach(block => {
+      // Determine if it's a user message or assistant message
+      const isUserMessage = block.querySelector('.items-end');
+      const messageContent = block.querySelector('.markdown');
+
+      if (!messageContent) return;
+
+      // Create a new message element
+      const messageElement = document.createElement('div');
+      messageElement.className = isUserMessage ? 'user-message' : 'assistant-message';
+
+      // Clone the markdown content to preserve structure
+      const contentClone = messageContent.cloneNode(true);
+
+      // Fix code blocks - ChatGPT has unconventional code block structure
+      const codeBlocks = contentClone.querySelectorAll('pre');
+      codeBlocks.forEach(codeBlock => {
+        // Ensure code blocks have proper structure
+        const codeElement = codeBlock.querySelector('code');
+        if (codeElement) {
+          // Standardize the code block format
+          const language = (codeElement.className.match(/language-(\w+)/) || [null, ''])[1];
+          const codeContent = codeElement.textContent;
+
+          // Replace with a more standard structure
+          const newCode = document.createElement('code');
+          newCode.className = language ? `language-${language}` : '';
+          newCode.textContent = codeContent;
+
+          const newPre = document.createElement('pre');
+          newPre.appendChild(newCode);
+          codeBlock.parentNode.replaceChild(newPre, codeBlock);
+        }
+      });
+
+      // Add the processed content to the message
+      messageElement.appendChild(contentClone);
+
+      // Add the message to the processed content
+      processedContent.appendChild(messageElement);
+
+      // Add separator between messages
+      const separator = document.createElement('hr');
+      processedContent.appendChild(separator);
+    });
+
+    return processedContent.outerHTML;
+  } catch (error) {
+    console.error("Error extracting ChatGPT content:", error);
     return document.documentElement.outerHTML;
   }
 }

@@ -455,12 +455,17 @@ var TurndownService = (function () {
     if (!input) return '';
 
     var root;
+    var isChatGPT = false;
 
     if (typeof input === 'string') {
       root = document.createElement('div');
       root.innerHTML = cleanInput(input);
+
+      // Check if this is ChatGPT content
+      isChatGPT = root.querySelector('.user-message') || root.querySelector('.assistant-message');
     } else {
       root = input.cloneNode(true);
+      isChatGPT = root.querySelector('.user-message') || root.querySelector('.assistant-message');
     }
 
     var output = this.process(root);
@@ -477,6 +482,20 @@ var TurndownService = (function () {
       .replace(/\n\s*\n(\s*\d+\.\s)/g, '\n$1')
       // Remove extra blank lines between content inside list items
       .replace(/(\s*[*\-+]\s.*)\n\s*\n(\s{4})/g, '$1\n$2');
+
+    // Special processing for ChatGPT content
+    if (isChatGPT || (typeof window !== 'undefined' && window.location.href.includes('chatgpt.com'))) {
+      // Clean up markdown code blocks - replace excessive backticks
+      output = output
+        // Fix excessive code fence backticks (more than 3)
+        .replace(/^`{4,}(.*)$/gm, '```$1')
+        // Fix double backtick representation of inline code
+        .replace(/``\s(.*?)\s``/g, '`$1`')
+        // Fix indentation in list items
+        .replace(/(\n\s*[-*+].*\n)\s*\n(\s*[-*+])/g, '$1$2')
+        // Fix markdown syntax inside list items
+        .replace(/(\n\s*[-*+].*)\n\s*\n(\s*\#{1,6}\s)/g, '$1\n\n$2');
+    }
 
     return output;
   };
