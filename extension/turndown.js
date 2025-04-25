@@ -194,6 +194,22 @@ var TurndownService = (function () {
       // Create the appropriate fenced code block
       if (options.codeBlockStyle === 'fenced') {
         var fence = options.fence;
+
+        // Normalize code block fence
+        // If backtick series is found in the code, use one more backtick for the fence
+        if (code.indexOf(fence) !== -1) {
+          // Count the highest number of consecutive backticks
+          var backtickMatch = code.match(/`+/g);
+          if (backtickMatch) {
+            var maxBackticks = 0;
+            for (var i = 0; i < backtickMatch.length; i++) {
+              maxBackticks = Math.max(maxBackticks, backtickMatch[i].length);
+            }
+            // Use one more backtick than the longest sequence in the code
+            fence = repeat('`', maxBackticks + 1);
+          }
+        }
+
         return (
           '\n\n' + fence + (language ? language : '') + '\n' +
           code.replace(/\n$/, '') +
@@ -583,6 +599,10 @@ var TurndownService = (function () {
     // Fix common HTML issues
     html = html.replace(/<(\/?)span>/gi, '');  // Remove empty spans
     html = html.replace(/<(\/?)div>/gi, '<$1div>\n');  // Add newlines after divs
+
+    // Fix common code block issues
+    html = html.replace(/```{6,}/g, '```');  // Normalize excessive backticks in code fences
+    html = html.replace(/~~~~{6,}/g, '~~~');  // Normalize excessive tildes in code fences
 
     return html;
   }
