@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+import requests
+
+# Create a session and add essential cookies
+s = requests.Session()
+
+# Add the session token cookie
+s.cookies.set('__Secure-next-auth.session-token', 'eyJhbGciOiJkaXIiLCJlbmMiOiJBMjU2R0NNIn0..GENMsJGT3B75nwyW.Sfyy_4ZOMUXJKKCUxPbdON-5UQT5xJTIJAwR6bFfncAebvgRMMzYqgZJQngO5qwA4cPzbgg5OLZZCk2Cwzr0e93VDOX7gK7-MLXTyVku5CP0IxApMwQhiSaH-uYXYu2Hsr8Hs4dmNxRI5GC8NKXniuJkg_NsjrDVTN6VuMLeRPD98Ki7_flwrUTDIEAX5UDUY8eEcY7EkxakijpcJ5rUXi1lvNZ_13nsIw2HzH0TFNtfeIXvK2ssDtBThotSXL_Kab8R3stNSLo29CI4wF5ePZ0QxOwrD_bJH_ihuwF1HwlKJOOBQLuYWF2-5txmIbBgc0ou1GS-wibham89Okv3Ait-BbLQw5p3G_MYqBtvDgL0OcQNbnUk7vYEZwIkYKipDoI9bC9ylN1uiqX-DUz-u9-BovsZTMrLB95-04_Y77DFMhWqUGqvN3Ro3YS2m0QQSshN3Nq_KiN2QkWtko-YxwPrtU2Q9ikKBrx8wGRxcWGGRtnCEVQdBvO5t3NS4qa-nQKFLehWcX1QHOSoTOrkqsq84DRdlnaGpxfhcTazHBBaO0LX7v018aY_ymE6DdpqVH5dtaNZHpK7qwQpdFc5NeSo2yE8u3011OTO-cPDumW_jz_zy4-6tlcjyvOg_hcmdNFMW4Tr5bBOSmsSTcSYchV7xLfopnSSYkCUQ_LwIV3QrKy9iHa1GCn3qcjShC0L5QR93ARpQszpHJEUh21PmPSTasZ7nftaMFekDD4q3ipU9Mtjf4_AAFo0DeyENqS2KXTtf4IFbsqShidigxyXTf5F6qWh4XPq5YsiTI3XhGJZz5N-idv71moqfWWUruTtP0YabFvIrzzYxSHz4nvWzh-4WBXe0W0ST-CxUVCRREvxb2sa_3numk50XxbB5JPf5tMviDZtXiKkUJftQf7L_fA2AIP0VNfoLcxw_MOaqYQ1GkNa1LytCBJnoqqu7mbAiyCQ-UM4dZi1QHkg30LzhtTCd1AyFOkBHkQvnJG988Yiqp_Uzx9LKO-ebs583dJN_57KSnb3r2CMyLdfZ2VFNWWVyfeYd7G0rfUn1Ko57oip-lU8J7a1nLYpnCIxQa-mKkPWdCOaKpBUEMwV97EIGmlYIRX2xCuHZ5QrfVmkdwn-EkxQRoN5AZrAUXs8vtaggU1hGR7XuexpNXdlULOQYHSTuRHaAjZWa_4G0wHPqPlUIrm_j7DH8tq4rNSz3CI9YBMplIHZBZr0ZQWRFUAtEG7uBTUyd7cwA-i5qA17laWBlUvnCFtwtV2Wsl6-kChw8Cw1MAcKAJ2JUeLo27b8Du_3NpEIhM7EGJO9eBPHJsrbqhum4xdsvLOjN6ytTcf5vw9xNz03x0u3qEX-UFiCwJnHvWO_WZmOdqO89-88LZ26PLVUqyfAh9_wT6wNoGNbc3srCtETs0Jxb7NejSwa0W7qspRlsk8M5Y1Fefm-u9X4F4CNRdDgZUZYIcdmyP8AhFzMxkXzNi6ZoMGK2F4nUrtK2N9a2XYjkIB-h7rGpkRnLnQlx29vhUYWIJgVY3w3UzLDAKDFZXZT-CFoSsYEZTCbn1ofGtZ9sBeY3Fruv4OF4w18jmuBnoFfEgZCjaMwr2h1LWnLRkNgraBKqaQ8dCzjm9jtsm8DeV2u0wXvO4LtuPus9pEH1a0dsPUzk_VnpBXzTWp4Qax8UBRaeinguodJjk_vTrZtIHyCCcBUDT3J3ItjX5IkHiENMIa3Zr__vD54cEKBPHTjtym9S3249fzi1oK-HUzN14d2Lh1ssaxFVn0UVm65En0tiAvhsmX0zwT1lACSpV9zfLXqCx3IUIvFWaVk9UktNuysEtf3l7zvU8uvdGemlW8aZq4TGaQqI1hFakIGoe6HDBFg6ehuS2tLWMTye0yzfLi2kBrzLU7-20QdIse_s7OUCU73uo-yGveZPzBYtgWvkmxBNknJCvuYiRlQtNaXpslnpMk9hA9eHxrxLkGofzvaFNT7WvuPVPorwfygv2wfppVptMwcBPwl0nmJrdn5I-niwPIqaapOgRjrpstkl3wCfbMg8aTGYkE6iJRe-_RqZ7MMftDEVr0_SZkM6tBAsiyNTCvit38d5UIGYCawjcZjIg2iXWVj4Ix2IJNNrJEVM2RKhh93VoK4N0lxkKBzNyRGfCvFpwLLhCv3LQB-7xBH4r14NSKS6pOsgrHfAixck_hqaF-3XIZwLUFuWEaaTxviKZdOdC_4jXZYGuymKB3CgachEAjI2SQ2_UnRhtofR62jl7jjqUDDvl_SeT1cZ2GkMONh_qagtZ0RUIRIxW-VTRnN60bwJBQFOQ8UUWCzy2_w3QP0uY77BzH2Hi8U25k2Osv6JrKuXvBhDlBnCRyfTpL6ikB_TWAE7OGR4ByvqEDdMKaQMyfIPR2A3e_XM6K97AGYcHtxGWt3rMgYjcqSz9AE2qcNgX95NjrU0OMfUSY79uEAUh94p45hPvot48RIENZO_3o3HCY65I0RoUtn8vyhuChgaqAz8psHaZccrIw5CgyAB3jmxCz8ck15bES5MgN88S04YTiV7SYl-9xts-Kb0NycRMow6xhoO84EzidkUHMD7w3Heu9yiglIROz-g0Qnqt_aS7xGVzXjrJ6im0XF-KJ6BMxU729p6_IMhm7_Ho2FkkCQHxvPiPgCrgvOyOzDjdgukWcJi-BUCWnYqRHj4c7sz3ugM_sZqK2DnTr3c_MLw_8N33ENP7GgED6h0jVzSeIlO6qLABQT2jmpRowKtwKKGf9oQpIKN7yfpuJ184VjqEWDIGvf9vYQd0FlDn3Eg1wYQrZs5V4MmU2aI0EOm9xr3FcRRqDbq6_ab1bSgz5d67X6-imZXwmjLuy2VJ_sUjoUWUpbTA4a5JSzJyYA-DMh5noxzVR_T95yKNEkaeC84rTENzSGSf_5lp7KDgrKMkZau65hrxKvkyHxtpRB-Hay8fHtdKulSxxYGCKOACYTN8lv8G00xc3VrSEmM02aJX7HA3_KB9Ux_gQc2TFaC_HpO7XsPunekC33w_REn3iWjBw9-cMbLVpLTzCysUBW_PiT-EN09T5U1y8ZrdmqzUepAQI_aRspA2cI3drsjruueTO9WVCXmU0xx6ncB678Es4I4n68Fwv2MRdZNjLjH7Iq9BFLaUax84IgOEZGvVntQULs4J-BFuk4-eNSv2jSlDgYTJTowrdGy-N4lp0UExxPjEfdD0fpAbybVnzOIGV4klKxfK86JI7CkGKIj0zDzLqwtwQeOa7DybjOzNapAKZqMUK-Gx82JalZ6jYJBZQY-xEUfZ8g7CakCEdMYi5aWoEgg3wAkBu2SfNEtXiSYCYD0O6qLzb9_Z2js8tSgdAasR8jSs2R6IL8goullYhAyL2Wz54my2cfftTaBvhs_hcomfnuafCoH74zYIxW3DQOLmQCk2H5H1sHmHsGrE1FRWuGi7Zko700XqEaovH0n71iTMJVEnaF_nzXYGRsso723S95ZlvVKNBN0k-zhBuI8RhXKd57-KrdqCMhLVDxvYEoyLH5Y5MNaGG5QGZj1NWBu9xt8RR7BRD9wA.UAfrn-hTy--Ywu4aLX7XSw', domain='chatgpt.com')
+
+# Set very browser-like headers
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Referer': 'https://chatgpt.com/',
+    'Sec-CH-UA': '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+    'Sec-CH-UA-Mobile': '?0',
+    'Sec-CH-UA-Platform': '"Windows"',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-User': '?1',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'DNT': '1',
+    'Connection': 'keep-alive'
+}
+
+# Make the request
+conversation_id = '6812d27d-6498-8006-9c6e-e6b6a4d6c0eb'
+url = f'https://chatgpt.com/c/{conversation_id}'
+
+r = s.get(url, headers=headers)
+
+# Print status and response info
+print(f'Status: {r.status_code}')
+print(f'Content-Type: {r.headers.get("content-type", "unknown")}')
+print(f'Response length: {len(r.text)} bytes')
+
+# Save the response to a file
+with open('browser_response.html', 'w') as f:
+    f.write(r.text)
+
+# Save response info to a separate file
+with open('browser_info.txt', 'w') as f:
+    f.write(f'Status: {r.status_code}\n')
+    f.write(f'Content-Type: {r.headers.get("content-type", "unknown")}\n')
+    f.write(f'Response length: {len(r.text)} bytes\n')
+    f.write('\nResponse Headers:\n')
+    for header, value in r.headers.items():
+        f.write(f'{header}: {value}\n')
+
+print(f'Response saved to browser_response.html')
+print(f'Response info saved to browser_info.txt')
