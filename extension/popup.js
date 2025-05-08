@@ -42,7 +42,8 @@ const defaultSettings = {
     preserveImages: true,
     includeTables: true,
     codeBlocks: true,
-    inlineLinks: true
+    inlineLinks: true,
+    enableChatGPTMode: true
   },
   urlCaptureOptions: {
     urlFilter: '.*',
@@ -60,6 +61,9 @@ let settings = {...defaultSettings};
 
 // Initialize TurndownService for HTML to Markdown conversion
 let turndownService;
+
+// Initialize ChatGPT specialized converter
+let chatGPTTurndown;
 
 // Initialize the extension
 document.addEventListener('DOMContentLoaded', () => {
@@ -114,6 +118,7 @@ function applySettings() {
   document.getElementById('include-tables').checked = settings.contentOptions.includeTables;
   document.getElementById('code-blocks').checked = settings.contentOptions.codeBlocks;
   document.getElementById('inline-links').checked = settings.contentOptions.inlineLinks;
+  document.getElementById('enable-chatgpt-mode').checked = settings.contentOptions.enableChatGPTMode;
 
   document.getElementById('cli-path').value = settings.cliPath || '';
 
@@ -123,12 +128,16 @@ function applySettings() {
 
 // Initialize the Turndown service with current settings
 function initializeTurndown() {
-  turndownService = new TurndownService({
+  // Standard TurndownService configuration
+  const turndownOptions = {
     headingStyle: settings.markdownOptions.headingStyle,
     bulletListMarker: settings.markdownOptions.bulletMarker,
     linkStyle: settings.markdownOptions.linkStyle,
     codeBlockStyle: settings.contentOptions.codeBlocks ? 'fenced' : 'indented'
-  });
+  };
+  
+  // Create the standard TurndownService
+  turndownService = new TurndownService(turndownOptions);
 
   // Configure Turndown based on settings
   if (!settings.contentOptions.preserveImages) {
@@ -138,6 +147,41 @@ function initializeTurndown() {
   if (settings.contentOptions.includeTables) {
     turndownService.keep(['table', 'tr', 'td', 'th', 'thead', 'tbody']);
   }
+  
+  // Add ChatGPT-specific rules to handle code blocks better
+  turndownService.addRule('codeBlock', {
+    filter: function(node) {
+      // Detect code blocks by structure or class
+      return (
+        (node.nodeName === 'PRE' && node.firstChild && node.firstChild.nodeName === 'CODE') ||
+        (node.nodeName === 'DIV' && node.classList && 
+         (node.classList.contains('code-block') || 
+          node.classList.contains('whitespace-pre') ||
+          node.classList.contains('bg-black')))
+      );
+    },
+    replacement: function(content, node, options) {
+      // Try to detect language
+      let language = '';
+      
+      // Check classes for language
+      if (node.className && node.className.includes('language-')) {
+        const match = node.className.match(/language-(\w+)/);
+        if (match) language = match[1];
+      }
+      
+      // Check child classes
+      if (!language && node.firstChild && node.firstChild.className) {
+        const match = node.firstChild.className.match(/language-(\w+)/);
+        if (match) language = match[1];
+      }
+      
+      // Clean up content and return as code block
+      content = content.trim();
+      
+      return '\n\n```' + language + '\n' + content + '\n```\n\n';
+    }
+  });
 }
 
 // Initialize UI elements
@@ -317,7 +361,8 @@ function updateSettingsFromForm() {
     preserveImages: document.getElementById('preserve-images').checked,
     includeTables: document.getElementById('include-tables').checked,
     codeBlocks: document.getElementById('code-blocks').checked,
-    inlineLinks: document.getElementById('inline-links').checked
+    inlineLinks: document.getElementById('inline-links').checked,
+    enableChatGPTMode: document.getElementById('enable-chatgpt-mode').checked
   };
 
   settings.cliPath = document.getElementById('cli-path').value;
@@ -363,6 +408,16 @@ function handleConversion() {
         showStatus('Error: Could not extract content', 'error');
         showSpinner(false);
         return;
+      }
+      
+      // If the HTML is very small or doesn't look like proper HTML,
+      // try to construct something meaningful
+      if (htmlContent.length < 100 || 
+          (!htmlContent.includes('<html') && !htmlContent.includes('<body'))) {
+        console.warn('HTML content looks broken or incomplete, attempting to salvage it');
+        
+        // Try to construct a basic HTML structure with the content
+        htmlContent = `<!DOCTYPE html><html><head><title>Conversation</title></head><body><div class="content">${htmlContent}</div></body></html>`;
       }
 
       // Convert HTML to Markdown
@@ -716,15 +771,206 @@ function convertToMarkdown(html, trim) {
     ];
 
     elementsToRemove.forEach(selector => {
-      tempDiv.querySelectorAll(selector).forEach(el => {
-        el.remove();
-      });
+      try {
+        tempDiv.querySelectorAll(selector).forEach(el => {
+          el.remove();
+        });
+      } catch (e) {
+        // Ignore errors from invalid selectors
+      }
     });
 
     html = tempDiv.innerHTML;
   }
 
-  return turndownService.turndown(html);
+  // Convert to markdown using the standard converter
+  let markdown = turndownService.turndown(html);
+  
+  // Check if this is content that's already been converted to our transcript format
+  if (html.includes('title: "ChatGPT Conversation Transcript"') && 
+      html.includes('format: "transcript-v1.0"') &&
+      html.includes('# Conversation Transcript')) {
+    
+    console.log('Already in transcript format, skipping conversion');
+    
+    // Just clean up any extra/duplicate metadata
+    if (html.match(/---\s*title.*?---/g)?.length > 1) {
+      // If there are multiple frontmatter blocks, keep only the first one
+      html = html.replace(/(---\s*title.*?---)([\s\S]*?)(---\s*title.*?---)/s, '$1$2');
+    }
+    
+    // Make sure we only have one main title
+    if (html.match(/# Conversation Transcript/g)?.length > 1) {
+      html = html.replace(/# Conversation Transcript/, '').trim();
+      html = html.replace(/---\s*title.*?---\s*/s, match => match + '\n# Conversation Transcript\n\n');
+    }
+    
+    return html;
+  }
+  
+  // Check if this is a ChatGPT conversation and we should use the transcript converter
+  if (settings.contentOptions.enableChatGPTMode && 
+      (TranscriptConverter.isChatGPT(html) || 
+       (typeof window !== 'undefined' && 
+        (window.location.href.includes('chatgpt.com') || 
+         window.location.href.includes('chat.openai.com'))))) {
+    
+    console.log('ChatGPT conversation detected, using transcript converter');
+    
+    try {
+      // We need to do some pre-cleaning before handing off to the transcript converter
+      // This helps with issues where UI text gets mixed in at the HTML level
+      const tempDiv = document.createElement('div');
+      
+      // Handle incomplete HTML by wrapping it in a proper structure if needed
+      let processedHtml = html;
+      
+      // Check if the HTML is a partial fragment
+      if (!html.trim().startsWith('<!DOCTYPE html>') && !html.trim().startsWith('<html')) {
+        console.log('Detected HTML fragment, wrapping in proper HTML structure');
+        processedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${html}</body></html>`;
+      }
+      
+      tempDiv.innerHTML = processedHtml;
+
+      // Remove specific ChatGPT UI elements that commonly cause problems
+      const removeSelectors = [
+        // Page UI elements
+        'title', 'header', 'footer', 'nav', 'aside', 
+        // Common ChatGPT UI elements 
+        '[role="banner"]', '[role="navigation"]', '[role="complementary"]',
+        '.flex-shrink-0', '.self-end', '.text-gray-400', '.text-gray-600',
+        '.text-gray-500', '.text-xs', '.text-sm', '.py-2', '.px-3',
+        '[data-testid="search-box"]', '[data-testid="send-button"]',
+        '[data-testid="model-switcher"]', '[data-testid="chat-sidebar"]',
+        '[aria-label="Menu"]', '[data-testid="copy-button"]',
+        '[data-state="closed"]', '[data-state="open"]', '[data-message-id]',
+        // Model indicator, buttons, etc.
+        'button', '.toast', '.modal', '.cookie-banner', '.alert',
+        '.buttons', '.actionbar', '.input-panel', '.toolbar', '.navigation',
+        '.pagination', '.search-results', '.menu-dropdown', '.settings',
+        '.skip-link', '.chat-history', '.main-header', '.main-footer',
+        // More specific ChatGPT UI elements
+        '.sticky', '.pointer-events-auto', '.chat-message-actions',
+        '.chat-message-edit-buttons', '.relative', '.absolute',
+        '.w-full', '.text-base', '.h-full'
+      ];
+      
+      removeSelectors.forEach(selector => {
+        try {
+          const elements = tempDiv.querySelectorAll(selector);
+          elements.forEach(el => el.remove());
+        } catch (e) { /* Ignore invalid selectors */ }
+      });
+
+      // Remove common text strings that indicate UI elements
+      const uiStrings = [
+        'Skip to content', 'Chat history', 'Open sidebar', 'Share', 'Search',
+        'Deep research', 'Saved memory full', 'undefined', 'Answer in chat instead',
+        'ChatGPT can make mistakes', 'OpenAI doesn\'t use', 'workspace data',
+        'CopyEdit', 'Copy Edit', 'Copy code', 'chat', 'Chat', 'GPT', 'OpenAI',
+        '4o', 'Assistant can make mistakes', 'Information cutoff', 
+        'Justin\'s Workspace', 'search', 'Deep research', 'Create image',
+        'Clear conversations', 'Settings', 'Log out', 'API mode', 'Help',
+        'My plan', 'New chat', 'Previous conversations', 'Limited knowledge',
+        'may produce inaccurate information', 'trained on data'
+      ];
+      
+      // Create a sanitized version of the HTML
+      let cleanedHtml = tempDiv.innerHTML;
+      uiStrings.forEach(str => {
+        cleanedHtml = cleanedHtml.replace(new RegExp(str, 'gi'), '');
+      });
+      
+      // Clean up any sequences of newlines in the HTML
+      cleanedHtml = cleanedHtml.replace(/\n{3,}/g, '\n\n');
+      
+      // Handle code blocks better at HTML level
+      const codeElements = tempDiv.querySelectorAll('pre, code, .code-block, [class*="bg-black"], [class*="whitespace-pre"]');
+      codeElements.forEach(codeEl => {
+        // Remove any "Copy" or "Edit" buttons inside or near code blocks
+        const nearbyButtons = codeEl.querySelectorAll('button');
+        nearbyButtons.forEach(btn => btn.remove());
+        
+        // Make sure code content is preserved properly
+        if (codeEl.innerHTML) {
+          // Preserve line breaks and spaces in code
+          codeEl.innerHTML = codeEl.innerHTML.replace(/<br\s*\/?>/gi, '\n');
+          // Remove any "Copy code" or similar text
+          codeEl.innerHTML = codeEl.innerHTML.replace(/Copy\s*code|CopyEdit|Copy\s*Edit/gi, '');
+        }
+      });
+      
+      // First check if this content is already in our transcript format
+      if (cleanedHtml.includes('title: "ChatGPT Conversation Transcript"') && 
+          cleanedHtml.includes('format: "transcript-v1.0"') &&
+          cleanedHtml.includes('# Conversation Transcript')) {
+        
+        console.log('Content is already in transcript format, cleaning up');
+        return TranscriptConverter.cleanupExistingTranscript(cleanedHtml);
+      }
+      
+      // Use the specialized transcript converter with pre-cleaned HTML
+      const result = TranscriptConverter.convert(cleanedHtml);
+      
+      // Log the first 200 characters of the result for debugging
+      console.log('Conversion result preview:', result.substring(0, 200) + '...');
+      
+      if (result && result.includes('# Conversation Transcript')) {
+        // Make sure conversation structure is correct with additional clean up
+        const finalResult = result
+          // Fix any remaining UI text at start or end 
+          .replace(/^(.*?)(---\s*title)/s, '$2')
+          .replace(/(Conversation\.\s*)\n+.*?(undefined|search|OpenAI|train its).*$/si, '$1\n\n');
+        
+        return finalResult;
+      } else {
+        console.error('Transcript converter returned invalid output');
+        // Try to use the regular turndown service to convert the HTML
+        try {
+          return turndownService.turndown(cleanedHtml);
+        } catch (turndownError) {
+          console.error('Regular turndown also failed:', turndownError);
+          
+          // If that fails too, return a simple fallback
+          return `# ChatGPT Conversation
+
+Unable to fully convert the content. Try using the "Convert Selection" option if you're seeing this message.`;
+        }
+      }
+    } catch (error) {
+      console.error('Error using transcript converter:', error);
+      console.error('Error details:', error.message);
+      console.error('Error stack:', error.stack);
+      
+      // Try to use the simpler ChatGPTCleaner as a fallback
+      try {
+        console.log('Attempting to use ChatGPTCleaner as fallback');
+        // Convert with regular turndown first
+        const simpleTurndown = turndownService.turndown(html);
+        // Then clean it up with the specialized cleaner
+        const cleanedResult = ChatGPTCleaner.clean(simpleTurndown);
+        
+        // Add a subtle note about using fallback
+        return `> ℹ️ *Note: Used fallback converter due to an issue with the primary converter.*
+
+${cleanedResult}`;
+      } catch (cleanerError) {
+        console.error('Fallback cleaner also failed:', cleanerError);
+        
+        // Last resort - just use regular turndown
+        const fallbackResult = turndownService.turndown(html);
+        
+        // Add warning about fallback conversion
+        return `> ⚠️ **Note**: The ChatGPT specialized converter encountered an error and fell back to standard conversion.
+> This may result in less optimal formatting. Please report this issue.
+
+${fallbackResult}`;
+      }
+    }
+  }
+
+  return markdown;
 }
 
 // Handle the output based on selected action
