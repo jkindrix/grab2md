@@ -1,7 +1,17 @@
 import json
 import logging
+import os
+import pickle
+import re
+import sqlite3
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
+from Crypto.Cipher import AES
+from Crypto.Protocol.KDF import PBKDF2
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -142,6 +152,417 @@ def get_credentials():
 
 
 # -------------------------------
+# Browser Cookie Management
+# -------------------------------
+
+def get_browser_cookie_path():
+    """Return the path to browser cookie files based on platform and browser."""
+    
+    # Define browser and profile configurations
+    browser_config = config.get("browser", {})
+    preferred_browser = browser_config.get("preferred", "chrome")
+    
+    # Check for custom path override in config
+    custom_paths = browser_config.get("custom_path", {})
+    if preferred_browser in custom_paths and custom_paths[preferred_browser]:
+        # Handle Windows path in WSL
+        custom_path_str = custom_paths[preferred_browser]
+        
+        # Convert Windows path to WSL path if needed
+        if (sys.platform.startswith('linux') and 
+            not custom_path_str.startswith('/') and 
+            ':' in custom_path_str):
+            # Looks like Windows path (C:\...) but we're in Linux/WSL
+            drive = custom_path_str[0].lower()
+            path_without_drive = custom_path_str[3:]
+            # Replace backslashes with forward slashes
+            path_with_slashes = path_without_drive.replace('\\', '/')
+            wsl_path = f"/mnt/{drive}/{path_with_slashes}"
+            logger.info(f"Converting Windows path {custom_path_str} to WSL path {wsl_path}")
+            custom_path = Path(wsl_path)
+        else:
+            custom_path = Path(custom_path_str)
+            
+        if custom_path.exists():
+            logger.info(f"Using custom cookie path for {preferred_browser}: {custom_path}")
+            return custom_path
+        else:
+            logger.warning(f"Custom cookie path for {preferred_browser} not found: {custom_path}")
+    
+    home = Path.home()
+    
+    # Browser storage paths based on platform
+    if sys.platform == "win32":  # Windows
+        if preferred_browser == "chrome":
+            return home / "AppData" / "Local" / "Google" / "Chrome" / "User Data" / "Default" / "Network" / "Cookies"
+        elif preferred_browser == "firefox":
+            return home / "AppData" / "Roaming" / "Mozilla" / "Firefox" / "Profiles"
+        elif preferred_browser == "edge":
+            return home / "AppData" / "Local" / "Microsoft" / "Edge" / "User Data" / "Default" / "Network" / "Cookies"
+    
+    elif sys.platform == "darwin":  # macOS
+        if preferred_browser == "chrome":
+            return home / "Library" / "Application Support" / "Google" / "Chrome" / "Default" / "Cookies"
+        elif preferred_browser == "firefox":
+            return home / "Library" / "Application Support" / "Firefox" / "Profiles"
+        elif preferred_browser == "safari":
+            return home / "Library" / "Cookies" / "Cookies.binarycookies"
+    
+    else:  # Linux/Unix
+        if preferred_browser == "chrome":
+            return home / ".config" / "google-chrome" / "Default" / "Cookies"
+        elif preferred_browser == "firefox":
+            return home / ".mozilla" / "firefox"
+        elif preferred_browser == "edge":
+            return home / ".config" / "microsoft-edge" / "Default" / "Cookies"
+    
+    logger.warning(f"Unsupported browser '{preferred_browser}' or platform '{sys.platform}'")
+    return None
+
+
+def get_chrome_encryption_key():
+    """Get encryption key for Chrome cookies"""
+    if sys.platform == "win32":  # Windows
+        import win32crypt
+        try:
+            local_state_path = Path.home() / "AppData" / "Local" / "Google" / "Chrome" / "User Data" / "Local State"
+            with open(local_state_path, "r", encoding="utf-8") as f:
+                local_state = json.loads(f.read())
+                
+            # Decode the encrypted key
+            encrypted_key = local_state["os_crypt"]["encrypted_key"]
+            encrypted_key = encrypted_key.encode()
+            encrypted_key = encrypted_key[5:]  # Remove 'DPAPI' prefix
+            
+            # Decrypt the key using Windows DPAPI
+            decrypted_key = win32crypt.CryptUnprotectData(encrypted_key, None, None, None, 0)[1]
+            return decrypted_key
+        except Exception as e:
+            logger.error(f"Error getting Chrome encryption key: {e}")
+            return None
+    
+    elif sys.platform == "darwin":  # macOS
+        # macOS uses the keychain for encryption
+        # This is a simplified implementation
+        try:
+            key_material = "Chrome Safe Storage"
+            password = key_material.encode()
+            # Use OSX keychain to get the actual password
+            # This would require additional macOS-specific libraries
+            salt = b'saltysalt'
+            iv = b' ' * 16
+            iterations = 1003
+            key = PBKDF2(password, salt, dkLen=16, count=iterations)
+            return key
+        except Exception as e:
+            logger.error(f"Error getting Chrome encryption key on macOS: {e}")
+            return None
+    
+    elif "linux" in sys.platform:  # Linux
+        # Linux Chrome may use different encryption based on distribution
+        # Here's a basic implementation for Ubuntu/Debian
+        try:
+            salt = b'saltysalt'
+            iv = b' ' * 16
+            iterations = 1
+            # Many Linux distros store this in the Gnome keyring
+            # This is a simplified implementation that works on some systems
+            password = "peanuts".encode()  # Default password on some Linux systems
+            key = PBKDF2(password, salt, dkLen=16, count=iterations)
+            return key
+        except Exception as e:
+            logger.error(f"Error getting Chrome encryption key on Linux: {e}")
+            return None
+    
+    return None
+
+
+def decrypt_chrome_cookie(encrypted_value, key):
+    """Decrypt Chrome cookie value"""
+    try:
+        # For newer Chrome versions, cookies are encrypted with AES-256-GCM
+        if encrypted_value.startswith(b'v10') or encrypted_value.startswith(b'v11'):
+            # Extract required values
+            nonce = encrypted_value[3:3+12]
+            ciphertext = encrypted_value[3+12:-16]
+            tag = encrypted_value[-16:]
+            
+            # Create cipher
+            cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+            
+            # Decrypt
+            decrypted = cipher.decrypt_and_verify(ciphertext, tag)
+            return decrypted.decode()
+        
+        # Windows may also use DPAPI for older Chrome versions
+        elif sys.platform == "win32":
+            import win32crypt
+            return win32crypt.CryptUnprotectData(encrypted_value, None, None, None, 0)[1].decode()
+        
+        # Older versions or other platforms might use simple AES
+        else:
+            iv = b' ' * 16
+            cipher = AES.new(key, AES.MODE_CBC, iv)
+            # Remove padding
+            decrypted = cipher.decrypt(encrypted_value)
+            padding_length = decrypted[-1]
+            if padding_length:
+                decrypted = decrypted[:-padding_length]
+            return decrypted.decode()
+    
+    except Exception as e:
+        logger.error(f"Cookie decryption error: {e}")
+        return None
+
+
+def get_chrome_cookies(domain):
+    """Retrieve Chrome cookies for a specific domain"""
+    cookie_dict = {}
+    cookie_path = get_browser_cookie_path()
+    
+    if not cookie_path or not cookie_path.exists():
+        logger.warning(f"Chrome cookie database not found at {cookie_path}")
+        return cookie_dict
+    
+    # Get encryption key (specific to Chrome)
+    encryption_key = get_chrome_encryption_key()
+    if not encryption_key:
+        logger.warning("Could not retrieve Chrome encryption key")
+        return cookie_dict
+    
+    # Create a temporary copy of the database to avoid locking issues
+    # Use /tmp directory in WSL which has proper permissions
+    temp_dir = Path("/tmp/html2md")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_db_path = temp_dir / "cookies_temp.db"
+    
+    try:
+        # Copy the database to a temporary file
+        import shutil
+        try:
+            # Try to use shutil.copy2 which preserves metadata
+            shutil.copy2(cookie_path, temp_db_path)
+        except Exception as copy_err:
+            # If that fails, try a basic file read/write approach
+            logger.warning(f"Error using shutil.copy2: {copy_err}, falling back to manual file copy")
+            with open(cookie_path, "rb") as src, open(temp_db_path, "wb") as dst:
+                dst.write(src.read())
+                
+        logger.info(f"Created temporary copy of cookies database at {temp_db_path}")
+    except Exception as e:
+        logger.error(f"Could not copy cookies database: {e}")
+        return cookie_dict
+    
+    # Connect to the temporary SQLite database
+    try:
+        domain_pattern = f"%{domain}%"
+        conn = sqlite3.connect(str(temp_db_path))
+        cursor = conn.cursor()
+        
+        # Query structure may vary between Chrome versions, try multiple versions
+        try:
+            # Newer Chrome versions
+            cursor.execute(
+                "SELECT name, value, encrypted_value, host_key, expires_utc, path FROM cookies WHERE host_key LIKE ?",
+                (domain_pattern,)
+            )
+        except sqlite3.OperationalError:
+            # Older Chrome versions
+            cursor.execute(
+                "SELECT name, value, encrypted_value, host_key, expires_utc, path FROM cookies WHERE host_key LIKE ?",
+                (domain_pattern,)
+            )
+        
+        # Current time for expiration check
+        now = int((datetime.now(timezone.utc) - datetime(1970, 1, 1, tzinfo=timezone.utc)).total_seconds())
+        
+        for name, value, encrypted_value, host_key, expires_utc, path in cursor.fetchall():
+            # Convert Chrome's expire format (microseconds since 1601) to standard format
+            # Chrome uses Windows epoch (January 1, 1601)
+            chrome_epoch = datetime(1601, 1, 1, tzinfo=timezone.utc)
+            try:
+                # Convert microseconds to seconds and adjust for epoch difference
+                expires = expires_utc / 1000000.0
+                
+                # Skip expired cookies
+                if expires < now and expires != 0:
+                    continue
+                
+                # If value is not set but encrypted_value is, decrypt it
+                if not value and encrypted_value:
+                    # Skip the 'v10' prefix for encrypted values
+                    decrypted_value = decrypt_chrome_cookie(encrypted_value, encryption_key)
+                    if decrypted_value:
+                        cookie_dict[name] = decrypted_value
+                else:
+                    cookie_dict[name] = value
+            except Exception as e:
+                logger.debug(f"Error processing cookie {name}: {e}")
+        
+        conn.close()
+        
+        # Clean up the temporary file
+        try:
+            os.remove(temp_db_path)
+        except Exception:
+            pass
+            
+    except Exception as e:
+        logger.error(f"Error reading Chrome cookies: {e}")
+        # Clean up the temporary file on error
+        try:
+            os.remove(temp_db_path)
+        except Exception:
+            pass
+    
+    logger.info(f"Retrieved {len(cookie_dict)} cookies for domain {domain}")
+    return cookie_dict
+
+
+def get_firefox_cookies(domain):
+    """Retrieve Firefox cookies for a specific domain"""
+    cookie_dict = {}
+    cookie_path = get_browser_cookie_path()
+    
+    if not cookie_path or not cookie_path.exists():
+        logger.warning(f"Firefox profile directory not found at {cookie_path}")
+        return cookie_dict
+    
+    # Find the default profile
+    profile_dir = None
+    
+    # Firefox uses a profiles.ini file to identify the default profile
+    if cookie_path.is_dir():
+        profiles_ini = cookie_path.parent / "profiles.ini"
+        if profiles_ini.exists():
+            try:
+                # Parse profiles.ini to find default profile
+                with open(profiles_ini, "r") as f:
+                    profile_data = f.read()
+                
+                # Find the default profile section
+                profile_sections = re.findall(r'\[Profile\d+\].*?(?=\[|$)', profile_data, re.DOTALL)
+                for section in profile_sections:
+                    if "Default=1" in section or "IsRelative=1" in section:
+                        path_match = re.search(r'Path=(.*)', section)
+                        if path_match:
+                            profile_name = path_match.group(1)
+                            if "IsRelative=1" in section:
+                                profile_dir = cookie_path.parent / profile_name
+                            else:
+                                profile_dir = Path(profile_name)
+                            break
+                
+                # If no default found, try to find any profile
+                if not profile_dir:
+                    for section in profile_sections:
+                        path_match = re.search(r'Path=(.*)', section)
+                        if path_match:
+                            profile_name = path_match.group(1)
+                            if "IsRelative=1" in section:
+                                profile_dir = cookie_path.parent / profile_name
+                            else:
+                                profile_dir = Path(profile_name)
+                            break
+            except Exception as e:
+                logger.error(f"Error parsing Firefox profiles.ini: {e}")
+    
+    # If still no profile found, check if there's only one subdirectory
+    if not profile_dir and cookie_path.is_dir():
+        profiles = [p for p in cookie_path.iterdir() if p.is_dir() and p.name.endswith(".default")]
+        if len(profiles) == 1:
+            profile_dir = profiles[0]
+        else:
+            # Try any .default profile directory
+            for p in cookie_path.iterdir():
+                if p.is_dir() and ".default" in p.name:
+                    profile_dir = p
+                    break
+    
+    if not profile_dir or not profile_dir.exists():
+        logger.warning("Could not find a valid Firefox profile")
+        return cookie_dict
+    
+    # Locate cookies.sqlite in the profile
+    cookies_db = profile_dir / "cookies.sqlite"
+    if not cookies_db.exists():
+        logger.warning(f"Firefox cookies database not found at {cookies_db}")
+        return cookie_dict
+    
+    # Connect to SQLite database and fetch cookies
+    try:
+        domain_pattern = f"%{domain}%"
+        
+        # Firefox locks its database, so we need to make a copy first
+        temp_path = cookies_db.with_suffix(".sqlite.tmp")
+        
+        # Copy the database to a temporary file
+        try:
+            with open(cookies_db, "rb") as src, open(temp_path, "wb") as dst:
+                dst.write(src.read())
+        except Exception as e:
+            logger.error(f"Could not copy Firefox cookies database: {e}")
+            return cookie_dict
+        
+        # Now connect to the copy
+        conn = sqlite3.connect(str(temp_path))
+        cursor = conn.cursor()
+        
+        # Query cookies
+        try:
+            cursor.execute(
+                "SELECT name, value, host, expiry, path FROM moz_cookies WHERE host LIKE ?",
+                (domain_pattern,)
+            )
+            
+            # Current time for expiration check
+            now = int(datetime.now().timestamp())
+            
+            for name, value, host, expiry, path in cursor.fetchall():
+                # Skip expired cookies
+                if expiry < now and expiry != 0:
+                    continue
+                
+                cookie_dict[name] = value
+        except sqlite3.OperationalError as e:
+            logger.error(f"Error querying Firefox cookies: {e}")
+        
+        conn.close()
+        
+        # Clean up the temporary file
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error(f"Error reading Firefox cookies: {e}")
+    
+    logger.info(f"Retrieved {len(cookie_dict)} cookies for domain {domain}")
+    return cookie_dict
+
+
+def get_domain_cookies(url):
+    """Get cookies for a specific domain from the preferred browser"""
+    # Parse domain from URL
+    domain = urlparse(url).netloc
+    
+    # Strip www. if present
+    if domain.startswith("www."):
+        domain = domain[4:]
+    
+    browser_config = config.get("browser", {})
+    preferred_browser = browser_config.get("preferred", "chrome")
+    
+    if preferred_browser == "chrome":
+        return get_chrome_cookies(domain)
+    elif preferred_browser == "firefox":
+        return get_firefox_cookies(domain)
+    else:
+        logger.warning(f"Cookie extraction not implemented for browser: {preferred_browser}")
+        return {}
+
+
+# -------------------------------
 # HTTP Session Management
 # -------------------------------
 
@@ -173,6 +594,140 @@ def reset_session(session):
     new_session = get_session()
     logger.info("New session initialized after reset.")
     return new_session
+
+
+def load_cookies_from_json(json_file, url=None):
+    """Load cookies from a JSON file exported from browser developer tools"""
+    cookies = {}
+    try:
+        with open(json_file, 'r') as f:
+            cookie_data = json.load(f)
+            
+        domain = None
+        if url:
+            domain = urlparse(url).netloc
+            logger.debug(f"URL domain for cookie matching: {domain}")
+            
+        # Handle different JSON cookie formats
+        if isinstance(cookie_data, list):
+            # Format: Array of cookie objects with name, value, domain
+            logger.debug(f"JSON cookie format: Array with {len(cookie_data)} items")
+            for cookie in cookie_data:
+                if isinstance(cookie, dict) and 'name' in cookie and 'value' in cookie:
+                    cookie_domain = cookie.get('domain', '')
+                    cookie_name = cookie['name']
+                    cookie_value = cookie['value']
+                    cookie_path = cookie.get('path', '/')
+                    
+                    # This is debugging to see what cookies are being processed
+                    logger.debug(f"Cookie: {cookie_name}, Domain: {cookie_domain}, Path: {cookie_path}")
+                    
+                    # Only include cookies for this domain if URL is specified
+                    include_cookie = False
+                    
+                    if not domain:
+                        # If no URL/domain specified, include all cookies
+                        include_cookie = True
+                    elif cookie_domain and cookie_domain.startswith('.'):
+                        # Handle subdomain cookies - domain starts with a dot, means any subdomain
+                        clean_domain = cookie_domain.lstrip('.')
+                        if domain == clean_domain or domain.endswith('.' + clean_domain):
+                            include_cookie = True
+                    elif cookie_domain and domain == cookie_domain:
+                        # Exact domain match
+                        include_cookie = True
+                    elif cookie_domain and domain.endswith(cookie_domain):
+                        # Domain ending match
+                        include_cookie = True
+                    
+                    if include_cookie:
+                        cookies[cookie_name] = cookie_value
+                        logger.debug(f"Included cookie: {cookie_name} for domain {domain}")
+                    else:
+                        logger.debug(f"Excluded cookie: {cookie_name} (domain mismatch)")
+        elif isinstance(cookie_data, dict):
+            # Format: Object with cookie key-value pairs
+            logger.debug(f"JSON cookie format: Dictionary with {len(cookie_data)} items")
+            for name, value in cookie_data.items():
+                cookies[name] = value
+                logger.debug(f"Added cookie: {name}")
+                
+        logger.info(f"Loaded {len(cookies)} cookies from JSON file: {json_file}")
+    except Exception as e:
+        logger.error(f"Error loading cookies from JSON file: {e}")
+        import traceback
+        logger.debug(f"Cookie loading traceback: {traceback.format_exc()}")
+    
+    return cookies
+
+def apply_browser_cookies(session, url, cookie_json=None):
+    """Apply cookies from browser to a requests session"""
+    url_domain = urlparse(url).netloc
+    logger.debug(f"Setting cookies for domain: {url_domain}")
+    
+    # Clear existing cookies for this domain to avoid conflicts
+    existing_cookies = {k: v for k, v in session.cookies.items()}
+    for name, value in existing_cookies.items():
+        if url_domain in session.cookies.get(name, domain=None):
+            logger.debug(f"Removing existing cookie: {name}")
+            del session.cookies[name]
+    
+    if cookie_json:
+        # Load raw cookie data to also get path, domain, etc.
+        try:
+            with open(cookie_json, 'r') as f:
+                raw_cookie_data = json.load(f)
+                
+            logger.debug(f"Loaded raw cookie data: {len(raw_cookie_data)} entries")
+            
+            # Check if we have a list of cookie objects
+            if isinstance(raw_cookie_data, list):
+                for cookie in raw_cookie_data:
+                    if isinstance(cookie, dict) and 'name' in cookie and 'value' in cookie:
+                        cookie_domain = cookie.get('domain', '')
+                        cookie_name = cookie['name']
+                        cookie_value = cookie['value']
+                        cookie_path = cookie.get('path', '/')
+                        
+                        # Process domain for cookies (remove leading dot for requests compatibility)
+                        if cookie_domain.startswith('.'):
+                            cookie_domain = cookie_domain[1:]
+                        
+                        # Skip domain check for now, we want to apply all cookies from the file
+                        # Cookies with wrong domain will be ignored by the browser anyway
+                        logger.debug(f"Setting cookie: {cookie_name}, Domain: {cookie_domain or url_domain}, Path: {cookie_path}")
+                        session.cookies.set(
+                            cookie_name, 
+                            cookie_value, 
+                            domain=cookie_domain or url_domain, 
+                            path=cookie_path
+                        )
+            elif isinstance(raw_cookie_data, dict):
+                # For dict format, we don't have domain/path info
+                for name, value in raw_cookie_data.items():
+                    logger.debug(f"Setting cookie from dict: {name}")
+                    session.cookies.set(name, value, domain=url_domain)
+                    
+        except Exception as e:
+            logger.error(f"Error directly processing cookie JSON: {e}")
+            # Fall back to simpler method
+            cookies = load_cookies_from_json(cookie_json, url)
+            for name, value in cookies.items():
+                logger.debug(f"Setting cookie (fallback): {name}")
+                session.cookies.set(name, value, domain=url_domain)
+    else:
+        # Extract from browser
+        cookies = get_domain_cookies(url)
+        for name, value in cookies.items():
+            logger.debug(f"Setting browser cookie: {name}")
+            session.cookies.set(name, value, domain=url_domain)
+    
+    # Log all cookies for debugging
+    all_cookies = {k: v for k, v in session.cookies.items()}
+    logger.debug(f"All cookies after applying: {all_cookies}")
+    logger.info(f"Applied cookies to session for {url}")
+    
+    return session
 
 
 # -------------------------------
