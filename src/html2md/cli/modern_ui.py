@@ -38,7 +38,7 @@ from html2md.config.loader import (
     DEFAULT_CONFIG,
     load_config,
 )
-from html2md.cookies.session_manager import get_session
+from html2md.cookies.session_manager import get_session, apply_browser_cookies
 from html2md.markdown.batch_processor import build_headers, process_markdown_links
 from html2md.markdown.converter import html_to_markdown, local_html_to_markdown
 from html2md.markdown.crawler import crawl_website
@@ -195,10 +195,27 @@ class LogLevel(str, Enum):
     WARNING = "WARNING"
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
+    
+class Browser(str, Enum):
+    """Supported browsers for cookie extraction."""
+    
+    CHROME = "chrome"
+    FIREFOX = "firefox"
+    EDGE = "edge"
+    SAFARI = "safari"
 
 
-def set_log_level(level: LogLevel) -> None:
-    """Set the logging level."""
+def set_log_level(level: LogLevel, debug_log: Optional[Path] = None) -> None:
+    """Set the logging level and optionally enable debug logging to a file."""
+    global logger
+    
+    # If debug log is specified, reconfigure the logger
+    if debug_log:
+        from html2md.utils.logger import setup_logging
+        logger = setup_logging(console_output=True, debug_file=str(debug_log))
+        logger.info(f"Debug logs will be written to: {debug_log}")
+    
+    # Set the log level
     logger.setLevel(getattr(logging, level))
 
 
@@ -207,9 +224,13 @@ def process_single_with_progress(
     trim: bool,
     output: Optional[Path],
     no_cookies: bool,
-    local: bool,
-    progress: Progress,
-    task_id: TaskID,
+    browser_cookies: bool,
+    browser: Optional[Browser],
+    cookie_path: Optional[Path] = None,
+    cookie_json: Optional[Path] = None,
+    local: bool = False,
+    progress: Progress = None,
+    task_id: TaskID = None,
 ) -> bool:
     """Process a single URL or file with progress tracking."""
     progress.update(task_id, description=f"Processing {source}")
@@ -223,8 +244,34 @@ def process_single_with_progress(
             # Subtasks for fetching and converting
             progress.update(task_id, description=f"Fetching content from {source}")
 
-            # Create a new session for each URL if cookies are not disabled
-            session = get_session() if not no_cookies else None
+            # Create a new session
+            session = None
+            
+            # Determine session type based on flags
+            if not no_cookies:
+                session = get_session()
+                
+                # If browser cookies flag is set, apply browser cookies to session
+                if browser_cookies and session:
+                    # Store browser preference in config or use specified one
+                    config = load_config()
+                    if browser:
+                        config.setdefault('browser', {})['preferred'] = browser
+                    
+                    progress.update(task_id, description=f"Extracting browser cookies for {source}")
+                    
+                    # Apply browser cookies to session - use JSON file if provided
+                    if cookie_json:
+                        progress.update(task_id, description=f"Loading cookies from JSON file for {source}")
+                        session = apply_browser_cookies(session, source, cookie_json)
+                        progress.update(task_id, description=f"Using cookies from JSON file for {source}")
+                        logger.info(f"Using cookies from JSON file for {source}")
+                    else:
+                        # Otherwise use browser extraction
+                        session = apply_browser_cookies(session, source)
+                        browser_name = browser or config.get('browser', {}).get('preferred', 'chrome')
+                        progress.update(task_id, description=f"Using cookies from {browser_name} browser for {source}")
+                        logger.info(f"Using cookies from {browser_name} browser for {source}")
 
             # Process URL with session and headers
             markdown_result = html_to_markdown(
@@ -275,8 +322,11 @@ def process_single_with_progress(
                 console.print("• There may be network connectivity issues")
                 console.print("• The website may be returning an empty response")
                 console.print(
-                    "\n[blue]Try using the --no-cookies flag if you're having login issues[/blue]"
+                    "\n[blue]Authentication tips:[/blue]"
                 )
+                console.print("• Try using --browser-cookies to use your browser's cookies")
+                console.print("• Use --browser firefox (or chrome, edge) to specify which browser's cookies to use")
+                console.print("• Try using the --no-cookies flag if default cookies are causing issues")
                 progress.start()
                 progress.update(
                     task_id, description=f"❌ Failed to retrieve content from {source}"
@@ -350,6 +400,18 @@ def convert_command(
     no_cookies: bool = typer.Option(
         False, "--no-cookies", help="Disable loading cookies from the browser."
     ),
+    browser_cookies: bool = typer.Option(
+        False, "--browser-cookies", help="Use cookies from the local browser to authenticate with websites."
+    ),
+    browser: Optional[Browser] = typer.Option(
+        None, "--browser", help="Specify which browser to extract cookies from (default: chrome)."
+    ),
+    cookie_path: Optional[Path] = typer.Option(
+        None, "--cookie-path", help="Path to browser cookies database file (helps with Windows/WSL)."
+    ),
+    cookie_json: Optional[Path] = typer.Option(
+        None, "--cookie-json", help="Path to JSON file with exported cookies (from browser developer tools)."
+    ),
     local: bool = typer.Option(
         False,
         "--local",
@@ -358,9 +420,12 @@ def convert_command(
     log_level: LogLevel = typer.Option(
         LogLevel.INFO, "--log-level", help="Set logging level."
     ),
+    debug_log: Optional[Path] = typer.Option(
+        None, "--debug-log", help="Write debug logs to specified file."
+    ),
 ):
     """Convert HTML content from URLs or local files to Markdown."""
-    set_log_level(log_level)
+    set_log_level(log_level, debug_log)
 
     # Display a beautiful header
     console.print(
@@ -388,8 +453,32 @@ def convert_command(
         successes = 0
         for source in sources:
             task_id = tasks[source]
+            
+            # Update config with cookie path if provided
+            if cookie_path:
+                config = load_config()
+                config.setdefault('browser', {}).setdefault('custom_path', {})
+                if browser:
+                    config['browser']['custom_path'][browser] = str(cookie_path)
+                else:
+                    pref_browser = config.get('browser', {}).get('preferred', 'chrome')
+                    config['browser']['custom_path'][pref_browser] = str(cookie_path)
+                    
+                # Write config back for session managers to use
+                CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
+                    
             if process_single_with_progress(
-                source, trim, output, no_cookies, local, progress, task_id
+                source=source, 
+                trim=trim, 
+                output=output, 
+                no_cookies=no_cookies, 
+                browser_cookies=browser_cookies, 
+                browser=browser,
+                cookie_path=cookie_path,
+                cookie_json=cookie_json,
+                local=local, 
+                progress=progress, 
+                task_id=task_id
             ):
                 successes += 1
             progress.update(task_id, completed=1)
@@ -440,9 +529,12 @@ def batch_command(
     log_level: LogLevel = typer.Option(
         LogLevel.INFO, "--log-level", help="Set logging level."
     ),
+    debug_log: Optional[Path] = typer.Option(
+        None, "--debug-log", help="Write debug logs to specified file."
+    ),
 ):
     """Process markdown files with links and create modular output."""
-    set_log_level(log_level)
+    set_log_level(log_level, debug_log)
 
     # Start time for processing report
     start_time = time.time()
@@ -761,9 +853,12 @@ def crawl_command(
     log_level: LogLevel = typer.Option(
         LogLevel.INFO, "--log-level", help="Set logging level."
     ),
+    debug_log: Optional[Path] = typer.Option(
+        None, "--debug-log", help="Write debug logs to specified file."
+    ),
 ):
     """Recursively crawl websites from starting URLs and convert to markdown."""
-    set_log_level(log_level)
+    set_log_level(log_level, debug_log)
 
     # Start time for processing report
     start_time = time.time()
@@ -1016,12 +1111,15 @@ def main(
     log_level: LogLevel = typer.Option(
         LogLevel.INFO, "--log-level", help="Set logging level."
     ),
+    debug_log: Optional[Path] = typer.Option(
+        None, "--debug-log", help="Write debug logs to specified file."
+    ),
     no_banner: bool = typer.Option(
         False, "--no-banner", help="Don't display the welcome banner."
     ),
 ):
     """Main entry point for the application."""
-    set_log_level(log_level)
+    set_log_level(log_level, debug_log)
 
     # Show welcome banner unless disabled
     if not no_banner and typer.get_app_dir("html2md") not in sys.argv[0]:

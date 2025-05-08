@@ -4,7 +4,7 @@ import logging
 import os
 from urllib.parse import urlparse
 
-from html2md.cookies.session_manager import get_session
+from html2md.cookies.session_manager import get_session, apply_browser_cookies
 from html2md.markdown.batch_processor import process_markdown_links
 from html2md.markdown.converter import html_to_markdown, local_html_to_markdown
 from html2md.markdown.crawler import crawl_website
@@ -18,13 +18,49 @@ def build_headers(url):
     parsed_url = urlparse(url)
     domain = parsed_url.netloc
 
-    return {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
+    # Basic headers for most sites
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
         "Accept-Language": "en-US,en;q=0.9",
         "Referer": f"https://{domain}/",
         "Connection": "keep-alive",
         "Cache-Control": "no-cache",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+        "Accept-Encoding": "gzip, deflate, br",
+        "sec-ch-ua": '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-User": "?1",
+        "Sec-Fetch-Dest": "document",
     }
+    
+    # Special case for ChatGPT which has stricter bot detection
+    if "chatgpt.com" in domain or "chat.openai.com" in domain:
+        # Use headers that closely mimic a real browser for ChatGPT
+        headers.update({
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Origin": f"https://{domain}",
+            "Referer": f"https://{domain}/",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "Accept-Language": "en-US,en;q=0.9",
+            "DNT": "1",
+            "Authority": domain,
+            "Host": domain,
+            "Pragma": "no-cache",
+            "Sec-CH-UA": '"Google Chrome";v="123", "Not:A-Brand";v="8", "Chromium";v="123"',
+            "Sec-CH-UA-Mobile": "?0",
+            "Sec-CH-UA-Platform": '"Windows"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "same-origin",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1"
+        })
+        
+    return headers
 
 
 def save_to_file(output_filename, content):
@@ -46,7 +82,7 @@ def is_url(source, force_local=False):
     return bool(parsed.scheme in ("http", "https") and parsed.netloc)
 
 
-def process_single(source, trim=True, output=None, no_cookies=False, local=False):
+def process_single(source, trim=True, output=None, no_cookies=False, browser_cookies=False, browser=None, cookie_path=None, cookie_json=None, local=False, oauth_email=None, oauth_password=None):
     """Process a single URL or file and save/print the result."""
     if is_url(source, local):
         # Process as URL
@@ -54,12 +90,49 @@ def process_single(source, trim=True, output=None, no_cookies=False, local=False
         logger.info(f"Processing URL: {source}")
 
         try:
-            # Create a new session for each URL if cookies are not disabled
-            session = get_session() if not no_cookies else None
+            # Create a new session
+            session = None
+            
+            # Determine session type based on flags
+            if not no_cookies:
+                session = get_session()
+                
+                # Update config with cookie path if provided
+                from html2md.config.loader import load_config
+                config = load_config()
+                
+                if cookie_path:
+                    config.setdefault('browser', {}).setdefault('custom_path', {})
+                    if browser:
+                        config['browser']['custom_path'][browser] = str(cookie_path)
+                    else:
+                        pref_browser = config.get('browser', {}).get('preferred', 'chrome')
+                        config['browser']['custom_path'][pref_browser] = str(cookie_path)
+                
+                # If browser cookies flag is set, apply browser cookies to session
+                if browser_cookies and session:
+                    # Store browser preference in config or use specified one
+                    if browser:
+                        config.setdefault('browser', {})['preferred'] = browser
+                    
+                    # Apply browser cookies to session
+                    if cookie_json:
+                        logger.info(f"Using cookies from JSON file: {cookie_json}")
+                        session = apply_browser_cookies(session, source, cookie_json)
+                    else:
+                        session = apply_browser_cookies(session, source)
+                        logger.info(f"Using cookies from {browser or config.get('browser', {}).get('preferred', 'chrome')} browser for {source}")
+            
+            # For debugging - log all available cookies for the domain
+            if logger.level <= logging.DEBUG:
+                domain = urlparse(source).netloc
+                cookies_for_domain = {k: v for k, v in session.cookies.items() if domain in session.cookies.domains.get(k, [])}
+                logger.debug(f"Cookies available for {domain}: {cookies_for_domain}")
 
             # Process URL with session and headers
             markdown_result = html_to_markdown(
-                source, session=session, headers=headers, trim=trim
+                source, session=session, headers=headers, trim=trim,
+                oauth_email=oauth_email, oauth_password=oauth_password
             )
 
             if markdown_result:
@@ -199,9 +272,41 @@ def main():
         help="Disable loading cookies from the browser.",
     )
     single_parser.add_argument(
+        "--browser-cookies",
+        action="store_true",
+        help="Use cookies from the local browser to authenticate with websites.",
+    )
+    single_parser.add_argument(
+        "--browser",
+        type=str,
+        choices=["chrome", "firefox", "edge", "safari"],
+        default="chrome",
+        help="Specify which browser to extract cookies from (default: chrome).",
+    )
+    single_parser.add_argument(
+        "--cookie-path",
+        type=str,
+        help="Path to browser cookies database file (helps with Windows/WSL).",
+    )
+    single_parser.add_argument(
+        "--cookie-json",
+        type=str,
+        help="Path to JSON file with exported cookies (from browser developer tools).",
+    )
+    single_parser.add_argument(
         "--local",
         action="store_true",
         help="Force treating sources as local files even if they look like URLs.",
+    )
+    single_parser.add_argument(
+        "--oauth-email",
+        type=str,
+        help="Email address for OAuth authentication with ChatGPT.",
+    )
+    single_parser.add_argument(
+        "--oauth-password",
+        type=str,
+        help="Password for OAuth authentication with ChatGPT.",
     )
 
     # Batch processing
@@ -281,9 +386,20 @@ def main():
         default="INFO",
         help="Set logging level (default: INFO).",
     )
+    parser.add_argument(
+        "--debug-log",
+        type=str,
+        help="Write debug logs to specified file (always at DEBUG level regardless of --log-level).",
+    )
 
     args = parser.parse_args()
 
+    # Set up logging with the debug file if specified
+    if hasattr(args, 'debug_log') and args.debug_log:
+        from html2md.utils.logger import setup_logging
+        logger = setup_logging(console_output=True, debug_file=args.debug_log)
+        logger.info(f"Debug logs will be written to: {args.debug_log}")
+    
     # Set logging level dynamically
     logger.setLevel(getattr(logging, args.log_level.upper(), logging.INFO))
 
@@ -304,7 +420,13 @@ def main():
                 trim=args.trim,
                 output=args.output,
                 no_cookies=args.no_cookies,
+                browser_cookies=getattr(args, "browser_cookies", False),
+                browser=getattr(args, "browser", None),
+                cookie_path=getattr(args, "cookie_path", None),
+                cookie_json=getattr(args, "cookie_json", None),
                 local=args.local,
+                oauth_email=getattr(args, "oauth_email", None),
+                oauth_password=getattr(args, "oauth_password", None),
             )
     elif args.command == "batch":
         process_batch(
