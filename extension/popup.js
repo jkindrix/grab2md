@@ -138,6 +138,11 @@ function initializeTurndown() {
   
   // Create the standard TurndownService
   turndownService = new TurndownService(turndownOptions);
+  
+  // Initialize ChatGPT specialized converter if available
+  if (typeof ChatGPTTurndownService !== 'undefined') {
+    chatGPTTurndown = new ChatGPTTurndownService(turndownOptions);
+  }
 
   // Configure Turndown based on settings
   if (!settings.contentOptions.preserveImages) {
@@ -911,7 +916,20 @@ function convertToMarkdown(html, trim) {
       }
       
       // Use the specialized transcript converter with pre-cleaned HTML
-      const result = TranscriptConverter.convert(cleanedHtml);
+      // Check if we have the ChatGPT turndown service available
+      let chatGPTMarkdown = '';
+      if (typeof chatGPTTurndown !== 'undefined' && chatGPTTurndown) {
+        try {
+          console.log('Using ChatGPT specialized converter first');
+          chatGPTMarkdown = chatGPTTurndown.turndown(cleanedHtml);
+          console.log('ChatGPT converter preview:', chatGPTMarkdown.substring(0, 200) + '...');
+        } catch (chatGPTError) {
+          console.error('Error using chatGPT converter:', chatGPTError);
+        }
+      }
+      
+      // Then use the transcript converter to create the final structured output
+      const result = TranscriptConverter.convert(chatGPTMarkdown || cleanedHtml);
       
       // Log the first 200 characters of the result for debugging
       console.log('Conversion result preview:', result.substring(0, 200) + '...');

@@ -20,6 +20,16 @@ class ChatGPTTurndownService {
     // Initialize with ChatGPT-specific rules
     this.initChatGPTRules();
   }
+  
+  /**
+   * Convert HTML to markdown string
+   * @param {string} html - HTML content to convert
+   * @returns {string} - Markdown content
+   */
+  turndown(html) {
+    // Do any ChatGPT-specific pre-processing if needed
+    return this.turndownService.turndown(html);
+  }
 
   /**
    * Configure the TurndownService with ChatGPT-specific rules
