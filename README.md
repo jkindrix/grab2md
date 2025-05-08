@@ -83,6 +83,10 @@ html2md batch "docs/*.md" --output-dir output
 - `--trim/--no-trim`: Enable/disable trimming based on domain-specific rules
 - `--output FILE, -o FILE`: Specify output file to save converted markdown
 - `--no-cookies`: Disable loading cookies from the browser
+- `--browser-cookies`: Use cookies from the local browser to authenticate with websites
+- `--browser {chrome,firefox,edge,safari}`: Specify which browser to extract cookies from (default: chrome)
+- `--cookie-path PATH`: Path to browser cookies database file (helps with Windows/WSL)
+- `--cookie-json PATH`: Path to JSON file with exported cookies (from browser developer tools)
 - `--local`: Force treating sources as local files even if they look like URLs
 
 ### Batch Command Options
@@ -157,7 +161,24 @@ html2md config set domains.example.com.footer_marker "Copyright"
 If you need to access a site that requires authentication, html2md can use your browser cookies:
 
 ```bash
-html2md convert https://private-site.com/protected-page
+# Use cookies from your default Chrome browser
+html2md convert https://private-site.com/protected-page --browser-cookies
+
+# Use cookies from Firefox instead
+html2md convert https://private-site.com/protected-page --browser-cookies --browser firefox
+
+# Use cookies from Microsoft Edge
+html2md convert https://private-site.com/protected-page --browser-cookies --browser edge
+
+# Specify path to cookies database (useful in WSL)
+html2md convert https://private-site.com/protected-page --browser-cookies --cookie-path "/path/to/cookies/database"
+
+# Use exported cookies JSON file (most reliable method)
+# 1. In Chrome/Firefox, open DevTools (F12)
+# 2. Go to Application/Storage tab, then Cookies
+# 3. Right-click and Export as JSON
+# 4. Save the file and use it with html2md:
+html2md convert https://private-site.com/protected-page --browser-cookies --cookie-json "cookies.json"
 ```
 
 ### Batch Processing Documentation Links
