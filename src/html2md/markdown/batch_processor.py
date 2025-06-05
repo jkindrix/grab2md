@@ -114,7 +114,8 @@ def rewrite_links(content, url_mapping, base_output_dir):
 
 
 def process_markdown_links(
-    source_files, output_dir, trim=True, progress_callback=None, flatten_output=False
+    source_files, output_dir, trim=True, progress_callback=None, flatten_output=False,
+    download_images=False, images_dir="images"
 ):
     """
     Process markdown files, extract URLs, and convert each URL to markdown.
@@ -126,6 +127,8 @@ def process_markdown_links(
         progress_callback (callable, optional): Function to call with progress updates
         flatten_output (bool, optional): If True, creates output directories directly
                                         named after domain. Defaults to False.
+        download_images (bool, optional): Whether to download images from pages.
+        images_dir (str, optional): Directory name for images (default: "images").
 
     Returns:
         int: Number of processed URLs
@@ -202,7 +205,8 @@ def process_markdown_links(
 
                 # Convert HTML to markdown
                 markdown_content = html_to_markdown(
-                    url, session=session, headers=headers, trim=trim
+                    url, session=session, headers=headers, trim=trim,
+                    download_images=download_images, output_dir=url_dir, images_dir=images_dir
                 )
 
                 if markdown_content:
