@@ -82,7 +82,7 @@ def is_url(source, force_local=False):
     return bool(parsed.scheme in ("http", "https") and parsed.netloc)
 
 
-def process_single(source, trim=True, output=None, no_cookies=False, browser_cookies=False, browser=None, cookie_path=None, cookie_json=None, local=False, oauth_email=None, oauth_password=None):
+def process_single(source, trim=True, output=None, no_cookies=False, browser_cookies=False, browser=None, cookie_path=None, cookie_json=None, local=False, oauth_email=None, oauth_password=None, download_images=False, images_dir="images"):
     """Process a single URL or file and save/print the result."""
     if is_url(source, local):
         # Process as URL
@@ -129,10 +129,19 @@ def process_single(source, trim=True, output=None, no_cookies=False, browser_coo
                 cookies_for_domain = {k: v for k, v in session.cookies.items() if domain in session.cookies.domains.get(k, [])}
                 logger.debug(f"Cookies available for {domain}: {cookies_for_domain}")
 
+            # Determine output directory for images if needed
+            output_dir = None
+            if download_images and output:
+                output_dir = os.path.dirname(os.path.abspath(output))
+            elif download_images:
+                # If no output file specified but downloading images, use current directory
+                output_dir = os.getcwd()
+
             # Process URL with session and headers
             markdown_result = html_to_markdown(
                 source, session=session, headers=headers, trim=trim,
-                oauth_email=oauth_email, oauth_password=oauth_password
+                oauth_email=oauth_email, oauth_password=oauth_password,
+                download_images=download_images, output_dir=output_dir, images_dir=images_dir
             )
 
             if markdown_result:
@@ -154,8 +163,19 @@ def process_single(source, trim=True, output=None, no_cookies=False, browser_coo
             # Expand to absolute path if needed
             file_path = os.path.abspath(os.path.expanduser(source))
 
+            # Determine output directory for images if needed
+            output_dir = None
+            if download_images and output:
+                output_dir = os.path.dirname(os.path.abspath(output))
+            elif download_images:
+                # If no output file specified but downloading images, use file's directory
+                output_dir = os.path.dirname(file_path)
+
             # Process local file
-            markdown_result = local_html_to_markdown(file_path, trim=trim)
+            markdown_result = local_html_to_markdown(file_path, trim=trim, 
+                                                    download_images=download_images, 
+                                                    output_dir=output_dir, 
+                                                    images_dir=images_dir)
 
             if markdown_result:
                 if output:
@@ -172,7 +192,7 @@ def process_single(source, trim=True, output=None, no_cookies=False, browser_coo
     return False
 
 
-def process_batch(input_files, output_dir, trim=True, flatten_output=False):
+def process_batch(input_files, output_dir, trim=True, flatten_output=False, download_images=False, images_dir="images"):
     """Process a batch of markdown files with links to convert."""
     # Expand any glob patterns in input files
     expanded_files = []
@@ -190,7 +210,8 @@ def process_batch(input_files, output_dir, trim=True, flatten_output=False):
     # Process the files
     try:
         processed_count = process_markdown_links(
-            expanded_files, output_dir, trim, flatten_output=flatten_output
+            expanded_files, output_dir, trim, flatten_output=flatten_output,
+            download_images=download_images, images_dir=images_dir
         )
         logger.info(f"Batch processing complete. Processed {processed_count} URLs.")
         return processed_count > 0
@@ -207,6 +228,8 @@ def process_recursive(
     max_pages=100,
     trim=True,
     flatten_output=False,
+    download_images=False,
+    images_dir="images",
 ):
     """Process URLs recursively, following links according to the follow option."""
     total_processed = 0
@@ -226,6 +249,8 @@ def process_recursive(
                 max_pages=max_pages,
                 trim=trim,
                 flatten_output=flatten_output,
+                download_images=download_images,
+                images_dir=images_dir,
             )
             total_processed += processed_count
             logger.info(
@@ -308,6 +333,17 @@ def main():
         type=str,
         help="Password for OAuth authentication with ChatGPT.",
     )
+    single_parser.add_argument(
+        "--download-images",
+        action="store_true",
+        help="Download images from the webpage and store them locally.",
+    )
+    single_parser.add_argument(
+        "--images-dir",
+        type=str,
+        default="images",
+        help="Directory name for storing downloaded images (default: images).",
+    )
 
     # Batch processing
     batch_parser = subparsers.add_parser(
@@ -333,6 +369,17 @@ def main():
         action="store_true",
         dest="flatten_output",
         help="Output files directly to domain directories (e.g., 'docs.github.com/')",
+    )
+    batch_parser.add_argument(
+        "--download-images",
+        action="store_true",
+        help="Download images from the webpages and store them locally.",
+    )
+    batch_parser.add_argument(
+        "--images-dir",
+        type=str,
+        default="images",
+        help="Directory name for storing downloaded images (default: images).",
     )
 
     # Recursive crawling
@@ -377,6 +424,17 @@ def main():
         dest="flatten_output",
         help="Output files directly to domain directories (e.g., 'docs.github.com/')",
     )
+    crawl_parser.add_argument(
+        "--download-images",
+        action="store_true",
+        help="Download images from the webpages and store them locally.",
+    )
+    crawl_parser.add_argument(
+        "--images-dir",
+        type=str,
+        default="images",
+        help="Directory name for storing downloaded images (default: images).",
+    )
 
     # Common arguments
     parser.add_argument(
@@ -395,6 +453,7 @@ def main():
     args = parser.parse_args()
 
     # Set up logging with the debug file if specified
+    global logger
     if hasattr(args, 'debug_log') and args.debug_log:
         from html2md.utils.logger import setup_logging
         logger = setup_logging(console_output=True, debug_file=args.debug_log)
@@ -427,6 +486,8 @@ def main():
                 local=args.local,
                 oauth_email=getattr(args, "oauth_email", None),
                 oauth_password=getattr(args, "oauth_password", None),
+                download_images=getattr(args, "download_images", False),
+                images_dir=getattr(args, "images_dir", "images"),
             )
     elif args.command == "batch":
         process_batch(
@@ -434,6 +495,8 @@ def main():
             args.output_dir,
             args.trim,
             flatten_output=getattr(args, "flatten_output", False),
+            download_images=getattr(args, "download_images", False),
+            images_dir=getattr(args, "images_dir", "images"),
         )
     elif args.command == "crawl":
         process_recursive(
@@ -444,6 +507,8 @@ def main():
             max_pages=args.max_pages,
             trim=args.trim,
             flatten_output=args.flatten_output,
+            download_images=getattr(args, "download_images", False),
+            images_dir=getattr(args, "images_dir", "images"),
         )
 
 
