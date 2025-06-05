@@ -1,5 +1,7 @@
 import logging
 import os
+from pathlib import Path
+from typing import Optional
 
 import requests
 from markdownify import markdownify as md
@@ -9,6 +11,7 @@ from html2md.markdown.trimmer import trim_markdown, trim_markdown_local
 from html2md.utils.formatter import format_markdown
 from html2md.network.chatgpt_handler import is_chatgpt_url, get_conversation_html
 from html2md.network.openai_api_handler import get_conversation_oauth
+from html2md.network.image_downloader import ImageDownloader
 
 # Setup logger
 logger = logging.getLogger("html2md")
@@ -22,7 +25,8 @@ DEFAULT_HEADERS = {
 }
 
 
-def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=None, oauth_password=None):
+def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=None, oauth_password=None, 
+                    download_images=False, output_dir=None, images_dir="images"):
     """
     Fetch HTML and convert to Markdown.
 
@@ -31,6 +35,11 @@ def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=No
         session (requests.Session, optional): Session object for HTTP requests.
         headers (dict, optional): Custom headers for the HTTP request.
         trim (bool, optional): Whether to apply trimming rules to the resulting markdown.
+        oauth_email (str, optional): OAuth email for ChatGPT authentication.
+        oauth_password (str, optional): OAuth password for ChatGPT authentication.
+        download_images (bool, optional): Whether to download images from the page.
+        output_dir (Path, optional): Output directory for saving images.
+        images_dir (str, optional): Subdirectory name for images (default: "images").
 
     Returns:
         str or None: Markdown content if successful, None otherwise.
@@ -126,17 +135,28 @@ def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=No
     if trim:
         formatted_markdown = trim_markdown(formatted_markdown, url)
 
+    # Download images if requested
+    if download_images and output_dir:
+        logger.info(f"Downloading images from {url}")
+        image_downloader = ImageDownloader(session=session, images_dir=images_dir)
+        formatted_markdown = image_downloader.process_markdown_with_images(
+            formatted_markdown, html_content, url, Path(output_dir)
+        )
+
     logger.info(f"Successfully converted HTML from {url} to Markdown.")
     return formatted_markdown
 
 
-def local_html_to_markdown(file_path, trim=False):
+def local_html_to_markdown(file_path, trim=False, download_images=False, output_dir=None, images_dir="images"):
     """
     Convert HTML from a local file to Markdown.
 
     Args:
         file_path (str): Path to the local HTML file.
         trim (bool, optional): Whether to apply trimming rules to the resulting markdown.
+        download_images (bool, optional): Whether to download images from the page.
+        output_dir (Path, optional): Output directory for saving images.
+        images_dir (str, optional): Subdirectory name for images (default: "images").
 
     Returns:
         str or None: Markdown content if successful, None otherwise.
@@ -170,6 +190,16 @@ def local_html_to_markdown(file_path, trim=False):
         if trim:
             file_name = os.path.basename(file_path)
             formatted_markdown = trim_markdown_local(formatted_markdown, file_name)
+
+        # Download images if requested
+        if download_images and output_dir:
+            logger.info(f"Downloading images from local file {file_path}")
+            # For local files, we'll use the file path as a dummy base URL
+            base_url = f"file://{os.path.abspath(os.path.dirname(file_path))}"
+            image_downloader = ImageDownloader(images_dir=images_dir)
+            formatted_markdown = image_downloader.process_markdown_with_images(
+                formatted_markdown, html_content, base_url, Path(output_dir)
+            )
 
         logger.info(f"Successfully converted HTML from {file_path} to Markdown.")
         return formatted_markdown
