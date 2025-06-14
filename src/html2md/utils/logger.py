@@ -13,7 +13,7 @@ DEFAULT_LOG_DIR = os.path.join(os.path.dirname(__file__), "../../logs")
 DEFAULT_LOG_FILE = os.path.join(DEFAULT_LOG_DIR, "html2md.log")
 
 LOG_FILE = os.getenv("HTML2MD_LOG_PATH", DEFAULT_LOG_FILE)
-LOG_LEVEL = os.getenv("HTML2MD_LOG_LEVEL", "INFO").upper()
+LOG_LEVEL = os.getenv("HTML2MD_LOG_LEVEL", "WARNING").upper()
 ENABLE_JSON_LOGGING = os.getenv("HTML2MD_JSON_LOGGING", "false").lower() == "true" and HAS_JSON_LOGGER
 
 
@@ -47,7 +47,7 @@ def setup_logging(console_output=True, debug_file=None):
             logger.removeHandler(handler)
 
     # Set logging level dynamically based on environment variable
-    logger.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+    logger.setLevel(getattr(logging, LOG_LEVEL, logging.WARNING))
 
     # Console handler (if enabled)
     if console_output:

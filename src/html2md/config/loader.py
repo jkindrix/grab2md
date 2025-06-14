@@ -11,7 +11,7 @@ logger = setup_logging()
 # Default Configuration
 DEFAULT_CONFIG = {
     "domains": {},
-    "logging": {"level": "INFO"},
+    "logging": {"level": "WARNING"},
     "oauth": {"CLIENT_ID": "", "CLIENT_SECRET": ""},
     "browser": {"preferred": "chrome"},
 }
