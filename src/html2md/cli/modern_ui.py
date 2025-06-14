@@ -681,6 +681,11 @@ def batch_command(
         "--flatten",
         help="Output files directly to domain directories (e.g., 'docs.github.com/')",
     ),
+    flatten_all: bool = typer.Option(
+        False,
+        "--flatten-all",
+        help="Output all files to a single directory, ignoring domain structure",
+    ),
     visualize: bool = typer.Option(
         False,
         "--visualize",
@@ -705,6 +710,11 @@ def batch_command(
 ):
     """Process markdown files with links and create modular output."""
     set_log_level(log_level, debug_log)
+
+    # Validate flatten options
+    if flatten_output and flatten_all:
+        console.print("[bold red]Error:[/bold red] Cannot use both --flatten and --flatten-all options together.")
+        raise typer.Exit(1)
 
     # Start time for processing report
     start_time = time.time()
@@ -806,6 +816,7 @@ def batch_command(
                 trim=trim,
                 progress_callback=progress_callback,
                 flatten_output=flatten_output,
+                flatten_all=flatten_all,
             )
 
             # Set completed state

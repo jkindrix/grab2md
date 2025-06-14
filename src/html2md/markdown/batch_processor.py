@@ -48,7 +48,7 @@ def build_headers(url):
     return headers
 
 
-def create_directory_structure(output_dir, url, flatten_domain=False):
+def create_directory_structure(output_dir, url, flatten_domain=False, flatten_all=False):
     """
     Create a directory structure based on the URL's domain.
 
@@ -57,10 +57,16 @@ def create_directory_structure(output_dir, url, flatten_domain=False):
         url (str): URL to create structure for
         flatten_domain (bool, optional): If True, uses the domain name directly as output directory
                                          instead of creating a subdirectory structure. Defaults to False.
+        flatten_all (bool, optional): If True, returns the output_dir directly without creating
+                                     any domain-based subdirectories. Defaults to False.
 
     Returns:
         str: Path to the directory where the file should be saved
     """
+    # If flatten_all is True, just return the output directory
+    if flatten_all:
+        return output_dir
+    
     parsed_url = urlparse(url)
     domain = parsed_url.netloc
 
@@ -115,7 +121,7 @@ def rewrite_links(content, url_mapping, base_output_dir):
 
 def process_markdown_links(
     source_files, output_dir, trim=True, progress_callback=None, flatten_output=False,
-    download_images=False, images_dir="images"
+    flatten_all=False, download_images=False, images_dir="images"
 ):
     """
     Process markdown files, extract URLs, and convert each URL to markdown.
@@ -127,6 +133,8 @@ def process_markdown_links(
         progress_callback (callable, optional): Function to call with progress updates
         flatten_output (bool, optional): If True, creates output directories directly
                                         named after domain. Defaults to False.
+        flatten_all (bool, optional): If True, outputs all files to a single directory,
+                                     ignoring domain structure. Defaults to False.
         download_images (bool, optional): Whether to download images from pages.
         images_dir (str, optional): Directory name for images (default: "images").
 
@@ -187,7 +195,7 @@ def process_markdown_links(
 
             # Create directory structure for the URL
             url_dir = create_directory_structure(
-                output_dir, url, flatten_domain=flatten_output
+                output_dir, url, flatten_domain=flatten_output, flatten_all=flatten_all
             )
 
             # Generate a safe filename for the URL
