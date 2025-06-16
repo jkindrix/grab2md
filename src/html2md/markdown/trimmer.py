@@ -7,7 +7,6 @@ from html2md.utils.parser import find_nth_occurrence
 
 def trim_markdown(markdown_content, url):
     """Trim content dynamically based on domain-specific rules loaded from configuration."""
-
     # Load configuration dynamically
     config = load_config(force_reload=True)
 

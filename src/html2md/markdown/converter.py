@@ -16,13 +16,8 @@ from html2md.network.image_downloader import ImageDownloader
 # Setup logger
 logger = logging.getLogger("html2md")
 
-# Default headers for web requests
-DEFAULT_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Connection": "keep-alive",
-    "Cache-Control": "no-cache",
-}
+# Default headers are now set in session_manager.get_session()
+# This ensures consistent header handling across the application
 
 
 def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=None, oauth_password=None, 
@@ -44,13 +39,12 @@ def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=No
     Returns:
         str or None: Markdown content if successful, None otherwise.
     """
-
     # Use provided session or initialize a new one
     session = session or get_session()
 
-    # Use default headers if none are provided
-    if headers is None:
-        headers = DEFAULT_HEADERS
+    # Apply custom headers if provided (they will override session defaults)
+    if headers:
+        session.headers.update(headers)
     
     # Special handling for ChatGPT URLs
     if is_chatgpt_url(url):
@@ -80,15 +74,59 @@ def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=No
         try:
             logger.info(f"Fetching URL: {url}")
             # Send GET request to fetch the HTML content
-            response = session.get(url, headers=headers, timeout=30)
+            response = session.get(url, timeout=30)
             response.raise_for_status()
             
             # Detect encoding if possible
             if response.encoding is None:
                 # Default to UTF-8 if encoding can't be determined
                 response.encoding = 'utf-8'
-                
+            
+            # Log content type and encoding info for debugging
+            logger.info(f"Response Content-Type: {response.headers.get('Content-Type', 'Not specified')}")
+            logger.info(f"Response Content-Encoding: {response.headers.get('Content-Encoding', 'Not specified')}")
+            logger.info(f"Response encoding detected: {response.encoding}")
+            
+            # The requests library automatically handles decompression based on Content-Encoding header
+            # So we should just use response.text which gives us the decoded content
             html_content = response.text
+            
+            # Log raw content info for debugging
+            raw_content = response.content
+            logger.debug(f"First 100 bytes of raw content: {raw_content[:100]}")
+            
+            # Check if we got proper HTML content
+            if html_content.startswith('<!DOCTYPE') or html_content.startswith('<html'):
+                logger.debug("Content appears to be valid HTML")
+            else:
+                # Check if content might be compressed but wasn't decompressed properly
+                # This can happen if the server sends compressed content without proper headers
+                is_likely_brotli = raw_content[:2] in [b'\x1b\x3f', b'\x1b\x4f', b'\x1b\x5f', b'\x1b\x6f']
+                is_likely_gzip = raw_content[:2] == b'\x1f\x8b'
+                
+                if is_likely_gzip:
+                    logger.warning("Content appears to be gzipped but wasn't decompressed. Attempting manual decompression.")
+                    try:
+                        import gzip
+                        decompressed = gzip.decompress(raw_content)
+                        html_content = decompressed.decode(response.encoding or 'utf-8')
+                        logger.info("Successfully decompressed gzip content manually")
+                    except Exception as e:
+                        logger.error(f"Manual gzip decompression failed: {e}")
+                        return None
+                elif is_likely_brotli:
+                    logger.warning("Content appears to be brotli compressed but wasn't decompressed. Attempting manual decompression.")
+                    try:
+                        import brotli
+                        decompressed = brotli.decompress(raw_content)
+                        html_content = decompressed.decode(response.encoding or 'utf-8')
+                        logger.info("Successfully decompressed brotli content manually")
+                    except ImportError:
+                        logger.error("Brotli compression detected but brotli module not installed. Install with: pip install brotli")
+                        return None
+                    except Exception as e:
+                        logger.error(f"Manual brotli decompression failed: {e}")
+                        return None
             
             # Log response details
             logger.info(f"Received {len(html_content)} bytes of HTML from {url}.")

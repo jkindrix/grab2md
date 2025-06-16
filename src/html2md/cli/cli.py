@@ -286,6 +286,7 @@ def process_single_with_progress(
             # Process URL with session and headers
             markdown_result = html_to_markdown(
                 source, session=session, headers=headers, trim=trim,
+                oauth_email=None, oauth_password=None,
                 download_images=download_images, output_dir=output_dir, images_dir=images_dir
             )
 
@@ -460,6 +461,7 @@ def process_single_quiet(
             # Process URL with session and headers
             markdown_result = html_to_markdown(
                 source, session=session, headers=headers, trim=trim,
+                oauth_email=None, oauth_password=None,
                 download_images=download_images, output_dir=output_dir, images_dir=images_dir
             )
 

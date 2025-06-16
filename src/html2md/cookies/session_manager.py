@@ -610,6 +610,8 @@ def get_session():
             "Accept-Language": "en-US,en;q=0.9",
             "Connection": "keep-alive",
             "Cache-Control": "no-cache",
+            # Let requests handle Accept-Encoding automatically
+            # This allows proper decompression of gzip, deflate, and br (brotli) content
         }
     )
     logger.info("New session initialized with default headers.")
