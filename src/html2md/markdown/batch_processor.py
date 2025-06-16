@@ -261,4 +261,4 @@ def process_markdown_links(
             )
 
     update_progress(f"Completed processing {processed_urls_count} URLs")
-    return processed_urls_count
+    return processed_urls_count, url_to_file_mapping

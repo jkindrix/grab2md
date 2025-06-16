@@ -773,6 +773,10 @@ def batch_command(
     # Process files with enhanced live progress
     console.print("\n[bold]Starting batch processing...[/bold]")
 
+    # Initialize variables to track results
+    processed_count = 0
+    url_to_file_mapping = {}
+
     with EnhancedProgress() as progress:
         task = progress.add_task("Extracting URLs...", total=None)
 
@@ -804,7 +808,7 @@ def batch_command(
                     progress.start()
 
             # Process the files with callback for updates
-            processed_count = process_markdown_links(
+            processed_count, url_to_file_mapping = process_markdown_links(
                 expanded_files,
                 output_dir,
                 trim=trim,
@@ -835,16 +839,12 @@ def batch_command(
     processing_time = time.time() - start_time
     created_files = []
 
-    # We need to get the url_to_file_mapping from the batch processor
-    # But since we can't, we'll walk the output directory and list all created markdown files
-    for root, dirs, files in os.walk(output_dir):
-        for file in files:
-            if file.endswith(".md"):
-                file_path = os.path.join(root, file)
-                rel_path = os.path.relpath(file_path, output_dir)
-                created_files.append((file_path, rel_path))
+    # Use the url_to_file_mapping from the batch processor to get actual created files
+    for url, file_path in url_to_file_mapping.items():
+        rel_path = os.path.relpath(file_path, output_dir)
+        created_files.append((file_path, rel_path))
 
-    # Count output files and directories
+    # Count output files
     file_count = len(created_files)
 
     dir_count = 0
