@@ -1,3 +1,4 @@
+import html
 import logging
 from urllib.parse import urlparse
 
@@ -39,15 +40,27 @@ def trim_markdown(markdown_content, url):
                         markdown_content, "# ", rule["h1_occurrence"]
                     )
                 if "footer_marker" in rule:
-                    footer_index = markdown_content.find(rule["footer_marker"])
+                    # Try both the raw marker and HTML-unescaped version
+                    footer_marker = rule["footer_marker"]
+                    footer_index = markdown_content.find(footer_marker)
+                    if footer_index == -1:
+                        # Try with HTML entities unescaped (e.g., &copy; -> ©)
+                        unescaped_marker = html.unescape(footer_marker)
+                        footer_index = markdown_content.find(unescaped_marker)
                 break  # Stop checking after the first matching rule
 
     # Handle domain-wide footer markers if no path-specific footer was found
     if "footer_marker" in domain_rules and footer_index == -1:
+        footer_marker = domain_rules["footer_marker"]
         logging.info(
-            f"Applying domain-wide footer marker for {domain}: {domain_rules['footer_marker']}"
+            f"Applying domain-wide footer marker for {domain}: {footer_marker}"
         )
-        footer_index = markdown_content.find(domain_rules["footer_marker"])
+        footer_index = markdown_content.find(footer_marker)
+        if footer_index == -1:
+            # Try with HTML entities unescaped (e.g., &copy; -> ©)
+            unescaped_marker = html.unescape(footer_marker)
+            logging.info(f"Trying unescaped footer marker: {repr(unescaped_marker)}")
+            footer_index = markdown_content.find(unescaped_marker)
 
     logging.info(f"URL: {url}, H1 index: {h1_index}, Footer index: {footer_index}")
 
@@ -81,6 +94,10 @@ def trim_markdown(markdown_content, url):
         
         if footer_marker:
             footer_index = markdown_content.find(footer_marker, h1_index)
+            if footer_index == -1:
+                # Try with HTML entities unescaped
+                unescaped_marker = html.unescape(footer_marker)
+                footer_index = markdown_content.find(unescaped_marker, h1_index)
         
         if footer_index == -1:
             logging.warning(
