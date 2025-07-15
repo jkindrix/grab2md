@@ -10,6 +10,10 @@ from html2md.cookies.session_manager import get_session
 from html2md.markdown.converter import html_to_markdown
 from html2md.markdown.batch_processor import create_directory_structure
 from html2md.network.request_handler import fetch_html
+from html2md.network.robots_parser import RobotsChecker
+from html2md.network.rate_limiter import GlobalRateLimiter, RateLimitConfig
+from html2md.network.header_manager import HeaderManager, HeaderConfig
+from html2md.network.concurrent_limiter import ConcurrentLimiter, ConcurrentConfig, BackoffStrategy
 from html2md.utils.parser import (
     extract_links_from_html,
     generate_safe_filename,
@@ -20,18 +24,6 @@ from html2md.utils.parser import (
 logger = logging.getLogger("html2md")
 
 
-def build_headers(url):
-    """Dynamically construct request headers based on the target URL."""
-    parsed_url = urlparse(url)
-    domain = parsed_url.netloc
-
-    return {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Referer": f"https://{domain}/",
-        "Connection": "keep-alive",
-        "Cache-Control": "no-cache",
-    }
 
 
 def rewrite_links(content, url_mapping, base_output_dir):
@@ -65,6 +57,13 @@ def crawl_website(
     max_depth=3,
     max_pages=100,
     delay=0.0,
+    respect_robots=True,
+    rate_limit=None,
+    header_config=None,
+    concurrent_config=None,
+    polite_mode=False,
+    max_concurrent=None,
+    show_progress=True,
     trim=True,
     progress_callback=None,
     flatten_output=False,
@@ -86,6 +85,8 @@ def crawl_website(
         max_depth (int, optional): Maximum link depth to follow. Defaults to 3.
         max_pages (int, optional): Maximum number of pages to crawl. Defaults to 100.
         delay (float, optional): Delay between requests in seconds. Random jitter of ±30% will be added. Defaults to 0.0.
+        respect_robots (bool, optional): Whether to respect robots.txt rules. Defaults to True.
+        rate_limit (int, optional): Requests per minute limit. If None, no rate limiting is applied. Defaults to None.
         trim (bool, optional): Whether to trim the markdown. Defaults to True.
         progress_callback (callable, optional): Function to call with progress updates
         flatten_output (bool, optional): If True, creates output directories directly
@@ -115,6 +116,61 @@ def crawl_website(
 
     # Create session for requests
     session = get_session()
+    
+    # Initialize header manager
+    header_manager = HeaderManager(header_config or HeaderConfig())
+    
+    # Initialize rate limiter if enabled
+    rate_limiter = None
+    if rate_limit and rate_limit > 0:
+        config = RateLimitConfig(requests_per_minute=rate_limit)
+        rate_limiter = GlobalRateLimiter(config)
+        update_progress(f"Rate limiting enabled: {rate_limit} requests/minute", start_url, "info")
+    
+    # Initialize concurrent limiter
+    concurrent_limiter = None
+    if concurrent_config or polite_mode or max_concurrent is not None:
+        # Build concurrent config
+        if not concurrent_config:
+            concurrent_config = ConcurrentConfig()
+        
+        # Apply polite mode
+        if polite_mode:
+            concurrent_config.polite_mode = True
+            concurrent_config.max_concurrent_per_domain = 1
+            concurrent_config.polite_delay_multiplier = 2.0
+            update_progress("Polite mode enabled: 1 concurrent connection per domain", start_url, "info")
+        
+        # Apply max concurrent override
+        if max_concurrent is not None:
+            concurrent_config.max_concurrent_per_domain = max_concurrent
+            update_progress(f"Max concurrent connections: {max_concurrent} per domain", start_url, "info")
+        
+        concurrent_limiter = ConcurrentLimiter(concurrent_config)
+    else:
+        # Default concurrent limiter
+        concurrent_limiter = ConcurrentLimiter()
+    
+    # Initialize robots.txt checker if enabled
+    robots_checker = None
+    robots_delay = None
+    if respect_robots:
+        initial_headers = header_manager.get_headers(start_url)
+        robots_checker = RobotsChecker(user_agent=initial_headers["User-Agent"], session=session)
+        
+        # Check if start URL is allowed
+        if not robots_checker.can_fetch(start_url):
+            update_progress(f"Starting URL is disallowed by robots.txt: {start_url}", start_url, "blocked")
+            return 0, {}
+        
+        # Get crawl-delay from robots.txt
+        robots_delay = robots_checker.get_crawl_delay(start_url)
+        if robots_delay:
+            update_progress(f"robots.txt specifies crawl-delay: {robots_delay}s", start_url, "info")
+            # Use the larger of user-specified delay or robots.txt delay
+            if robots_delay > delay:
+                delay = robots_delay
+                update_progress(f"Using robots.txt crawl-delay: {delay}s", start_url, "info")
 
     # Process URLs breadth-first up to max_depth
     while queue and processed_urls_count < max_pages:
@@ -126,6 +182,11 @@ def crawl_website(
 
         # Mark as visited
         visited_urls.add(url)
+        
+        # Check robots.txt for this URL
+        if robots_checker and not robots_checker.can_fetch(url):
+            update_progress(f"URL disallowed by robots.txt: {url}", url, "blocked")
+            continue
 
         # Process the URL
         update_progress(
@@ -135,10 +196,61 @@ def crawl_website(
         )
 
         try:
+            # Check concurrent limits and backoff
+            if not concurrent_limiter.acquire_slot(url):
+                # Check if we need to wait for backoff
+                wait_time = concurrent_limiter.should_wait(url)
+                if wait_time:
+                    update_progress(
+                        f"Domain backoff, waiting {wait_time:.1f}s for {url}", 
+                        url, 
+                        "backoff"
+                    )
+                    # Skip this URL and continue with others
+                    queue.append((url, depth))
+                    continue
+                else:
+                    update_progress(f"Concurrent limit reached, queueing {url}", url, "queued")
+                    queue.append((url, depth))
+                    continue
+            
+            # Check rate limit before making request
+            if rate_limiter:
+                can_proceed, suggested_delay = rate_limiter.can_make_request(url)
+                if not can_proceed:
+                    update_progress(
+                        f"Rate limited, waiting {suggested_delay:.1f}s for {url}", 
+                        url, 
+                        "rate_limited"
+                    )
+                    time.sleep(suggested_delay)
+                    # Re-check after waiting
+                    can_proceed, _ = rate_limiter.can_make_request(url)
+                    if not can_proceed:
+                        update_progress(f"Rate limit still exceeded for {url}", url, "blocked")
+                        concurrent_limiter.release_slot(url, success=False)
+                        continue
+            
+            # Record request start for rate limiting
+            request_start_time = time.time()
+            if rate_limiter:
+                rate_limiter.record_request_start(url)
+            
             # Fetch HTML content
             update_progress(f"Fetching content from {url}", url, "fetching")
-            headers = build_headers(url)
+            headers = header_manager.get_headers(url)
             html_content = fetch_html(url, session, headers)
+            
+            # Get status code from response (would need to modify fetch_html to return this)
+            status_code = 200 if html_content else None
+            
+            # Record request completion
+            request_success = html_content is not None
+            if rate_limiter:
+                rate_limiter.record_request_end(url, request_start_time, request_success)
+            
+            # Release concurrent slot
+            concurrent_limiter.release_slot(url, success=request_success, status_code=status_code)
 
             if not html_content:
                 update_progress(f"Failed to fetch content from {url}", url, "failed")
@@ -193,8 +305,18 @@ def crawl_website(
                         f"Found {len(links)} links on {url}", url, "extracting_links"
                     )
 
-                    # Filter links according to follow_option
-                    for link in links:
+                    # Filter links according to follow_option and robots.txt
+                    allowed_links = links
+                    if robots_checker:
+                        allowed_links = robots_checker.filter_urls(links)
+                        if len(allowed_links) < len(links):
+                            update_progress(
+                                f"Filtered {len(links) - len(allowed_links)} links due to robots.txt",
+                                url,
+                                "filtered"
+                            )
+                    
+                    for link in allowed_links:
                         if link not in visited_urls and should_follow_link(
                             link, start_url, follow_option
                         ):
@@ -207,6 +329,11 @@ def crawl_website(
                 update_progress(f"Failed to convert HTML from {url}", url, "failed")
 
         except Exception as e:
+            # Record failed request for rate limiting
+            if rate_limiter:
+                rate_limiter.record_request_end(url, request_start_time, False)
+            # Release concurrent slot on error
+            concurrent_limiter.release_slot(url, success=False)
             update_progress(f"Error processing URL {url}: {str(e)}", url, "error")
 
     # Rewrite links in all files to point to local files
@@ -241,6 +368,42 @@ def crawl_website(
                     f"Error updating links in file {output_file}: {str(e)}",
                     url,
                     "error",
+                )
+
+    # Report statistics
+    if rate_limiter:
+        stats = rate_limiter.get_all_stats()
+        for domain, domain_stats in stats.items():
+            if domain_stats.total_requests > 0:
+                update_progress(
+                    f"Rate limit stats for {domain}: {domain_stats.total_requests} requests, "
+                    f"{domain_stats.successful_requests} successful, {domain_stats.failed_requests} failed, "
+                    f"{domain_stats.blocked_requests} rate-limited, circuit: {domain_stats.circuit_state.value}",
+                    start_url,
+                    "stats"
+                )
+    
+    # Report concurrent limiter statistics
+    concurrent_stats = concurrent_limiter.get_progress()
+    if concurrent_stats['total_completed'] > 0:
+        update_progress(
+            f"Concurrent stats: {concurrent_stats['total_completed']} completed, "
+            f"{concurrent_stats['total_errors']} errors, "
+            f"{concurrent_stats['requests_per_second']:.2f} req/s",
+            start_url,
+            "stats"
+        )
+        
+        # Report per-domain concurrent stats
+        domain_stats = concurrent_limiter.get_all_domain_stats()
+        for domain, stats in domain_stats.items():
+            if stats['total_requests'] > 0:
+                update_progress(
+                    f"Domain {domain}: {stats['total_requests']} requests, "
+                    f"{stats['total_errors']} errors ({stats['error_rate']:.1f}%), "
+                    f"backoff: {'yes' if stats['in_backoff'] else 'no'}",
+                    start_url,
+                    "stats"
                 )
 
     update_progress(

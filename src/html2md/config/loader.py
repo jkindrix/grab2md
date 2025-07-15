@@ -11,9 +11,46 @@ logger = setup_logging()
 # Default Configuration
 DEFAULT_CONFIG = {
     "domains": {},
+    "domain_limits": {
+        # Example domain-specific rate limits
+        # "github.com": {
+        #     "max_concurrent": 2,
+        #     "requests_per_minute": 30,
+        #     "backoff_multiplier": 2.0
+        # }
+    },
+    "concurrent": {
+        "max_concurrent_per_domain": 2,
+        "max_total_concurrent": 10,
+        "connection_timeout": 30,
+        "backoff_strategy": "exponential",  # none, linear, exponential, fibonacci
+        "initial_backoff": 1.0,
+        "max_backoff": 300.0,
+        "backoff_multiplier": 2.0,
+        "error_threshold": 3,
+        "respect_retry_after": True,
+        "polite_concurrent_limit": 1,
+        "polite_delay_multiplier": 2.0
+    },
     "logging": {"level": "WARNING"},
     "oauth": {"CLIENT_ID": "", "CLIENT_SECRET": ""},
     "browser": {"preferred": "chrome"},
+    "headers": {
+        "enhanced_user_agent": True,
+        "contact_email": None,
+        "contact_url": None,
+        "user_agent_name": "html2md",
+        "user_agent_version": "1.0",
+        "enable_compression": True,
+        "compression_methods": "gzip, deflate, br",
+        "enable_conditional_requests": True,
+        "simulate_browser": False,
+        "browser_type": "chrome",
+        "respect_caching": True,
+        "include_accept_language": True,
+        "preferred_language": "en-US,en;q=0.9",
+        "custom_headers": {}
+    },
     "cli_defaults": {
         "batch": {
             "hierarchical": False,
@@ -30,6 +67,14 @@ DEFAULT_CONFIG = {
             "max_depth": 3,
             "max_pages": 100,
             "delay": 0.0,
+            "respect_robots": True,
+            "rate_limit": None,
+            "enhanced_headers": True,
+            "user_agent_contact": None,
+            "simulate_browser": False,
+            "polite": False,
+            "max_concurrent": None,
+            "show_progress": True,
             "trim": True,
             "visualize": False,
             "quiet": False
@@ -38,6 +83,9 @@ DEFAULT_CONFIG = {
             "browser_cookies": False,
             "no_cookies": False,
             "browser": None,
+            "enhanced_headers": True,
+            "user_agent_contact": None,
+            "simulate_browser": False,
             "trim": True,
             "download_images": False,
             "images_dir": "images",
@@ -83,29 +131,21 @@ def validate_config(config_data):
         logger.error("Invalid config format: Expected a JSON object.")
         return deepcopy(DEFAULT_CONFIG)
 
-    # Define required sections with default values
-    required_defaults = {
-        "domains": {},
-        "logging": {"level": "INFO"},
-        "oauth": {"CLIENT_ID": "", "CLIENT_SECRET": ""},
-        "browser": {"preferred": "chrome"},
-    }
-
-    # Ensure each required section exists
-    for key, default_value in required_defaults.items():
-        if key not in config_data:
-            logger.warning(f"Missing '{key}' section in config. Using default.")
-            config_data[key] = deepcopy(default_value)
-        elif isinstance(default_value, dict):
-            # Ensure nested keys exist for dictionary-type defaults
-            for sub_key, sub_default in default_value.items():
-                if sub_key not in config_data[key]:
-                    logger.warning(
-                        f"Missing '{sub_key}' in '{key}'. Using default: {sub_default}"
-                    )
-                    config_data[key][sub_key] = sub_default
-
-    return config_data
+    # Start with a copy of default config and merge user config
+    merged_config = deepcopy(DEFAULT_CONFIG)
+    
+    # Deep merge user config into default config
+    def deep_merge(default_dict, user_dict):
+        """Recursively merge user config into default config."""
+        for key, value in user_dict.items():
+            if key in default_dict and isinstance(default_dict[key], dict) and isinstance(value, dict):
+                deep_merge(default_dict[key], value)
+            else:
+                default_dict[key] = value
+    
+    deep_merge(merged_config, config_data)
+    
+    return merged_config
 
 
 def ensure_config_exists():

@@ -42,6 +42,7 @@ from html2md.cookies.session_manager import get_session, apply_browser_cookies
 from html2md.markdown.batch_processor import build_headers, process_markdown_links
 from html2md.markdown.converter import html_to_markdown, local_html_to_markdown
 from html2md.markdown.crawler import crawl_website
+from html2md.network.header_manager import HeaderConfig
 from html2md.utils.logger import setup_logging
 from html2md.utils.parser import is_url
 
@@ -247,7 +248,30 @@ def process_single_with_progress(
 
     if is_url(source, local):
         # Process as URL
-        headers = build_headers(source)
+        # Build header configuration from CLI options and config
+        config = load_config()
+        header_settings = config.get("headers", {})
+        
+        header_config = HeaderConfig(
+            use_enhanced_user_agent=enhanced_headers,
+            contact_email=user_agent_contact if "@" in (user_agent_contact or "") else None,
+            contact_url=user_agent_contact if user_agent_contact and not "@" in user_agent_contact else None,
+            user_agent_name=header_settings.get("user_agent_name", "html2md"),
+            user_agent_version=header_settings.get("user_agent_version", "1.0"),
+            enable_compression=header_settings.get("enable_compression", True),
+            compression_methods=header_settings.get("compression_methods", "gzip, deflate, br"),
+            enable_conditional_requests=header_settings.get("enable_conditional_requests", True),
+            simulate_browser=simulate_browser,
+            browser_type=header_settings.get("browser_type", "chrome"),
+            respect_caching=header_settings.get("respect_caching", True),
+            include_accept_language=header_settings.get("include_accept_language", True),
+            preferred_language=header_settings.get("preferred_language", "en-US,en;q=0.9"),
+            custom_headers=header_settings.get("custom_headers", {})
+        )
+        
+        from html2md.network.header_manager import HeaderManager
+        header_manager = HeaderManager(header_config)
+        headers = header_manager.get_headers(source)
         logger.info(f"Processing URL: {source}")
 
         try:
@@ -431,7 +455,30 @@ def process_single_quiet(
     """Process a single URL or file in quiet mode (just output content)."""
     if is_url(source, local):
         # Process as URL
-        headers = build_headers(source)
+        # Build header configuration from CLI options and config
+        config = load_config()
+        header_settings = config.get("headers", {})
+        
+        header_config = HeaderConfig(
+            use_enhanced_user_agent=enhanced_headers,
+            contact_email=user_agent_contact if "@" in (user_agent_contact or "") else None,
+            contact_url=user_agent_contact if user_agent_contact and not "@" in user_agent_contact else None,
+            user_agent_name=header_settings.get("user_agent_name", "html2md"),
+            user_agent_version=header_settings.get("user_agent_version", "1.0"),
+            enable_compression=header_settings.get("enable_compression", True),
+            compression_methods=header_settings.get("compression_methods", "gzip, deflate, br"),
+            enable_conditional_requests=header_settings.get("enable_conditional_requests", True),
+            simulate_browser=simulate_browser,
+            browser_type=header_settings.get("browser_type", "chrome"),
+            respect_caching=header_settings.get("respect_caching", True),
+            include_accept_language=header_settings.get("include_accept_language", True),
+            preferred_language=header_settings.get("preferred_language", "en-US,en;q=0.9"),
+            custom_headers=header_settings.get("custom_headers", {})
+        )
+        
+        from html2md.network.header_manager import HeaderManager
+        header_manager = HeaderManager(header_config)
+        headers = header_manager.get_headers(source)
         logger.info(f"Processing URL: {source}")
 
         try:
@@ -566,6 +613,21 @@ def convert_command(
         get_cli_default("convert", "local", False),
         "--local",
         help="Force treating sources as local files even if they look like URLs.",
+    ),
+    enhanced_headers: bool = typer.Option(
+        get_cli_default("convert", "enhanced_headers", True),
+        "--enhanced-headers/--basic-headers",
+        help="Use enhanced headers with User-Agent identification and compression support.",
+    ),
+    user_agent_contact: Optional[str] = typer.Option(
+        get_cli_default("convert", "user_agent_contact", None),
+        "--user-agent-contact",
+        help="Contact email or URL to include in User-Agent header (e.g., 'admin@example.com').",
+    ),
+    simulate_browser: bool = typer.Option(
+        get_cli_default("convert", "simulate_browser", False),
+        "--simulate-browser",
+        help="Use browser-like headers instead of identifying as html2md crawler.",
     ),
     download_images: bool = typer.Option(
         get_cli_default("convert", "download_images", False),
@@ -1027,6 +1089,46 @@ def crawl_command(
         "--delay", 
         help="Delay between requests in seconds (e.g., 1.5). A random jitter of ±30% will be added."
     ),
+    respect_robots: bool = typer.Option(
+        get_cli_default("crawl", "respect_robots", True),
+        "--respect-robots/--ignore-robots",
+        help="Respect robots.txt rules and crawl-delay directives.",
+    ),
+    rate_limit: Optional[int] = typer.Option(
+        get_cli_default("crawl", "rate_limit", None),
+        "--rate-limit",
+        help="Maximum requests per minute (e.g., 30). Includes circuit breaker and adaptive limiting.",
+    ),
+    enhanced_headers: bool = typer.Option(
+        get_cli_default("crawl", "enhanced_headers", True),
+        "--enhanced-headers/--basic-headers",
+        help="Use enhanced headers with User-Agent identification and compression support.",
+    ),
+    user_agent_contact: Optional[str] = typer.Option(
+        get_cli_default("crawl", "user_agent_contact", None),
+        "--user-agent-contact",
+        help="Contact email or URL to include in User-Agent header (e.g., 'admin@example.com').",
+    ),
+    simulate_browser: bool = typer.Option(
+        get_cli_default("crawl", "simulate_browser", False),
+        "--simulate-browser",
+        help="Use browser-like headers instead of identifying as html2md crawler.",
+    ),
+    polite: bool = typer.Option(
+        get_cli_default("crawl", "polite", False),
+        "--polite",
+        help="Enable polite mode with conservative crawling defaults (1 concurrent connection, slower delays).",
+    ),
+    max_concurrent: Optional[int] = typer.Option(
+        get_cli_default("crawl", "max_concurrent", None),
+        "--max-concurrent",
+        help="Maximum concurrent connections per domain (default: 2, polite mode: 1).",
+    ),
+    show_progress: bool = typer.Option(
+        get_cli_default("crawl", "show_progress", True),
+        "--progress/--no-progress",
+        help="Show crawling progress and statistics.",
+    ),
     trim: bool = typer.Option(
         get_cli_default("crawl", "trim", True),
         "--trim/--no-trim",
@@ -1111,6 +1213,9 @@ def crawl_command(
         console.print(f"[bold]Maximum pages:[/bold] {max_pages}")
         if delay > 0:
             console.print(f"[bold]Request delay:[/bold] {delay}s (±30% jitter)")
+        console.print(f"[bold]Respect robots.txt:[/bold] {'Yes' if respect_robots else 'No'}")
+        if rate_limit:
+            console.print(f"[bold]Rate limit:[/bold] {rate_limit} requests/minute")
 
         with EnhancedProgress() as progress:
             task = progress.add_task(f"Crawling {start_url}...", total=None)
@@ -1157,6 +1262,58 @@ def crawl_command(
                     progress.start()
 
             try:
+                # Build header configuration from CLI options and config
+                config = load_config()
+                header_settings = config.get("headers", {})
+                
+                header_config = HeaderConfig(
+                    use_enhanced_user_agent=enhanced_headers,
+                    contact_email=user_agent_contact if "@" in (user_agent_contact or "") else None,
+                    contact_url=user_agent_contact if user_agent_contact and not "@" in user_agent_contact else None,
+                    user_agent_name=header_settings.get("user_agent_name", "html2md"),
+                    user_agent_version=header_settings.get("user_agent_version", "1.0"),
+                    enable_compression=header_settings.get("enable_compression", True),
+                    compression_methods=header_settings.get("compression_methods", "gzip, deflate, br"),
+                    enable_conditional_requests=header_settings.get("enable_conditional_requests", True),
+                    simulate_browser=simulate_browser,
+                    browser_type=header_settings.get("browser_type", "chrome"),
+                    respect_caching=header_settings.get("respect_caching", True),
+                    include_accept_language=header_settings.get("include_accept_language", True),
+                    preferred_language=header_settings.get("preferred_language", "en-US,en;q=0.9"),
+                    custom_headers=header_settings.get("custom_headers", {})
+                )
+                
+                # Build concurrent configuration from CLI options and config
+                from html2md.network.concurrent_limiter import ConcurrentConfig, BackoffStrategy
+                concurrent_settings = config.get("concurrent", {})
+                
+                # Parse backoff strategy
+                backoff_str = concurrent_settings.get("backoff_strategy", "exponential")
+                backoff_strategy = BackoffStrategy.EXPONENTIAL
+                if backoff_str == "none":
+                    backoff_strategy = BackoffStrategy.NONE
+                elif backoff_str == "linear":
+                    backoff_strategy = BackoffStrategy.LINEAR
+                elif backoff_str == "fibonacci":
+                    backoff_strategy = BackoffStrategy.FIBONACCI
+                
+                concurrent_config = ConcurrentConfig(
+                    max_concurrent_per_domain=concurrent_settings.get("max_concurrent_per_domain", 2),
+                    max_total_concurrent=concurrent_settings.get("max_total_concurrent", 10),
+                    backoff_strategy=backoff_strategy,
+                    initial_backoff=concurrent_settings.get("initial_backoff", 1.0),
+                    max_backoff=concurrent_settings.get("max_backoff", 300.0),
+                    backoff_multiplier=concurrent_settings.get("backoff_multiplier", 2.0),
+                    error_threshold_for_backoff=concurrent_settings.get("error_threshold", 3),
+                    retry_after_respect=concurrent_settings.get("respect_retry_after", True),
+                    polite_concurrent_limit=concurrent_settings.get("polite_concurrent_limit", 1),
+                    polite_delay_multiplier=concurrent_settings.get("polite_delay_multiplier", 2.0)
+                )
+                
+                # Check for domain-specific limits
+                domain_limits = config.get("domain_limits", {})
+                # This could be passed to the crawler for domain-specific configuration
+                
                 # Crawl the website
                 processed_count, url_mapping = crawl_website(
                     start_url,
@@ -1165,6 +1322,13 @@ def crawl_command(
                     max_depth=max_depth,
                     max_pages=max_pages,
                     delay=delay,
+                    respect_robots=respect_robots,
+                    rate_limit=rate_limit,
+                    header_config=header_config,
+                    concurrent_config=concurrent_config,
+                    polite_mode=polite,
+                    max_concurrent=max_concurrent,
+                    show_progress=show_progress,
                     trim=trim,
                     progress_callback=progress_callback,
                     flatten_output=flatten_output,
@@ -1734,6 +1898,8 @@ def show_config_options():
             "max_depth": ("int", "Maximum crawl depth"),
             "max_pages": ("int", "Maximum pages to crawl"),
             "delay": ("float", "Delay between requests in seconds (with ±30% jitter)"),
+            "respect_robots": ("bool", "Respect robots.txt rules and crawl-delay"),
+            "rate_limit": ("int", "Maximum requests per minute with circuit breaker"),
             "trim": ("bool", "Enable/disable content trimming"),
             "visualize": ("bool", "Show visual directory structure"),
             "quiet": ("bool", "Reduce output verbosity")
