@@ -62,3 +62,20 @@ config.json
 # Test outputs
 test_image_download/*.md
 test_image_download/*.html
+
+# Test environments and debugging
+test_env/
+test_debug/
+test_debug2/
+
+# Development test files
+test_*.py
+test_*.sh
+verify_*.py
+src/test_*.py
+src/test_*.sh
+src/verify_*.py
+
+# Temporary crawl outputs
+test_*/
+*.tmp/

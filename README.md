@@ -16,16 +16,53 @@ A command-line utility for converting HTML content to Markdown.
 
 ## Installation
 
+### Prerequisites
+
+- Python 3.11 or higher
+- pip or Poetry package manager
+
+### Install with Poetry (Recommended)
+
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/html2md.git
 cd html2md
 
-# Install with Poetry
+# Install dependencies and project
 poetry install
 
-# Or install with pip
-pip install .
+# Activate the virtual environment
+poetry shell
+```
+
+### Install with pip
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/html2md.git
+cd html2md
+
+# Create a virtual environment (recommended)
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Install the project in development mode
+pip install -e .
+```
+
+### Development Installation
+
+For development with testing and linting tools:
+
+```bash
+# With Poetry
+poetry install --with dev
+
+# With pip
+pip install -r requirements-dev.txt
 ```
 
 ## Usage

@@ -14,6 +14,7 @@ from html2md.network.robots_parser import RobotsChecker
 from html2md.network.rate_limiter import GlobalRateLimiter, RateLimitConfig
 from html2md.network.header_manager import HeaderManager, HeaderConfig
 from html2md.network.concurrent_limiter import ConcurrentLimiter, ConcurrentConfig, BackoffStrategy
+from html2md.utils.state_manager import StateManager
 from html2md.utils.parser import (
     extract_links_from_html,
     generate_safe_filename,
@@ -70,6 +71,12 @@ def crawl_website(
     hierarchical_domains=False,
     download_images=False,
     images_dir="images",
+    # State management parameters
+    state_manager=None,
+    resume_crawl_id=None,
+    enable_checkpoints=True,
+    checkpoint_interval=300,
+    checkpoint_page_count=100,
 ):
     """
     Crawl a website starting from a URL and convert each page to markdown.
@@ -95,24 +102,82 @@ def crawl_website(
                                               (e.g., com/jetbrains/www). Defaults to False.
         download_images (bool, optional): Whether to download images from pages.
         images_dir (str, optional): Directory name for images (default: "images").
+        state_manager (StateManager, optional): State manager for persistence. If None, creates new one.
+        resume_crawl_id (str, optional): ID of crawl to resume. If None, starts new crawl.
+        enable_checkpoints (bool, optional): Whether to enable checkpointing. Defaults to True.
+        checkpoint_interval (int, optional): Checkpoint interval in seconds. Defaults to 300.
+        checkpoint_page_count (int, optional): Checkpoint after this many pages. Defaults to 100.
 
     Returns:
-        tuple: (processed_urls_count, url_to_file_mapping)
+        tuple: (processed_urls_count, url_to_file_mapping, crawl_id)
     """
     # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
 
-    # URL to local file mapping for link rewriting
-    url_to_file_mapping = {}
-    visited_urls = set()
-    queue = deque([(start_url, 0)])  # (url, depth)
-    processed_urls_count = 0
+    # Initialize state manager
+    if state_manager is None:
+        state_manager = StateManager()
+    
+    # Configure checkpoint settings
+    if enable_checkpoints:
+        state_manager.checkpoint_interval = checkpoint_interval
+        state_manager.checkpoint_page_count = checkpoint_page_count
+    
+    # Initialize crawl state
+    crawl_state = None
+    if resume_crawl_id:
+        # Resume existing crawl
+        crawl_state = state_manager.load_state(resume_crawl_id)
+        if crawl_state:
+            update_progress(f"Resuming crawl {resume_crawl_id}", start_url, "info")
+            # Restore state
+            start_url = crawl_state.start_url
+            output_dir = crawl_state.output_dir
+            url_to_file_mapping = crawl_state.urls_visited.copy()
+            visited_urls = set(crawl_state.urls_visited.keys()) | set(crawl_state.urls_failed.keys())
+            queue = deque(crawl_state.urls_queued)
+            processed_urls_count = crawl_state.statistics.urls_processed
+        else:
+            update_progress(f"Could not resume crawl {resume_crawl_id}, starting new crawl", start_url, "warning")
+    
+    # Create new crawl state if not resuming
+    if not crawl_state:
+        crawl_config = {
+            "follow_option": follow_option,
+            "max_depth": max_depth,
+            "max_pages": max_pages,
+            "delay": delay,
+            "respect_robots": respect_robots,
+            "rate_limit": rate_limit,
+            "trim": trim,
+            "flatten_output": flatten_output,
+            "hierarchical_domains": hierarchical_domains,
+            "download_images": download_images,
+            "images_dir": images_dir,
+            "polite_mode": polite_mode,
+            "max_concurrent": max_concurrent,
+            "enable_checkpoints": enable_checkpoints,
+            "checkpoint_interval": checkpoint_interval,
+            "checkpoint_page_count": checkpoint_page_count
+        }
+        crawl_state = state_manager.create_new_state(start_url, output_dir, crawl_config)
+        url_to_file_mapping = {}
+        visited_urls = set()
+        queue = deque([(start_url, 0)])  # (url, depth)
+        processed_urls_count = 0
+        
+        # Initialize queue in state
+        state_manager.add_urls_to_queue([(start_url, 0)])
 
     # Helper function to update progress
     def update_progress(message, url=None, status=None):
         logger.info(message)
         if progress_callback:
             progress_callback(message, url, status)
+    
+    # Now update progress for resume case
+    if resume_crawl_id and crawl_state:
+        update_progress(f"Resuming crawl {resume_crawl_id}", start_url, "info")
 
     # Create session for requests
     session = get_session()
@@ -182,6 +247,10 @@ def crawl_website(
 
         # Mark as visited
         visited_urls.add(url)
+        
+        # Update state manager queue
+        if enable_checkpoints:
+            state_manager.current_state.urls_queued = list(queue)
         
         # Check robots.txt for this URL
         if robots_checker and not robots_checker.can_fetch(url):
@@ -284,6 +353,10 @@ def crawl_website(
                 update_progress(f"Saved markdown to: {output_file}", url, "saved")
                 processed_urls_count += 1
                 
+                # Update state manager with successful processing
+                if enable_checkpoints:
+                    state_manager.update_progress(url, True, output_file)
+                
                 # Apply delay with jitter if configured
                 if delay > 0 and processed_urls_count < max_pages:
                     # Calculate jitter: ±30% of the base delay
@@ -335,6 +408,10 @@ def crawl_website(
             # Release concurrent slot on error
             concurrent_limiter.release_slot(url, success=False)
             update_progress(f"Error processing URL {url}: {str(e)}", url, "error")
+            
+            # Update state manager with failed processing
+            if enable_checkpoints:
+                state_manager.update_progress(url, False, error_message=str(e))
 
     # Rewrite links in all files to point to local files
     if processed_urls_count > 0:
@@ -409,4 +486,9 @@ def crawl_website(
     update_progress(
         f"Completed crawling. Processed {processed_urls_count} pages, visited {len(visited_urls)} URLs."
     )
-    return processed_urls_count, url_to_file_mapping
+    
+    # Save final checkpoint
+    if enable_checkpoints and crawl_state:
+        state_manager.save_checkpoint("completion", "Crawl completed successfully")
+    
+    return processed_urls_count, url_to_file_mapping, crawl_state.crawl_id if crawl_state else None

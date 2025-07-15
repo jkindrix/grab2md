@@ -1,0 +1,19 @@
+# Development Dependencies
+
+# Include base requirements
+-r requirements.txt
+
+# Testing
+pytest>=7.4.0
+
+# Code quality
+pre-commit>=3.5.0
+
+# Type checking
+types-requests>=2.32.0.20250328
+
+# Optional tools
+black>=23.0.0  # Code formatting
+flake8>=6.0.0  # Linting
+mypy>=1.7.0    # Type checking
+coverage>=7.3.0  # Test coverage

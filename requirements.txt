@@ -1,0 +1,37 @@
+# HTML2MD Requirements
+# Generated from pyproject.toml for pip users
+
+# Core dependencies
+beautifulsoup4>=4.12.0
+certifi>=2023.0.0
+charset-normalizer>=3.0.0
+idna>=3.4
+markdownify>=0.11.6
+requests>=2.31.0
+six>=1.16.0
+soupsieve>=2.5
+typing-extensions>=4.8.0
+urllib3>=2.0.0
+
+# Cookie handling
+browser-cookie3>=0.19.0
+jeepney>=0.8.0  # Linux keyring support
+lz4>=4.3.0
+pycryptodomex>=3.19.0
+pycryptodome>=3.20.0
+
+# Authentication
+python-json-logger>=2.0.0
+pyjwt>=2.8.0
+google-auth-oauthlib==1.2.1
+google-auth==2.38.0
+
+# CLI and UI
+typer[all]>=0.15.1
+rich>=13.7.0
+
+# Async support (optional, for concurrent_controller)
+aiohttp>=3.9.0
+
+# Platform-specific
+pywin32>=306; sys_platform == 'win32'
