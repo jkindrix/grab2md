@@ -36,7 +36,9 @@ from rich.tree import Tree
 from html2md.config.loader import (
     CONFIG_FILE,
     DEFAULT_CONFIG,
+    get_backup_manager,
     load_config,
+    save_config,
 )
 from html2md.cookies.session_manager import get_session, apply_browser_cookies
 from html2md.markdown.batch_processor import build_headers, process_markdown_links
@@ -677,7 +679,7 @@ def convert_command(
         else:
             pref_browser = config.get('browser', {}).get('preferred', 'chrome')
             config['browser']['custom_path'][pref_browser] = str(cookie_path)
-        CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        save_config(config)
 
     if fancy:
         # Fancy mode with progress bars and decorations
@@ -1734,7 +1736,7 @@ def set_config_value(
         current[last_component] = value
 
     # Save the updated config
-    CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    save_config(config)
 
     console.print(f"[bold green]Updated:[/bold green] {path} = {value}")
 
@@ -1822,7 +1824,7 @@ def delete_config_value(
         del current[last_component]
 
         # Save the updated config
-        CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        save_config(config)
 
         console.print(f"[bold green]Deleted:[/bold green] {path}")
         console.print("[dim]Previous value was:[/dim]")
@@ -1862,7 +1864,7 @@ def add_domain_config(
     # In quick mode, just add the domain with empty config
     if quick:
         # Save the config
-        CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
+        save_config(config)
         console.print(f"[bold green]✓[/bold green] Domain '{domain}' added with default settings")
         return
 
@@ -1905,7 +1907,7 @@ def add_domain_config(
                 break
 
     # Save the config
-    CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    save_config(config)
 
     # Show the updated domain config
     domain_config = config["domains"][domain]
@@ -1953,14 +1955,25 @@ def list_domains():
 def reset_config():
     """Reset the configuration to default values."""
     if not Confirm.ask(
-        "[bold red]Warning:[/bold red] This will reset all settings to default values. Continue?"
+        "[bold red]Warning:[/bold red] This will reset all settings to default values. Continue?",
+        default=False
     ):
+        console.print("[yellow]Reset cancelled[/yellow]")
         return
 
-    # Write default config
-    CONFIG_FILE.write_text(json.dumps(DEFAULT_CONFIG, indent=2), encoding="utf-8")
+    # Create backup before reset
+    backup_manager = get_backup_manager()
+    backup_path = backup_manager.create_backup(reason="manual-reset")
+
+    if backup_path:
+        console.print(f"[dim]Backup created: {backup_path}[/dim]")
+
+    # Write default config using safe save
+    save_config(DEFAULT_CONFIG)
 
     console.print("[bold green]Configuration reset to default values.[/bold green]")
+    if backup_path:
+        console.print(f"[dim]Previous config backed up to: {backup_path}[/dim]")
 
     # Show the reset config
     json_str = json.dumps(DEFAULT_CONFIG, indent=2)
@@ -2018,7 +2031,7 @@ def set_cli_default(
     config["cli_defaults"][command][option] = parsed_value
     
     # Save the updated config
-    CONFIG_FILE.write_text(json.dumps(config, indent=2), encoding="utf-8")
+    save_config(config)
     
     console.print(f"[bold green]Updated:[/bold green] {command}.{option} = {parsed_value}")
     console.print(f"\n[bold blue]Tip:[/bold blue] This will be the default value for --{option.replace('_', '-')} when using 'html2md {command}'")
@@ -2149,6 +2162,101 @@ def show_config_options():
     for desc, cmd in examples:
         console.print(f"[bold blue]{desc}:[/bold blue]")
         console.print(f"  [dim]$[/dim] {cmd}\n")
+
+
+@config_app.command(name="backup")
+def backup_config_command():
+    """Create a manual backup of the current configuration."""
+    backup_manager = get_backup_manager()
+    backup_path = backup_manager.create_backup(reason="manual")
+
+    if backup_path:
+        console.print(f"[green]✓ Backup created:[/green] {backup_path}")
+    else:
+        console.print("[red]Failed to create backup[/red]")
+        raise typer.Exit(1)
+
+
+@config_app.command(name="list-backups")
+def list_backups_command():
+    """List all available configuration backups."""
+    backup_manager = get_backup_manager()
+    backups = backup_manager.list_backups()
+
+    if not backups:
+        console.print("[yellow]No backups found[/yellow]")
+        return
+
+    table = Table(title="Configuration Backups", border_style="cyan")
+    table.add_column("Date", style="cyan", no_wrap=True)
+    table.add_column("Time", style="cyan", no_wrap=True)
+    table.add_column("Reason", style="green")
+    table.add_column("Size", style="yellow", justify="right")
+    table.add_column("Path", style="dim")
+
+    for backup in backups:
+        # Parse filename: config.20251029_143022.manual.json
+        parts = backup.stem.split('.')
+        if len(parts) >= 3:
+            timestamp = parts[1]
+            reason = parts[2] if len(parts) > 2 else "unknown"
+
+            # Format for display: YYYYMMDD_HHMMSS
+            if len(timestamp) >= 15 and '_' in timestamp:
+                date_part = timestamp[:8]  # YYYYMMDD
+                time_part = timestamp[9:]  # HHMMSS
+
+                # Format: YYYY-MM-DD
+                date_str = f"{date_part[:4]}-{date_part[4:6]}-{date_part[6:8]}"
+                # Format: HH:MM:SS
+                time_str = f"{time_part[:2]}:{time_part[2:4]}:{time_part[4:6]}"
+
+                size = backup.stat().st_size
+                size_str = f"{size:,}"
+
+                table.add_row(date_str, time_str, reason, size_str, str(backup))
+
+    console.print(table)
+
+
+@config_app.command(name="restore")
+def restore_config_command(
+    backup_file: Optional[Path] = typer.Argument(
+        None,
+        help="Path to backup file (or omit to restore most recent)"
+    )
+):
+    """Restore configuration from a backup file."""
+    backup_manager = get_backup_manager()
+
+    # Determine which backup to restore
+    if backup_file is None:
+        backups = backup_manager.list_backups()
+        if not backups:
+            console.print("[red]No backups available to restore[/red]")
+            raise typer.Exit(1)
+        backup_file = backups[0]
+        console.print(f"[cyan]Restoring most recent backup:[/cyan] {backup_file.name}")
+
+    # Confirm restore
+    if not Confirm.ask(
+        f"[yellow]⚠️  Restore config from {backup_file.name}?[/yellow]",
+        default=False
+    ):
+        console.print("[yellow]Restore cancelled[/yellow]")
+        return
+
+    # Create backup of current config before restoring
+    current_backup = backup_manager.create_backup(reason="pre-restore")
+
+    # Restore
+    if backup_manager.restore_backup(backup_file):
+        console.print("[green]✓ Configuration restored successfully[/green]")
+        if current_backup:
+            console.print(f"[dim]Previous config backed up to: {current_backup.name}[/dim]")
+    else:
+        console.print("[red]Failed to restore backup[/red]")
+        raise typer.Exit(1)
 
 
 def detect_color_support():
