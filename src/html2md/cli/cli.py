@@ -250,6 +250,9 @@ def process_single_with_progress(
     local: bool = False,
     download_images: bool = False,
     images_dir: str = "images",
+    enhanced_headers: bool = True,
+    user_agent_contact: Optional[str] = None,
+    simulate_browser: bool = False,
     progress: Progress = None,
     task_id: TaskID = None,
 ) -> bool:
@@ -461,6 +464,9 @@ def process_single_quiet(
     local: bool = False,
     download_images: bool = False,
     images_dir: str = "images",
+    enhanced_headers: bool = True,
+    user_agent_contact: Optional[str] = None,
+    simulate_browser: bool = False,
 ) -> bool:
     """Process a single URL or file in quiet mode (just output content)."""
     if is_url(source, local):
@@ -713,6 +719,9 @@ def convert_command(
                     local=local,
                     download_images=download_images,
                     images_dir=images_dir,
+                    enhanced_headers=enhanced_headers,
+                    user_agent_contact=user_agent_contact,
+                    simulate_browser=simulate_browser,
                     progress=progress, 
                     task_id=task_id
                 ):
@@ -739,6 +748,9 @@ def convert_command(
                 local=local,
                 download_images=download_images,
                 images_dir=images_dir,
+                enhanced_headers=enhanced_headers,
+                user_agent_contact=user_agent_contact,
+                simulate_browser=simulate_browser,
             )
 
 

@@ -125,6 +125,9 @@ html2md batch "docs/*.md" --output-dir output
 - `--cookie-path PATH`: Path to browser cookies database file (helps with Windows/WSL)
 - `--cookie-json PATH`: Path to JSON file with exported cookies (from browser developer tools)
 - `--local`: Force treating sources as local files even if they look like URLs
+- `--enhanced-headers/--basic-headers`: Use enhanced headers with User-Agent identification and compression support (default: enhanced)
+- `--user-agent-contact EMAIL_OR_URL`: Contact email or URL to include in User-Agent header for crawler identification
+- `--simulate-browser`: Use browser-like headers instead of identifying as html2md crawler
 
 ### Batch Command Options
 
@@ -143,6 +146,9 @@ html2md batch "docs/*.md" --output-dir output
 - `--max-pages`: Maximum number of pages to crawl (default: 100)
 - `--trim/--no-trim`: Enable/disable trimming based on domain-specific rules
 - `--flatten`: Output files directly to domain directories (e.g., 'docs.github.com/')
+- `--enhanced-headers/--basic-headers`: Use enhanced headers with User-Agent identification and compression support (default: enhanced)
+- `--user-agent-contact EMAIL_OR_URL`: Contact email or URL to include in User-Agent header for crawler identification
+- `--simulate-browser`: Use browser-like headers instead of identifying as html2md crawler
 
 ## UI Features
 
@@ -217,6 +223,32 @@ html2md convert https://private-site.com/protected-page --browser-cookies --cook
 # 4. Save the file and use it with html2md:
 html2md convert https://private-site.com/protected-page --browser-cookies --cookie-json "cookies.json"
 ```
+
+### Customizing HTTP Headers
+
+html2md provides flexible header customization for different use cases:
+
+```bash
+# Use enhanced headers with proper crawler identification (default)
+html2md convert https://example.com --enhanced-headers
+
+# Include contact information in User-Agent for responsible crawling
+html2md convert https://example.com --user-agent-contact "admin@example.com"
+
+# Use browser-like headers to avoid crawler detection
+html2md convert https://example.com --simulate-browser
+
+# Combine browser simulation with authentication
+html2md convert https://example.com --simulate-browser --browser-cookies
+
+# Use basic headers (minimal User-Agent)
+html2md convert https://example.com --basic-headers
+```
+
+**Header Modes:**
+- **Enhanced headers** (default): Identifies as html2md crawler, includes compression support, conditional requests, and optional contact info
+- **Browser simulation**: Mimics a real browser to bypass basic crawler detection
+- **Basic headers**: Simple User-Agent only, for minimal footprint
 
 ### Batch Processing Documentation Links
 
