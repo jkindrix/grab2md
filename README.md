@@ -343,6 +343,21 @@ HTML2MD comes with a Chrome extension for instant conversion of web pages to Mar
 
 Check out the [extension directory](./extension) for installation instructions.
 
+## Known Limitations
+
+### Concurrent Configuration Access
+
+Concurrent modifications to the configuration file from multiple `html2md` processes are not supported and may result in the "last-write-wins" scenario, where one change may be silently overwritten.
+
+**What this means:**
+- If you run two `html2md config set` commands simultaneously from different terminals, one change may be lost
+- Single-process operations (normal usage) are fully protected with thread-safety locks
+- Atomic write operations prevent file corruption even in concurrent scenarios
+
+**Recommendation:**
+- Avoid running multiple `html2md config` commands at the exact same time
+- For automated scripts, ensure config operations happen sequentially
+
 ## License
 
 MIT
