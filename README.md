@@ -13,7 +13,7 @@ The current development version is **0.1.0 (alpha)**. Feature work is temporaril
 - Python 3.11 is the current verified development baseline.
 - Python 3.12 and 3.13 are compatibility targets, not supported claims, until the CI matrix is implemented.
 - Passing unit tests do not currently imply that every documented workflow works end to end.
-- The current measured status and known blockers are maintained in [`INTEGRITY_REVIEW.md`](./INTEGRITY_REVIEW.md).
+- Historical review and planning records are archived under [`docs/internal/`](./docs/internal/README.md).
 
 ### Security boundaries
 

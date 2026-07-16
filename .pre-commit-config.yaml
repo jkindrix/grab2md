@@ -3,9 +3,9 @@ repos:
     rev: v5.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: ^(extension/|chatgpt_tools/)
+        exclude: ^extension/
       - id: end-of-file-fixer
-        exclude: ^(extension/|chatgpt_tools/)
+        exclude: ^extension/
       - id: check-yaml
       - id: check-toml
       - id: debug-statements
