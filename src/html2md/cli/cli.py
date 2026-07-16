@@ -12,7 +12,7 @@ import time
 from copy import deepcopy
 from enum import Enum
 from pathlib import Path
-from typing import List, Optional
+from typing import Callable, List, Optional
 
 import typer
 from rich.console import Console, Group
@@ -42,12 +42,11 @@ from html2md.config.loader import (
     save_config,
 )
 from html2md.config.schema import ConfigValidationError, default_at_path, parse_cli_value
-from html2md.cookies.session_manager import get_session, apply_browser_cookies
 from html2md.markdown.batch_processor import process_markdown_links
-from html2md.markdown.converter import html_to_markdown, local_html_to_markdown
 from html2md.markdown.crawler import crawl_website
 from html2md.cli.runtime import build_header_config
 from html2md.cli.state_commands import state_app
+from html2md.cli.conversion_service import ConversionResult, convert_source
 from html2md.utils.logger import setup_logging
 from html2md.utils.parser import is_url
 from html2md.utils.state_manager import StateManager
@@ -240,6 +239,44 @@ def set_log_level(level: LogLevel, debug_log: Optional[Path] = None) -> None:
     logger.setLevel(getattr(logging, level))
 
 
+def _convert_one(
+    source: str,
+    trim: bool,
+    output: Optional[Path],
+    no_cookies: bool,
+    browser_cookies: bool,
+    browser: Optional[Browser],
+    cookie_json: Optional[Path],
+    local: bool,
+    download_images: bool,
+    images_dir: str,
+    enhanced_headers: bool,
+    user_agent_contact: Optional[str],
+    simulate_browser: bool,
+    insecure: bool,
+    on_status: Optional[Callable[[str], None]] = None,
+) -> ConversionResult:
+    """Translate CLI option types into one presentation-neutral conversion."""
+    status_callback = on_status or (lambda _message: None)
+    return convert_source(
+        source,
+        trim=trim,
+        output=output,
+        no_cookies=no_cookies,
+        browser_cookies=browser_cookies,
+        browser=browser.value if browser else None,
+        cookie_json=cookie_json,
+        local=local,
+        download_images=download_images,
+        images_dir=images_dir,
+        enhanced_headers=enhanced_headers,
+        user_agent_contact=user_agent_contact,
+        simulate_browser=simulate_browser,
+        insecure=insecure,
+        on_status=status_callback,
+    )
+
+
 def process_single_with_progress(
     source: str,
     trim: bool,
@@ -256,192 +293,70 @@ def process_single_with_progress(
     user_agent_contact: Optional[str] = None,
     simulate_browser: bool = False,
     insecure: bool = False,
-    progress: Progress = None,
-    task_id: TaskID = None,
+    progress: Optional[Progress] = None,
+    task_id: Optional[TaskID] = None,
 ) -> bool:
-    """Process a single URL or file with progress tracking."""
+    """Render a shared conversion result with interactive progress output."""
+    del cookie_path  # The command persists this preference before conversion.
+    if progress is None or task_id is None:
+        raise ValueError("progress and task_id are required in fancy mode")
     progress.update(task_id, description=f"Processing {source}")
+    result = _convert_one(
+        source,
+        trim,
+        output,
+        no_cookies,
+        browser_cookies,
+        browser,
+        cookie_json,
+        local,
+        download_images,
+        images_dir,
+        enhanced_headers,
+        user_agent_contact,
+        simulate_browser,
+        insecure,
+        lambda message: progress.update(task_id, description=message),
+    )
 
-    if is_url(source, local):
-        # Process as URL
-        # Build header configuration from CLI options and config
-        config = load_config()
-        header_config = build_header_config(
-            config,
-            enhanced_headers=enhanced_headers,
-            user_agent_contact=user_agent_contact,
-            simulate_browser=simulate_browser,
-        )
-        
-        from html2md.network.header_manager import HeaderManager
-        header_manager = HeaderManager(header_config)
-        headers = header_manager.get_headers(source)
-        logger.info(f"Processing URL: {source}")
-
-        try:
-            # Subtasks for fetching and converting
-            progress.update(task_id, description=f"Fetching content from {source}")
-
-            # Create a new session
-            session = None
-            
-            # Determine session type based on flags
-            if not no_cookies:
-                session = get_session(verify_ssl=not insecure)
-
-                # If browser cookies flag is set, apply browser cookies to session
-                if browser_cookies and session:
-                    # Store browser preference in config or use specified one
-                    config = load_config()
-                    if browser:
-                        config.setdefault('browser', {})['preferred'] = browser
-
-                    progress.update(task_id, description=f"Extracting browser cookies for {source}")
-                    
-                    # Apply browser cookies to session - use JSON file if provided
-                    if cookie_json:
-                        progress.update(task_id, description=f"Loading cookies from JSON file for {source}")
-                        session = apply_browser_cookies(session, source, cookie_json)
-                        progress.update(task_id, description=f"Using cookies from JSON file for {source}")
-                        logger.info(f"Using cookies from JSON file for {source}")
-                    else:
-                        # Otherwise use browser extraction
-                        session = apply_browser_cookies(session, source)
-                        browser_name = browser or config.get('browser', {}).get('preferred', 'chrome')
-                        progress.update(task_id, description=f"Using cookies from {browser_name} browser for {source}")
-                        logger.info(f"Using cookies from {browser_name} browser for {source}")
-
-            # Determine output directory for images if needed
-            output_dir = None
-            if download_images and output:
-                output_dir = os.path.dirname(os.path.abspath(output))
-            elif download_images:
-                # If no output file specified but downloading images, use current directory
-                output_dir = os.getcwd()
-
-            # Process URL with session and headers
-            markdown_result = html_to_markdown(
-                source, session=session, headers=headers, trim=trim,
-                download_images=download_images, output_dir=output_dir, images_dir=images_dir,
-                verify_ssl=not insecure
+    if not result.succeeded:
+        progress.stop()
+        if result.error:
+            console.print(
+                Panel(
+                    f"[bold red]Error processing:[/bold red] {source}\n{result.error}",
+                    title="Error",
+                    border_style="red",
+                )
             )
-
-            progress.update(task_id, description=f"Converting {source} to markdown")
-
-            if markdown_result:
-                if output:
-                    # Save to file
-                    progress.update(task_id, description=f"Saving to {output}")
-                    with open(output, "w", encoding="utf-8") as f:
-                        f.write(markdown_result)
-                    # Show more information about what happened
-                    progress.stop()
-                    console.print(
-                        f"[bold green]✓[/bold green] Downloaded and converted [bold]{source}[/bold]"
-                    )
-                    console.print(
-                        f"[bold green]✓[/bold green] Saved output to [bold]{output}[/bold]"
-                    )
-                    progress.start()
-                    logger.info(f"Successfully processed URL: {source}")
-                else:
-                    # Print to console
-                    progress.stop()
-                    console.print(Panel.fit(f"# URL: {source}", title="Source"))
-                    console.print(markdown_result)
-                    progress.start()
-                    logger.info(f"Successfully processed URL: {source}")
-
-                progress.update(task_id, description=f"✅ Completed {source}")
-                return True
-            else:
-                # Handle empty result case
-                progress.stop()
-                console.print(
-                    Panel(
-                        f"[bold red]Unable to retrieve content from:[/bold red] {source}",
-                        title="Error",
-                        border_style="red",
-                    )
+        else:
+            console.print(
+                Panel(
+                    f"[bold red]Unable to retrieve or convert content from:[/bold red] {source}",
+                    title="Error",
+                    border_style="red",
                 )
-                console.print("[yellow]Possible causes:[/yellow]")
-                console.print("• The website may require authentication")
-                console.print("• The website may be blocking automated requests")
-                console.print("• There may be network connectivity issues")
-                console.print("• The website may be returning an empty response")
-                console.print(
-                    "\n[blue]Authentication tips:[/blue]"
-                )
-                console.print("• Try using --browser-cookies to use your browser's cookies")
-                console.print("• Use --browser firefox (or chrome, edge) to specify which browser's cookies to use")
-                console.print("• Try using the --no-cookies flag if default cookies are causing issues")
-                progress.start()
-                progress.update(
-                    task_id, description=f"❌ Failed to retrieve content from {source}"
-                )
-                return False
-        except Exception as e:
-            logger.error(f"Failed to process URL {source}: {e}")
-            progress.update(task_id, description=f"❌ Failed {source} ({str(e)})")
-            return False
+            )
+        progress.start()
+        progress.update(task_id, description=f"❌ Failed {source}")
+        return False
+
+    if output:
+        progress.update(task_id, description=f"Saving to {output}")
+        output.write_text(result.markdown or "", encoding="utf-8")
+
+    progress.stop()
+    if output:
+        action = "Downloaded and converted" if result.is_remote else "Converted local file"
+        console.print(f"[bold green]✓[/bold green] {action} [bold]{result.source_label}[/bold]")
+        console.print(f"[bold green]✓[/bold green] Saved output to [bold]{output}[/bold]")
     else:
-        # Process as local file
-        logger.info(f"Processing local file: {source}")
-
-        try:
-            # Expand to absolute path if needed
-            file_path = os.path.abspath(os.path.expanduser(source))
-            progress.update(task_id, description=f"Reading local file {file_path}")
-
-            # Determine output directory for images if needed
-            output_dir = None
-            if download_images and output:
-                output_dir = os.path.dirname(os.path.abspath(output))
-            elif download_images:
-                # If no output file specified but downloading images, use file's directory
-                output_dir = os.path.dirname(file_path)
-
-            # Process local file
-            markdown_result = local_html_to_markdown(file_path, trim=trim,
-                                                    download_images=download_images,
-                                                    output_dir=output_dir,
-                                                    images_dir=images_dir,
-                                                    verify_ssl=not insecure)
-
-            progress.update(task_id, description=f"Converting {file_path} to markdown")
-
-            if markdown_result:
-                if output:
-                    # Save to file
-                    progress.update(task_id, description=f"Saving to {output}")
-                    with open(output, "w", encoding="utf-8") as f:
-                        f.write(markdown_result)
-                    # Show more information about what happened
-                    progress.stop()
-                    console.print(
-                        f"[bold green]✓[/bold green] Converted local file [bold]{file_path}[/bold]"
-                    )
-                    console.print(
-                        f"[bold green]✓[/bold green] Saved output to [bold]{output}[/bold]"
-                    )
-                    progress.start()
-                    logger.info(f"Successfully processed local file: {file_path}")
-                else:
-                    # Print to console
-                    progress.stop()
-                    console.print(Panel.fit(f"# File: {file_path}", title="Source"))
-                    console.print(markdown_result)
-                    progress.start()
-                    logger.info(f"Successfully processed local file: {file_path}")
-
-                progress.update(task_id, description=f"✅ Completed {file_path}")
-                return True
-        except Exception as e:
-            logger.error(f"Failed to process local file {source}: {e}")
-            progress.update(task_id, description=f"❌ Failed {source} ({str(e)})")
-            return False
-
-    return False
+        label = "URL" if result.is_remote else "File"
+        console.print(Panel.fit(f"# {label}: {result.source_label}", title="Source"))
+        console.print(result.markdown)
+    progress.start()
+    progress.update(task_id, description=f"✅ Completed {result.source_label}")
+    return True
 
 
 def process_single_quiet(
@@ -461,122 +376,39 @@ def process_single_quiet(
     simulate_browser: bool = False,
     insecure: bool = False,
 ) -> bool:
-    """Process a single URL or file in quiet mode (just output content)."""
-    if is_url(source, local):
-        # Process as URL
-        # Build header configuration from CLI options and config
-        config = load_config()
-        header_config = build_header_config(
-            config,
-            enhanced_headers=enhanced_headers,
-            user_agent_contact=user_agent_contact,
-            simulate_browser=simulate_browser,
-        )
-        
-        from html2md.network.header_manager import HeaderManager
-        header_manager = HeaderManager(header_config)
-        headers = header_manager.get_headers(source)
-        logger.info(f"Processing URL: {source}")
+    """Render a shared conversion result without decoration."""
+    del cookie_path  # The command persists this preference before conversion.
+    result = _convert_one(
+        source,
+        trim,
+        output,
+        no_cookies,
+        browser_cookies,
+        browser,
+        cookie_json,
+        local,
+        download_images,
+        images_dir,
+        enhanced_headers,
+        user_agent_contact,
+        simulate_browser,
+        insecure,
+    )
+    if not result.succeeded:
+        if result.error:
+            message = f"Error processing {source}: {result.error}"
+        elif result.is_remote:
+            message = f"Error: Unable to retrieve content from {source}"
+        else:
+            message = f"Error: Unable to convert local file {result.source_label}"
+        print(message, file=sys.stderr)
+        return False
 
-        try:
-            # Create a new session
-            session = None
-            
-            # Determine session type based on flags
-            if not no_cookies:
-                session = get_session(verify_ssl=not insecure)
-
-                # If browser cookies flag is set, apply browser cookies to session
-                if browser_cookies and session:
-                    # Store browser preference in config or use specified one
-                    config = load_config()
-                    if browser:
-                        config.setdefault('browser', {})['preferred'] = browser
-
-                    # Apply browser cookies to session - use JSON file if provided
-                    if cookie_json:
-                        session = apply_browser_cookies(session, source, cookie_json)
-                        logger.info(f"Using cookies from JSON file for {source}")
-                    else:
-                        # Otherwise use browser extraction
-                        session = apply_browser_cookies(session, source)
-                        browser_name = browser or config.get('browser', {}).get('preferred', 'chrome')
-                        logger.info(f"Using cookies from {browser_name} browser for {source}")
-
-            # Determine output directory for images if needed
-            output_dir = None
-            if download_images and output:
-                output_dir = os.path.dirname(os.path.abspath(output))
-            elif download_images:
-                output_dir = os.getcwd()
-
-            # Process URL with session and headers
-            markdown_result = html_to_markdown(
-                source, session=session, headers=headers, trim=trim,
-                download_images=download_images, output_dir=output_dir, images_dir=images_dir,
-                verify_ssl=not insecure
-            )
-
-            if markdown_result:
-                if output:
-                    # Save to file silently
-                    with open(output, "w", encoding="utf-8") as f:
-                        f.write(markdown_result)
-                    logger.info(f"Successfully processed URL: {source}")
-                else:
-                    # Print to console without decoration
-                    print(markdown_result)
-                    logger.info(f"Successfully processed URL: {source}")
-                return True
-            else:
-                print(f"Error: Unable to retrieve content from {source}", file=sys.stderr)
-                return False
-        except Exception as e:
-            logger.error(f"Failed to process URL {source}: {e}")
-            print(f"Error processing {source}: {str(e)}", file=sys.stderr)
-            return False
+    if output:
+        output.write_text(result.markdown or "", encoding="utf-8")
     else:
-        # Process as local file
-        logger.info(f"Processing local file: {source}")
-
-        try:
-            # Expand to absolute path if needed
-            file_path = os.path.abspath(os.path.expanduser(source))
-
-            # Determine output directory for images if needed
-            output_dir = None
-            if download_images and output:
-                output_dir = os.path.dirname(os.path.abspath(output))
-            elif download_images:
-                output_dir = os.path.dirname(file_path)
-
-            # Process local file
-            markdown_result = local_html_to_markdown(file_path, trim=trim,
-                                                    download_images=download_images,
-                                                    output_dir=output_dir,
-                                                    images_dir=images_dir,
-                                                    verify_ssl=not insecure)
-
-            if markdown_result:
-                if output:
-                    # Save to file silently
-                    with open(output, "w", encoding="utf-8") as f:
-                        f.write(markdown_result)
-                    logger.info(f"Successfully processed local file: {file_path}")
-                else:
-                    # Print to console without decoration
-                    print(markdown_result)
-                    logger.info(f"Successfully processed local file: {file_path}")
-                return True
-            else:
-                print(f"Error: Unable to convert local file {file_path}", file=sys.stderr)
-                return False
-        except Exception as e:
-            logger.error(f"Failed to process local file {source}: {e}")
-            print(f"Error processing {source}: {str(e)}", file=sys.stderr)
-            return False
-
-    return False
+        print(result.markdown)
+    return True
 
 
 @app.command(name="convert")

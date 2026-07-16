@@ -184,12 +184,12 @@ def get_credentials():
 # Browser Cookie Management
 # -------------------------------
 
-def get_browser_cookie_path():
+def get_browser_cookie_path(browser=None):
     """Return the path to browser cookie files based on platform and browser."""
     
     # Define browser and profile configurations
     browser_config = config.get("browser", {})
-    preferred_browser = browser_config.get("preferred", "chrome")
+    preferred_browser = browser or browser_config.get("preferred", "chrome")
     
     # Check for custom path override in config
     custom_paths = browser_config.get("custom_path", {})
@@ -369,7 +369,7 @@ def _copy_cookie_database(source_path):
 def get_chrome_cookies(domain):
     """Retrieve Chrome cookies for a specific domain"""
     cookie_dict = {}
-    cookie_path = get_browser_cookie_path()
+    cookie_path = get_browser_cookie_path("chrome")
     
     if not cookie_path or not cookie_path.exists():
         logger.warning(f"Chrome cookie database not found at {cookie_path}")
@@ -443,7 +443,7 @@ def get_chrome_cookies(domain):
 def get_firefox_cookies(domain):
     """Retrieve Firefox cookies for a specific domain"""
     cookie_dict = {}
-    cookie_path = get_browser_cookie_path()
+    cookie_path = get_browser_cookie_path("firefox")
     
     if not cookie_path or not cookie_path.exists():
         logger.warning(f"Firefox profile directory not found at {cookie_path}")
@@ -551,7 +551,7 @@ def get_firefox_cookies(domain):
     return cookie_dict
 
 
-def get_domain_cookies(url):
+def get_domain_cookies(url, browser=None):
     """Get cookies for a specific domain from the preferred browser"""
     # Parse domain from URL
     domain = urlparse(url).netloc
@@ -561,7 +561,7 @@ def get_domain_cookies(url):
         domain = domain[4:]
     
     browser_config = config.get("browser", {})
-    preferred_browser = browser_config.get("preferred", "chrome")
+    preferred_browser = browser or browser_config.get("preferred", "chrome")
     
     if preferred_browser == "chrome":
         return get_chrome_cookies(domain)
@@ -719,7 +719,7 @@ def load_cookies_from_json(json_file, url=None):
     
     return cookies
 
-def apply_browser_cookies(session, url, cookie_json=None):
+def apply_browser_cookies(session, url, cookie_json=None, browser=None):
     """Apply cookies from browser to a requests session"""
     url_domain = urlparse(url).netloc
     logger.debug(f"Setting cookies for domain: {url_domain}")
@@ -775,7 +775,7 @@ def apply_browser_cookies(session, url, cookie_json=None):
                 session.cookies.set(name, value, domain=url_domain)
     else:
         # Extract from browser
-        cookies = get_domain_cookies(url)
+        cookies = get_domain_cookies(url, browser=browser)
         for name, value in cookies.items():
             logger.debug(f"Setting browser cookie: {name}")
             session.cookies.set(name, value, domain=url_domain)
