@@ -9,6 +9,7 @@ import os
 import platform
 import sys
 import time
+from copy import deepcopy
 from enum import Enum
 from pathlib import Path
 from typing import List, Optional
@@ -40,6 +41,7 @@ from html2md.config.loader import (
     load_config,
     save_config,
 )
+from html2md.config.schema import ConfigValidationError, default_at_path, parse_cli_value
 from html2md.cookies.session_manager import get_session, apply_browser_cookies
 from html2md.markdown.batch_processor import process_markdown_links
 from html2md.markdown.converter import html_to_markdown, local_html_to_markdown
@@ -1803,7 +1805,11 @@ def set_config_value(
         current[last_component] = value
 
     # Save the updated config
-    save_config(config)
+    try:
+        save_config(config)
+    except ConfigValidationError as error:
+        console.print(f"[bold red]Error:[/bold red] {error}")
+        raise typer.Exit(1)
 
     console.print(f"[bold green]Updated:[/bold green] {path} = {value}")
 
@@ -2053,46 +2059,41 @@ def reset_config():
 def set_cli_default(
     command: str = typer.Argument(..., help="Command name (convert, batch, crawl)"),
     option: str = typer.Argument(..., help="Option name (e.g., browser_cookies, hierarchical)"),
-    value: str = typer.Argument(..., help="Value to set (true/false for booleans, or other values)"),
+    value: Optional[str] = typer.Argument(None, help="Typed value to set; use null for optional values"),
+    reset: bool = typer.Option(False, "--reset", help="Reset this option to its built-in default"),
 ):
     """Set a default value for a CLI option."""
     config = load_config()
     
     # Ensure cli_defaults exists
     if "cli_defaults" not in config:
-        config["cli_defaults"] = DEFAULT_CONFIG["cli_defaults"]
+        config["cli_defaults"] = deepcopy(DEFAULT_CONFIG["cli_defaults"])
     
     # Validate command
     if command not in config["cli_defaults"]:
         console.print(f"[bold red]Error:[/bold red] Unknown command '{command}'. Valid commands: convert, batch, crawl")
-        return
+        raise typer.Exit(1)
     
     # Validate option exists in the command defaults
     if option not in config["cli_defaults"][command]:
         valid_options = ", ".join(config["cli_defaults"][command].keys())
         console.print(f"[bold red]Error:[/bold red] Unknown option '{option}' for command '{command}'.")
         console.print(f"Valid options: {valid_options}")
-        return
+        raise typer.Exit(1)
     
-    # Convert value to appropriate type
-    current_value = config["cli_defaults"][command][option]
-    if isinstance(current_value, bool):
-        # Convert string to boolean
-        if value.lower() in ["true", "yes", "1", "on"]:
-            parsed_value = True
-        elif value.lower() in ["false", "no", "0", "off"]:
-            parsed_value = False
+    config_path = ("cli_defaults", command, option)
+    try:
+        if reset:
+            if value is not None:
+                raise ConfigValidationError(["value cannot be combined with --reset"])
+            parsed_value = default_at_path(DEFAULT_CONFIG, config_path)
         else:
-            console.print("[bold red]Error:[/bold red] Boolean value expected. Use 'true' or 'false'.")
-            return
-    elif isinstance(current_value, int):
-        try:
-            parsed_value = int(value)
-        except ValueError:
-            console.print("[bold red]Error:[/bold red] Integer value expected.")
-            return
-    else:
-        parsed_value = value
+            if value is None:
+                raise ConfigValidationError(["a value or --reset is required"])
+            parsed_value = parse_cli_value(DEFAULT_CONFIG, config_path, value)
+    except ConfigValidationError as error:
+        console.print(f"[bold red]Error:[/bold red] {error}")
+        raise typer.Exit(1)
     
     # Set the value
     config["cli_defaults"][command][option] = parsed_value

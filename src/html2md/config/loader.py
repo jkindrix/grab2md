@@ -6,6 +6,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict
 
+from html2md.config.schema import validate_and_merge
 from html2md.utils.logger import setup_logging
 
 logger = setup_logging()
@@ -166,14 +167,15 @@ def get_recovery_handler():
     return _recovery_handler
 
 
-def validate_config(config_data):
+def validate_config(config_data, *, strict=True):
     """
     Ensure the loaded config contains required keys and valid types.
 
     This function:
     - Merges user config with defaults
     - Validates types match expected schema
-    - Reverts invalid values to defaults with warnings
+    - Rejects invalid known values by default
+    - Can provide an explicit non-strict in-memory fallback for recovery tools
 
     Args:
         config_data: User configuration dictionary to validate
@@ -181,60 +183,9 @@ def validate_config(config_data):
     Returns:
         Validated and merged configuration dictionary
     """
-    if not isinstance(config_data, dict):
-        logger.error("Invalid config format: Expected a JSON object.")
-        return deepcopy(DEFAULT_CONFIG)
-
-    # Start with a copy of default config and merge user config
-    merged_config = deepcopy(DEFAULT_CONFIG)
-
-    # Deep merge user config into default config
-    def deep_merge(default_dict, user_dict):
-        """Recursively merge user config into default config."""
-        for key, value in user_dict.items():
-            if key in default_dict and isinstance(default_dict[key], dict) and isinstance(value, dict):
-                deep_merge(default_dict[key], value)
-            else:
-                default_dict[key] = value
-
-    deep_merge(merged_config, config_data)
-
-    # Validate types match defaults
-    def validate_types(user_dict, default_dict, path=""):
-        """
-        Recursively validate that user config values match expected types.
-
-        On type mismatch, logs a warning and reverts to default value.
-
-        Args:
-            user_dict: User configuration dictionary (modified in-place)
-            default_dict: Default configuration with expected types
-            path: Current path in config tree (for error messages)
-        """
-        for key, default_value in default_dict.items():
-            if key in user_dict:
-                user_value = user_dict[key]
-
-                # Check if types match
-                if type(user_value) is not type(default_value):
-                    config_path = f"{path}.{key}" if path else key
-                    logger.warning(
-                        f"Config type mismatch at '{config_path}': "
-                        f"expected {type(default_value).__name__}, "
-                        f"got {type(user_value).__name__}. Using default value."
-                    )
-                    user_dict[key] = default_value
-
-                # Recursively validate nested dictionaries
-                elif isinstance(default_value, dict) and isinstance(user_value, dict):
-                    validate_types(
-                        user_value,
-                        default_value,
-                        f"{path}.{key}" if path else key
-                    )
-
-    validate_types(merged_config, DEFAULT_CONFIG)
-
+    merged_config, errors = validate_and_merge(config_data, DEFAULT_CONFIG, strict=strict)
+    for error in errors:
+        logger.warning("Invalid persisted config value: %s. Using default in memory.", error)
     return merged_config
 
 
@@ -282,7 +233,7 @@ def save_config(config_data: Dict[str, Any]) -> None:
     # Thread-safe: Entire save operation is atomic with respect to other config ops
     with _config_lock:
         # Validate before saving
-        validated_config = validate_config(config_data)
+        validated_config, _ = validate_and_merge(config_data, DEFAULT_CONFIG, strict=True)
 
         # Create backup before overwriting (if file exists)
         if CONFIG_FILE.exists():
@@ -314,7 +265,7 @@ def save_config(config_data: Dict[str, Any]) -> None:
                 raise
 
         # Invalidate cache (write-through pattern)
-        _cached_config = validated_config
+        _cached_config = deepcopy(validated_config)
 
         logger.info(f"Saved configuration to: {CONFIG_FILE}")
 
@@ -346,7 +297,7 @@ def load_config(force_reload=False):
     # Thread-safe: Entire load operation is atomic with respect to save operations
     with _config_lock:
         if _cached_config is not None and not force_reload:
-            return _cached_config  # Use cached config
+            return deepcopy(_cached_config)
 
         ensure_config_exists()
         _cached_config = deepcopy(DEFAULT_CONFIG) if not CONFIG_FILE.exists() else None
@@ -354,13 +305,13 @@ def load_config(force_reload=False):
         try:
             with CONFIG_FILE.open("r", encoding="utf-8") as f:
                 config_data = json.load(f)
-                _cached_config = validate_config(config_data)
+                _cached_config = validate_config(config_data, strict=True)
                 logger.info(f"Loaded configuration from: {CONFIG_FILE}")
-                return _cached_config
+                return deepcopy(_cached_config)
 
         except (json.JSONDecodeError, FileNotFoundError) as e:
             # Use recovery handler instead of immediate overwrite
             # This respects user data and provides context-aware recovery
             recovery_handler = get_recovery_handler()
             _cached_config = recovery_handler.handle_corrupt_config(e)
-            return _cached_config
+            return deepcopy(_cached_config)

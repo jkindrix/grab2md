@@ -235,6 +235,11 @@ html2md config [command]
 - `config add-domain`: Interactive wizard to add domain-specific configuration
 - `config list-domains`: List all configured domains with their settings
 - `config reset`: Reset the configuration to default values
+- `config set-cli-default`: Set a typed command default or restore it with `--reset`
+
+Known settings are validated against an explicit schema. Optional values accept
+`null`, integer and floating-point settings are parsed distinctly, and invalid
+updates fail without replacing the existing configuration file.
 
 ### Example: Adding Domain-Specific Trimming Rules
 
