@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 
 from html2md.cookies.session_manager import get_session
 from html2md.markdown.converter import html_to_markdown
-from html2md.markdown.link_rewriter import rewrite_links
+from html2md.markdown.link_rewriter import rewrite_archived_files
 from html2md.utils.parser import generate_safe_filename, get_urls_from_file
 from html2md.utils.path_safety import contained_output_file, contained_path, safe_path_segment
 
@@ -222,34 +222,8 @@ def process_markdown_links(
             except Exception as e:
                 update_progress(f"Error processing URL {url}: {str(e)}", url, "error")
 
-    # Second pass: Rewrite links in all files to point to local files
-    update_progress(f"Rewriting links between {len(url_to_file_mapping)} files...")
-
-    for i, (url, output_file) in enumerate(url_to_file_mapping.items()):
-        update_progress(
-            f"Updating links in file {i+1}/{len(url_to_file_mapping)}: {output_file}",
-            url,
-            "updating",
-        )
-
-        try:
-            # Read the file content
-            with open(output_file, "r", encoding="utf-8") as f:
-                content = f.read()
-
-            # Rewrite links
-            updated_content = rewrite_links(content, url_to_file_mapping, output_file)
-
-            # Save updated content
-            with open(output_file, "w", encoding="utf-8") as f:
-                f.write(updated_content)
-
-            update_progress(f"Updated links in file: {output_file}", url, "updated")
-
-        except Exception as e:
-            update_progress(
-                f"Error updating links in file {output_file}: {str(e)}", url, "error"
-            )
+    # Second pass: Rewrite links in all files to point to local files.
+    rewrite_archived_files(url_to_file_mapping, update_progress)
 
     update_progress(f"Completed processing {processed_urls_count} URLs")
     return processed_urls_count, url_to_file_mapping

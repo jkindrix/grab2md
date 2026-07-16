@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from html2md.markdown.batch_processor import process_markdown_links
 from html2md.markdown.crawler import crawl_website
-from html2md.markdown.link_rewriter import rewrite_links
+from html2md.markdown.link_rewriter import rewrite_archived_files, rewrite_links
 from html2md.network.request_handler import FetchResult
 from html2md.utils.state_manager import StateManager
 
@@ -41,6 +41,46 @@ def test_rewrite_links_is_relative_to_each_source_and_preserves_url_parts(tmp_pa
     assert '[With title](../index.md "Home")' in rewritten
     assert "[External](https://outside.example/page)" in rewritten
     assert "![Mapped image](https://example.com/sibling)" in rewritten
+
+
+def test_rewrite_archived_files_updates_all_files_and_reports_progress(tmp_path):
+    first = tmp_path / "first.md"
+    second = tmp_path / "nested" / "second.md"
+    second.parent.mkdir()
+    first.write_text("[Second](https://example.com/second)", encoding="utf-8")
+    second.write_text("[First](https://example.com/first)", encoding="utf-8")
+    mapping = {
+        "https://example.com/first": first,
+        "https://example.com/second": second,
+    }
+    progress = []
+
+    updated = rewrite_archived_files(
+        mapping, lambda message, url, status: progress.append((message, url, status))
+    )
+
+    assert updated == 2
+    assert first.read_text(encoding="utf-8") == "[Second](nested/second.md)"
+    assert second.read_text(encoding="utf-8") == "[First](../first.md)"
+    assert [event[2] for event in progress].count("updated") == 2
+
+
+def test_rewrite_archived_files_isolates_missing_file_failure(tmp_path):
+    missing = tmp_path / "missing.md"
+    existing = tmp_path / "existing.md"
+    existing.write_text("[Missing](https://example.com/missing)", encoding="utf-8")
+    mapping = {
+        "https://example.com/missing": missing,
+        "https://example.com/existing": existing,
+    }
+    progress = []
+
+    updated = rewrite_archived_files(
+        mapping, lambda message, url, status: progress.append((message, url, status))
+    )
+
+    assert updated == 1
+    assert any(status == "error" for _, _, status in progress)
 
 
 def test_batch_mapping_and_rewrites_exclude_failed_outputs(tmp_path):

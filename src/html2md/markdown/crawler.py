@@ -8,7 +8,7 @@ from typing import Dict, Optional
 
 from html2md.cookies.session_manager import get_session
 from html2md.markdown.converter import html_content_to_markdown
-from html2md.markdown.link_rewriter import rewrite_links
+from html2md.markdown.link_rewriter import rewrite_archived_files
 from html2md.markdown.batch_processor import create_directory_structure
 from html2md.network.request_handler import fetch_html
 from html2md.network.robots_parser import RobotsChecker
@@ -487,37 +487,7 @@ def crawl_website(
 
     # Rewrite links in all files to point to local files
     if processed_urls_count > 0:
-        update_progress(f"Rewriting links between {len(url_to_file_mapping)} files...")
-
-        for i, (url, output_file) in enumerate(url_to_file_mapping.items()):
-            update_progress(
-                f"Updating links in file {i+1}/{len(url_to_file_mapping)}: {output_file}",
-                url,
-                "updating",
-            )
-
-            try:
-                # Read the file content
-                with open(output_file, "r", encoding="utf-8") as f:
-                    content = f.read()
-
-                # Rewrite links
-                updated_content = rewrite_links(
-                    content, url_to_file_mapping, output_file
-                )
-
-                # Save updated content
-                with open(output_file, "w", encoding="utf-8") as f:
-                    f.write(updated_content)
-
-                update_progress(f"Updated links in file: {output_file}", url, "updated")
-
-            except Exception as e:
-                update_progress(
-                    f"Error updating links in file {output_file}: {str(e)}",
-                    url,
-                    "error",
-                )
+        rewrite_archived_files(url_to_file_mapping, update_progress)
 
     # Report statistics
     if rate_limiter:

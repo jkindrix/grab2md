@@ -2,6 +2,8 @@
 
 import os
 import re
+from pathlib import Path
+from typing import Callable, Mapping, Optional, Union
 from urllib.parse import urlsplit, urlunsplit
 
 
@@ -10,6 +12,9 @@ MARKDOWN_LINK = re.compile(
     r"(?P<destination><https?://[^>]+>|https?://[^\s)]+)"
     r"(?P<suffix>(?:\s+(?:\"[^\"]*\"|'[^']*'))?\))"
 )
+
+OutputPath = Union[str, os.PathLike]
+ProgressCallback = Callable[[str, Optional[str], Optional[str]], None]
 
 
 def rewrite_links(content, url_mapping, source_file):
@@ -46,3 +51,33 @@ def rewrite_links(content, url_mapping, source_file):
         return f"{match.group('prefix')}{relative_path}{match.group('suffix')}"
 
     return MARKDOWN_LINK.sub(replace, content)
+
+
+def rewrite_archived_files(
+    url_mapping: Mapping[str, OutputPath],
+    update_progress: ProgressCallback,
+) -> int:
+    """Rewrite every durable archived file, isolating per-file failures."""
+    total = len(url_mapping)
+    update_progress(f"Rewriting links between {total} files...", None, None)
+    updated_count = 0
+
+    for index, (url, output_file) in enumerate(url_mapping.items(), start=1):
+        path = Path(output_file)
+        update_progress(
+            f"Updating links in file {index}/{total}: {path}",
+            url,
+            "updating",
+        )
+        try:
+            content = path.read_text(encoding="utf-8")
+            updated_content = rewrite_links(content, url_mapping, path)
+            path.write_text(updated_content, encoding="utf-8")
+            update_progress(f"Updated links in file: {path}", url, "updated")
+            updated_count += 1
+        except (OSError, UnicodeError) as error:
+            update_progress(
+                f"Error updating links in file {path}: {error}", url, "error"
+            )
+
+    return updated_count

@@ -1,7 +1,8 @@
 import unittest
 from unittest import mock
 
-from html2md.markdown.batch_processor import create_directory_structure, rewrite_links
+from html2md.markdown.batch_processor import create_directory_structure
+from html2md.markdown.link_rewriter import rewrite_links
 from html2md.utils.parser import extract_urls_from_markdown, generate_safe_filename
 
 
