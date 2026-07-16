@@ -1,0 +1,34 @@
+# Changelog
+
+All notable changes are documented here. This project follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and intends to use
+[Semantic Versioning](https://semver.org/) once public releases begin.
+
+## [Unreleased]
+
+### Added
+
+- End-to-end CLI coverage for local, URL, batch, crawl, state, interruption,
+  compression, HTTP failure, robots, and path-safety boundaries.
+- Required Python 3.11–3.13 CI, production coverage, static quality, wheel,
+  extension, security, and dependency-audit gates.
+- Metadata-backed `--version` support and a non-mutating deployment dry run.
+
+### Changed
+
+- The planned distribution name is `html2md-cli`; the command and import
+  package remain `html2md`.
+- Crawl fetching, persistence, politeness, link rewriting, configuration,
+  conversion orchestration, and extension behavior were stabilized and tested.
+- Runtime dependencies now contain only direct requirements with compatible
+  bounds and an audited lockfile.
+
+### Security
+
+- Credential and cookie logging is redacted; private temporary files and token
+  storage use restrictive permissions.
+- Image acquisition rejects private-network targets, unsafe redirects, active
+  formats, oversized files, and output-root escapes.
+- The extension uses least-privilege permissions and exposes only tested modes.
+
+No public release has been declared from this repository yet.
