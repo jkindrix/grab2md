@@ -3,6 +3,7 @@ Comprehensive tests for robots.txt parser functionality.
 """
 
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock, patch
 import time
 
@@ -37,9 +38,10 @@ class TestRobotsChecker:
         mock_get.return_value = mock_response
         
         checker = RobotsChecker()
-        content = checker._fetch_robots_txt("https://example.com/robots.txt")
+        result = checker._fetch_robots_txt("https://example.com/robots.txt")
         
-        assert content == "User-agent: *\nDisallow: /private/"
+        assert result.content == "User-agent: *\nDisallow: /private/"
+        assert result.status_code == 200
         mock_get.assert_called_once()
     
     @patch('requests.Session.get')
@@ -50,9 +52,10 @@ class TestRobotsChecker:
         mock_get.return_value = mock_response
         
         checker = RobotsChecker()
-        content = checker._fetch_robots_txt("https://example.com/robots.txt")
+        result = checker._fetch_robots_txt("https://example.com/robots.txt")
         
-        assert content == ""  # Empty means everything allowed
+        assert result.content == ""
+        assert result.status_code == 404
     
     @patch('requests.Session.get')
     def test_fetch_robots_txt_error(self, mock_get):
@@ -61,9 +64,28 @@ class TestRobotsChecker:
         mock_get.side_effect = RequestException("Network error")
         
         checker = RobotsChecker()
-        content = checker._fetch_robots_txt("https://example.com/robots.txt")
+        result = checker._fetch_robots_txt("https://example.com/robots.txt")
         
-        assert content is None
+        assert result.content is None
+        assert result.status_code is None
+
+    @patch('requests.Session.get')
+    def test_unavailable_robots_txt_temporarily_disallows_crawl(self, mock_get):
+        mock_response = Mock(status_code=503)
+        mock_get.return_value = mock_response
+
+        checker = RobotsChecker()
+
+        assert checker.can_fetch("https://example.com/page") is False
+
+    @patch('requests.Session.get')
+    def test_missing_robots_txt_allows_crawl(self, mock_get):
+        mock_response = Mock(status_code=404)
+        mock_get.return_value = mock_response
+
+        checker = RobotsChecker()
+
+        assert checker.can_fetch("https://example.com/page") is True
     
     def test_parse_crawl_delay(self):
         """Test crawl-delay parsing from robots.txt."""
@@ -93,6 +115,21 @@ User-agent: *
 Disallow: /private/
 """
         assert checker._parse_crawl_delay(content) is None
+
+    def test_parse_crawl_delay_matches_product_token_not_substrings(self):
+        checker = RobotsChecker(user_agent="html2md/1.0 (+https://example.com/bot)")
+        content = """
+User-agent: not-html2md
+Crawl-delay: 99
+
+User-agent: html2md
+Crawl-delay: 2
+
+User-agent: *
+Crawl-delay: 5
+"""
+
+        assert checker._parse_crawl_delay(content) == 2
         
         # Test with invalid crawl-delay
         content = """
@@ -206,6 +243,30 @@ Disallow: /admin/
         # Different domain should fetch again
         checker.can_fetch("https://other.com/page")
         assert mock_get.call_count == 2
+
+    def test_concurrent_cache_miss_fetches_once(self):
+        session = Mock()
+
+        def delayed_response(*args, **kwargs):
+            time.sleep(0.01)
+            return Mock(
+                status_code=200,
+                text="User-agent: *\nDisallow: /private/",
+            )
+
+        session.get.side_effect = delayed_response
+        checker = RobotsChecker(session=session)
+
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            results = list(
+                executor.map(
+                    checker.can_fetch,
+                    [f"https://example.com/page-{index}" for index in range(5)],
+                )
+            )
+
+        assert results == [True] * 5
+        session.get.assert_called_once()
     
     def test_clear_cache(self):
         """Test cache clearing."""

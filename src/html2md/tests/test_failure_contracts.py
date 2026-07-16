@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from html2md.cli.cli import app
 from html2md.markdown.crawler import CrawlResult, crawl_website
 from html2md.network.chatgpt_handler import get_conversation_html
+from html2md.network.request_handler import FetchResult
 from html2md.utils.state_manager import StateManager
 
 
@@ -45,7 +46,12 @@ def test_convert_failure_exits_nonzero():
 
 def test_crawler_fetch_failure_uses_typed_failure_result(tmp_path):
     state_manager = StateManager(state_dir=tmp_path / "states")
-    with patch("html2md.markdown.crawler.fetch_html", return_value=None):
+    failure = FetchResult(
+        requested_url="https://example.com",
+        final_url="https://example.com",
+        error="ConnectionError: offline",
+    )
+    with patch("html2md.markdown.crawler.fetch_html", return_value=failure):
         result = crawl_website(
             "https://example.com",
             tmp_path / "output",

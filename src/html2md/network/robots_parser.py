@@ -9,15 +9,24 @@ This module provides functionality to:
 """
 
 import logging
-import re
+import threading
 import time
-from typing import Dict, Optional, Set, Tuple
-from urllib.parse import urlparse, urljoin
+from dataclasses import dataclass
+from typing import Dict, Optional, Tuple
+from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
 import requests
 
 logger = logging.getLogger("html2md")
+
+
+@dataclass(frozen=True)
+class RobotsFetchResult:
+    """robots.txt response data needed to apply RFC 9309 failure policy."""
+
+    content: Optional[str]
+    status_code: Optional[int]
 
 
 class RobotsChecker:
@@ -28,7 +37,7 @@ class RobotsChecker:
     - Caches robots.txt content to avoid repeated fetches
     - Supports crawl-delay directives
     - Handles various edge cases (missing robots.txt, malformed content)
-    - Thread-safe for concurrent operations
+    - Serializes cache/session access for concurrent callers
     """
     
     def __init__(self, user_agent: str = "html2md", session: Optional[requests.Session] = None):
@@ -40,21 +49,23 @@ class RobotsChecker:
             session: Optional requests session for connection pooling
         """
         self.user_agent = user_agent
+        self._product_token = user_agent.split()[0].split("/", 1)[0].lower()
         self.session = session or requests.Session()
         self._cache: Dict[str, Tuple[RobotFileParser, Optional[float], float]] = {}
         self._cache_duration = 3600  # Cache robots.txt for 1 hour
+        self._lock = threading.RLock()
         
     def _get_robots_url(self, url: str) -> str:
         """Get the robots.txt URL for a given URL."""
         parsed = urlparse(url)
         return f"{parsed.scheme}://{parsed.netloc}/robots.txt"
     
-    def _fetch_robots_txt(self, robots_url: str) -> Optional[str]:
+    def _fetch_robots_txt(self, robots_url: str) -> RobotsFetchResult:
         """
         Fetch robots.txt content from a URL.
         
         Returns:
-            The robots.txt content, or None if fetch failed
+            Content and HTTP status, or no status for a network failure.
         """
         try:
             response = self.session.get(
@@ -62,17 +73,17 @@ class RobotsChecker:
                 timeout=10,
                 headers={'User-Agent': self.user_agent}
             )
-            if response.status_code == 200:
-                return response.text
-            elif response.status_code == 404:
-                logger.debug(f"No robots.txt found at {robots_url}")
-                return ""  # Empty robots.txt means everything is allowed
+            if 200 <= response.status_code < 300:
+                return RobotsFetchResult(response.text, response.status_code)
+            if 400 <= response.status_code < 500:
+                logger.debug(f"robots.txt unavailable at {robots_url}: HTTP {response.status_code}")
+                return RobotsFetchResult("", response.status_code)
             else:
                 logger.warning(f"Failed to fetch robots.txt from {robots_url}: HTTP {response.status_code}")
-                return None
+                return RobotsFetchResult(None, response.status_code)
         except requests.RequestException as e:
             logger.warning(f"Error fetching robots.txt from {robots_url}: {e}")
-            return None
+            return RobotsFetchResult(None, None)
     
     def _parse_crawl_delay(self, content: str) -> Optional[float]:
         """
@@ -87,32 +98,49 @@ class RobotsChecker:
         if not content:
             return None
             
-        # Look for crawl-delay directives for our user agent or *
-        lines = content.lower().split('\n')
-        current_agent = None
-        crawl_delay = None
-        
-        for line in lines:
-            line = line.strip()
-            
-            # Check for user-agent directive
-            if line.startswith('user-agent:'):
-                agent = line.split(':', 1)[1].strip()
-                if agent == '*' or self.user_agent.lower() in agent:
-                    current_agent = agent
-                else:
-                    current_agent = None
-            
-            # Check for crawl-delay directive
-            elif line.startswith('crawl-delay:') and current_agent is not None:
-                try:
-                    delay_str = line.split(':', 1)[1].strip()
-                    crawl_delay = float(delay_str)
-                    break  # Use the first matching crawl-delay
-                except (ValueError, IndexError):
-                    logger.warning(f"Invalid crawl-delay value: {line}")
-        
-        return crawl_delay
+        # Group consecutive User-agent fields and apply the product-token group
+        # in preference to the wildcard group.
+        groups = []
+        agents = []
+        directives = []
+        seen_directive = False
+
+        def finish_group():
+            if agents:
+                groups.append((list(agents), list(directives)))
+
+        for raw_line in content.splitlines():
+            line = raw_line.split("#", 1)[0].strip()
+            if not line or ":" not in line:
+                continue
+            field, value = (part.strip() for part in line.split(":", 1))
+            field = field.lower()
+            if field == "user-agent":
+                if seen_directive:
+                    finish_group()
+                    agents.clear()
+                    directives.clear()
+                    seen_directive = False
+                agents.append(value.lower())
+            elif agents:
+                seen_directive = True
+                directives.append((field, value))
+        finish_group()
+
+        def delay_for(agent_name):
+            for group_agents, group_directives in groups:
+                if agent_name not in group_agents:
+                    continue
+                for field, value in group_directives:
+                    if field == "crawl-delay":
+                        try:
+                            return float(value)
+                        except ValueError:
+                            logger.warning("Invalid crawl-delay value: %s", value)
+            return None
+
+        specific_delay = delay_for(self._product_token)
+        return specific_delay if specific_delay is not None else delay_for("*")
     
     def _get_cached_or_fetch(self, url: str) -> Tuple[RobotFileParser, Optional[float]]:
         """
@@ -122,33 +150,31 @@ class RobotsChecker:
             Tuple of (RobotFileParser, crawl_delay)
         """
         robots_url = self._get_robots_url(url)
-        
-        # Check cache
-        if robots_url in self._cache:
-            parser, crawl_delay, cached_time = self._cache[robots_url]
-            if time.time() - cached_time < self._cache_duration:
-                return parser, crawl_delay
-        
-        # Fetch and parse robots.txt
-        content = self._fetch_robots_txt(robots_url)
-        
-        # Create parser
-        parser = RobotFileParser()
-        parser.set_url(robots_url)
-        
-        if content is not None:
-            parser.parse(content.split('\n'))
-        else:
-            # If fetch failed, assume everything is allowed to avoid blocking crawl
-            parser.parse([])
-        
-        # Extract crawl delay
-        crawl_delay = self._parse_crawl_delay(content) if content else None
-        
-        # Cache the result
-        self._cache[robots_url] = (parser, crawl_delay, time.time())
-        
-        return parser, crawl_delay
+        with self._lock:
+            if robots_url in self._cache:
+                parser, crawl_delay, cached_time = self._cache[robots_url]
+                if time.time() - cached_time < self._cache_duration:
+                    return parser, crawl_delay
+
+            fetch_result = self._fetch_robots_txt(robots_url)
+            content = fetch_result.content
+
+            parser = RobotFileParser()
+            parser.set_url(robots_url)
+
+            if fetch_result.status_code is not None and 400 <= fetch_result.status_code < 500:
+                # RFC 9309: an unavailable robots.txt permits access.
+                parser.allow_all = True
+            elif content is not None:
+                parser.parse(content.split('\n'))
+            else:
+                # RFC 9309: unreachable or 5xx robots.txt is temporarily unavailable;
+                # crawlers must assume complete disallow.
+                parser.disallow_all = True
+
+            crawl_delay = self._parse_crawl_delay(content) if content else None
+            self._cache[robots_url] = (parser, crawl_delay, time.time())
+            return parser, crawl_delay
     
     def can_fetch(self, url: str) -> bool:
         """
@@ -162,11 +188,10 @@ class RobotsChecker:
         """
         try:
             parser, _ = self._get_cached_or_fetch(url)
-            return parser.can_fetch(self.user_agent, url)
+            return parser.can_fetch(self._product_token, url)
         except Exception as e:
             logger.error(f"Error checking robots.txt for {url}: {e}")
-            # On error, default to allowing fetch to avoid blocking crawl
-            return True
+            return False
     
     def get_crawl_delay(self, url: str) -> Optional[float]:
         """
@@ -205,4 +230,5 @@ class RobotsChecker:
     
     def clear_cache(self):
         """Clear the robots.txt cache."""
-        self._cache.clear()
+        with self._lock:
+            self._cache.clear()

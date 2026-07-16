@@ -44,23 +44,19 @@ def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=No
     if not verify_ssl:
         disable_ssl_verification(session)
 
-    # Apply custom headers if provided (they will override session defaults)
-    if headers:
-        session.headers.update(headers)
-    
     # Special handling for ChatGPT URLs
     if is_chatgpt_url(url):
         logger.info(f"Detected ChatGPT URL: {url}")
         
         # Try OAuth API approach first if credentials are provided
         if oauth_email and oauth_password:
-            logger.info(f"Attempting to use OAuth authentication for ChatGPT")
+            logger.info("Attempting to use OAuth authentication for ChatGPT")
             cookies_dict = session.cookies.get_dict() if session else {}
             html_content = get_conversation_oauth(url, oauth_email, oauth_password, cookies_dict)
             if html_content:
                 logger.info(f"Successfully retrieved ChatGPT conversation via OAuth API ({len(html_content)} bytes)")
             else:
-                logger.warning(f"OAuth API retrieval failed, falling back to cookie-based methods")
+                logger.warning("OAuth API retrieval failed, falling back to cookie-based methods")
                 html_content = get_conversation_html(url, session, headers)
         else:
             # If no OAuth credentials, use traditional cookie-based approach
@@ -76,7 +72,7 @@ def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=No
         try:
             logger.info(f"Fetching URL: {url}")
             # Send GET request to fetch the HTML content
-            response = session.get(url, timeout=30)
+            response = session.get(url, headers=headers, timeout=30)
             response.raise_for_status()
             
             # Detect encoding if possible
@@ -134,15 +130,28 @@ def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=No
             logger.error(f"Failed to retrieve {url}: {e}")
             return None
 
-    # Handle empty HTML response
+    return html_content_to_markdown(
+        html_content,
+        url,
+        session=session,
+        trim=trim,
+        download_images=download_images,
+        output_dir=output_dir,
+        images_dir=images_dir,
+    )
+
+
+def html_content_to_markdown(html_content, base_url, session=None, trim=False,
+                             download_images=False, output_dir=None, images_dir="images"):
+    """Convert an already-fetched HTML document to Markdown."""
     if not html_content or not html_content.strip():
-        logger.warning(f"Empty HTML response from {url}")
+        logger.warning(f"Empty HTML response from {base_url}")
         return None
 
     # Check for tiny responses that are likely error pages
     if len(html_content) < 100:
         logger.warning(
-            f"Very small response ({len(html_content)} bytes) from {url}, might be an error page"
+            f"Very small response ({len(html_content)} bytes) from {base_url}, might be an error page"
         )
         # We'll still try to convert it, but log a warning
 
@@ -154,17 +163,17 @@ def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=No
 
     # Apply trimming if requested
     if trim:
-        formatted_markdown = trim_markdown(formatted_markdown, url)
+        formatted_markdown = trim_markdown(formatted_markdown, base_url)
 
     # Download images if requested
     if download_images and output_dir:
-        logger.info(f"Downloading images from {url}")
+        logger.info(f"Downloading images from {base_url}")
         image_downloader = ImageDownloader(session=session, images_dir=images_dir)
         formatted_markdown = image_downloader.process_markdown_with_images(
-            formatted_markdown, html_content, url, Path(output_dir)
+            formatted_markdown, html_content, base_url, Path(output_dir)
         )
 
-    logger.info(f"Successfully converted HTML from {url} to Markdown.")
+    logger.info(f"Successfully converted HTML from {base_url} to Markdown.")
     return formatted_markdown
 
 

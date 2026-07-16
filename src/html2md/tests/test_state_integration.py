@@ -8,6 +8,7 @@ from unittest.mock import patch
 import pytest
 
 from html2md.markdown.crawler import crawl_website
+from html2md.network.request_handler import FetchResult
 from html2md.utils.state_manager import StateManager
 
 
@@ -35,14 +36,19 @@ class TestStateIntegration:
         </html>
         """
 
-    @patch('html2md.markdown.crawler.html_to_markdown', return_value="# Test Content")
+    @patch('html2md.markdown.crawler.html_content_to_markdown', return_value="# Test Content")
     @patch('html2md.markdown.crawler.fetch_html')
     def test_crawler_with_state_manager(self, mock_fetch, mock_convert, temp_dirs, mock_html_response):
         """Test crawler with state manager enabled."""
         state_dir, output_dir = temp_dirs
 
         # Mock the HTML fetch
-        mock_fetch.return_value = mock_html_response
+        mock_fetch.return_value = FetchResult(
+            "https://example.com",
+            "https://example.com",
+            status_code=200,
+            body=mock_html_response,
+        )
 
         # Create state manager
         state_manager = StateManager(state_dir=state_dir)
@@ -78,14 +84,19 @@ class TestStateIntegration:
         assert len(state_data['checkpoints']) >= 1
         assert state_data['progress']['statistics']['urls_processed'] >= 1
 
-    @patch('html2md.markdown.crawler.html_to_markdown', return_value="# Test Content")
+    @patch('html2md.markdown.crawler.html_content_to_markdown', return_value="# Test Content")
     @patch('html2md.markdown.crawler.fetch_html')
     def test_crawler_resume_functionality(self, mock_fetch, mock_convert, temp_dirs, mock_html_response):
         """Test resuming a crawl from saved state."""
         state_dir, output_dir = temp_dirs
 
         # Mock the HTML fetch
-        mock_fetch.return_value = mock_html_response
+        mock_fetch.return_value = FetchResult(
+            "https://example.com",
+            "https://example.com",
+            status_code=200,
+            body=mock_html_response,
+        )
 
         # Create state manager
         state_manager = StateManager(state_dir=state_dir)
@@ -128,14 +139,19 @@ class TestStateIntegration:
 
         assert final_state['progress']['statistics']['urls_processed'] >= initial_result.processed_count
 
-    @patch('html2md.markdown.crawler.html_to_markdown', return_value="# Resumed")
+    @patch('html2md.markdown.crawler.html_content_to_markdown', return_value="# Resumed")
     @patch('html2md.markdown.crawler.fetch_html')
     def test_resume_page_budget_counts_only_prior_successes(
         self, mock_fetch, mock_convert, temp_dirs, mock_html_response
     ):
         """Prior failures must not consume the resumed crawl's success budget."""
         state_dir, output_dir = temp_dirs
-        mock_fetch.return_value = mock_html_response
+        mock_fetch.return_value = FetchResult(
+            "https://example.com/resumed",
+            "https://example.com/resumed",
+            status_code=200,
+            body=mock_html_response,
+        )
 
         manager = StateManager(state_dir=state_dir)
         state = manager.create_new_state(
@@ -271,7 +287,7 @@ class TestStateIntegration:
         state_dir, output_dir = temp_dirs
 
         state_manager = StateManager(state_dir=state_dir)
-        crawl_state = state_manager.create_new_state(
+        state_manager.create_new_state(
             start_url="https://example.com",
             output_dir=str(output_dir),
             config={}

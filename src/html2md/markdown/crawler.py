@@ -3,12 +3,12 @@ import os
 import re
 import time
 import random
-from collections import deque
+from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 from html2md.cookies.session_manager import get_session
-from html2md.markdown.converter import html_to_markdown
+from html2md.markdown.converter import html_content_to_markdown
 from html2md.markdown.batch_processor import create_directory_structure
 from html2md.network.request_handler import fetch_html
 from html2md.network.robots_parser import RobotsChecker
@@ -24,6 +24,7 @@ from html2md.utils.parser import (
 
 # Setup logger
 logger = logging.getLogger("html2md")
+MAX_RATE_LIMIT_RETRIES = 2
 
 
 @dataclass(frozen=True)
@@ -192,6 +193,17 @@ def crawl_website(
         state_manager.add_urls_to_queue([(start_url, 0)])
 
     failed_urls_count = 0
+    retryable_attempts = defaultdict(int)
+    queued_urls = {item[0] for item in queue}
+    in_flight_urls = set()
+
+    def enqueue_url(url, depth):
+        """Queue nonterminal work exactly once."""
+        if url in visited_urls or url in queued_urls or url in in_flight_urls:
+            return False
+        queue.append((url, depth))
+        queued_urls.add(url)
+        return True
 
     # Now update progress for resume case
     if resume_crawl_id and crawl_state:
@@ -262,14 +274,12 @@ def crawl_website(
     # Process URLs breadth-first up to max_depth
     while queue and processed_urls_count < max_pages:
         url, depth = queue.popleft()
+        queued_urls.discard(url)
 
         # Skip if already visited
         if url in visited_urls:
             continue
 
-        # Mark as visited
-        visited_urls.add(url)
-        
         # Update state manager queue
         if enable_checkpoints:
             state_manager.current_state.urls_queued = list(queue)
@@ -277,6 +287,7 @@ def crawl_website(
         # Check robots.txt for this URL
         if robots_checker and not robots_checker.can_fetch(url):
             update_progress(f"URL disallowed by robots.txt: {url}", url, "blocked")
+            visited_urls.add(url)
             continue
 
         # Process the URL
@@ -286,6 +297,9 @@ def crawl_website(
             "processing",
         )
 
+        slot_acquired = False
+        request_start_time = None
+        request_recorded = False
         try:
             # Check concurrent limits and backoff
             if not concurrent_limiter.acquire_slot(url):
@@ -298,12 +312,14 @@ def crawl_website(
                         "backoff"
                     )
                     # Skip this URL and continue with others
-                    queue.append((url, depth))
+                    enqueue_url(url, depth)
                     continue
                 else:
                     update_progress(f"Concurrent limit reached, queueing {url}", url, "queued")
-                    queue.append((url, depth))
+                    enqueue_url(url, depth)
                     continue
+            slot_acquired = True
+            in_flight_urls.add(url)
             
             # Check rate limit before making request
             if rate_limiter:
@@ -318,14 +334,19 @@ def crawl_website(
                     # Re-check after waiting
                     can_proceed, _ = rate_limiter.can_make_request(url)
                     if not can_proceed:
-                        update_progress(f"Rate limit still exceeded for {url}", url, "blocked")
-                        concurrent_limiter.release_slot(url, success=False)
-                        failed_urls_count += 1
-                        if enable_checkpoints:
-                            state_manager.update_progress(
-                                url, False, error_message="Rate limit remained exceeded"
-                            )
+                        update_progress(f"Rate limit still exceeded; queueing {url}", url, "queued")
+                        concurrent_limiter.release_slot(url)
+                        slot_acquired = False
+                        in_flight_urls.discard(url)
+                        enqueue_url(url, depth)
                         continue
+                elif suggested_delay > 0:
+                    update_progress(
+                        f"Adaptive rate limit delay: {suggested_delay:.1f}s for {url}",
+                        url,
+                        "rate_limited",
+                    )
+                    time.sleep(suggested_delay)
             
             # Record request start for rate limiting
             request_start_time = time.time()
@@ -335,27 +356,60 @@ def crawl_website(
             # Fetch HTML content
             update_progress(f"Fetching content from {url}", url, "fetching")
             headers = header_manager.get_headers(url)
-            html_content = fetch_html(url, session, headers)
-            
-            # Get status code from response (would need to modify fetch_html to return this)
-            status_code = 200 if html_content else None
+            fetch_result = fetch_html(url, session, headers)
             
             # Record request completion
-            request_success = html_content is not None
+            request_success = fetch_result.success
             if rate_limiter:
-                rate_limiter.record_request_end(url, request_start_time, request_success)
+                rate_limiter.record_request_end(
+                    url,
+                    request_start_time,
+                    request_success,
+                    response_time=fetch_result.elapsed,
+                )
+                request_recorded = True
             
             # Release concurrent slot
-            concurrent_limiter.release_slot(url, success=request_success, status_code=status_code)
+            concurrent_limiter.release_slot(
+                url,
+                success=request_success,
+                status_code=fetch_result.status_code,
+                retry_after=fetch_result.retry_after,
+            )
+            slot_acquired = False
 
-            if not html_content:
-                update_progress(f"Failed to fetch content from {url}", url, "failed")
+            if (
+                fetch_result.status_code == 429
+                and retryable_attempts[url] < MAX_RATE_LIMIT_RETRIES
+            ):
+                retryable_attempts[url] += 1
+                update_progress(
+                    f"Server rate limited {url}; queueing retry "
+                    f"{retryable_attempts[url]}/{MAX_RATE_LIMIT_RETRIES}",
+                    url,
+                    "queued",
+                )
+                in_flight_urls.discard(url)
+                enqueue_url(url, depth)
+                if enable_checkpoints:
+                    state_manager.current_state.urls_queued = list(queue)
+                continue
+
+            # The URL is terminal only after it succeeds or exhausts retry policy.
+            in_flight_urls.discard(url)
+            visited_urls.add(url)
+
+            if not fetch_result.success or not fetch_result.body:
+                error_message = fetch_result.error or "Failed to fetch content"
+                update_progress(f"Failed to fetch content from {url}: {error_message}", url, "failed")
                 failed_urls_count += 1
                 if enable_checkpoints:
                     state_manager.update_progress(
-                        url, False, error_message="Failed to fetch content"
+                        url, False, error_message=error_message
                     )
                 continue
+
+            html_content = fetch_result.body
 
             # Create directory structure for the URL
             url_dir = create_directory_structure(
@@ -371,8 +425,8 @@ def crawl_website(
             url_to_file_mapping[url] = output_file
 
             # Convert HTML to markdown
-            markdown_content = html_to_markdown(
-                url, session=session, headers=headers, trim=trim,
+            markdown_content = html_content_to_markdown(
+                html_content, fetch_result.final_url, session=session, trim=trim,
                 download_images=download_images, output_dir=url_dir, images_dir=images_dir
             )
 
@@ -425,10 +479,10 @@ def crawl_website(
                         if link not in visited_urls and should_follow_link(
                             link, start_url, follow_option
                         ):
-                            queue.append((link, depth + 1))
-                            update_progress(
-                                f"Queued link (depth {depth+1}): {link}", link, "queued"
-                            )
+                            if enqueue_url(link, depth + 1):
+                                update_progress(
+                                    f"Queued link (depth {depth+1}): {link}", link, "queued"
+                                )
 
             else:
                 update_progress(f"Failed to convert HTML from {url}", url, "failed")
@@ -439,12 +493,15 @@ def crawl_website(
                     )
 
         except Exception as e:
+            in_flight_urls.discard(url)
+            visited_urls.add(url)
             failed_urls_count += 1
             # Record failed request for rate limiting
-            if rate_limiter:
+            if rate_limiter and request_start_time is not None and not request_recorded:
                 rate_limiter.record_request_end(url, request_start_time, False)
             # Release concurrent slot on error
-            concurrent_limiter.release_slot(url, success=False)
+            if slot_acquired:
+                concurrent_limiter.release_slot(url, success=False)
             update_progress(f"Error processing URL {url}: {str(e)}", url, "error")
             
             # Update state manager with failed processing
