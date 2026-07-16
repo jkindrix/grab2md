@@ -2,6 +2,10 @@
 
 A browser extension for quickly converting web content to Markdown.
 
+## Stabilization status
+
+The supported alpha surface is intentionally limited to converting the active tab as a full page, selection, or main article, with popup preview, clipboard copy, or download output. Direct URL capture, batch URL conversion, and element-selection modes are hidden and reject old messages explicitly until browser-level tests support them. The Node regression suite is not a substitute for the Chromium coverage tracked for the remaining extension work.
+
 ## Features
 
 - **One-Click Conversion**: Convert any web page to Markdown with a single click
@@ -103,6 +107,13 @@ html2md-extension/
 2. Make your changes
 3. Test locally using Chrome's "Load unpacked" feature
 4. Package for distribution
+
+Run the committed static regression and syntax checks with:
+
+```bash
+for file in extension/*.js extension/tests/*.js; do node --check "$file"; done
+node --test extension/tests/*.test.js
+```
 
 ## License
 

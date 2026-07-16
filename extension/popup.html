@@ -27,7 +27,6 @@
 
     <div class="tabs" role="tablist">
       <button id="convert-tab" class="tab-button active" data-tab="convert" role="tab" aria-selected="true" aria-controls="convert">Convert</button>
-      <button id="url-capture-tab" class="tab-button" data-tab="url-capture" role="tab" aria-selected="false" aria-controls="url-capture">URL Capture</button>
       <button id="settings-tab" class="tab-button" data-tab="settings" role="tab" aria-selected="false" aria-controls="settings">Settings</button>
     </div>
 
@@ -41,7 +40,6 @@
               <option value="full-page">Full Page</option>
               <option value="selection">Selection Only</option>
               <option value="article">Main Article</option>
-              <option value="element">Select Element</option>
             </select>
           </div>
 
@@ -85,83 +83,6 @@
             </div>
           </div>
           <pre id="markdown-result"></pre>
-        </div>
-      </div>
-
-      <!-- URL Capture Tab -->
-      <div id="url-capture" class="tab-pane" role="tabpanel" aria-labelledby="url-capture-tab" tabindex="-1">
-        <div class="url-capture-options">
-          <div class="capture-settings">
-            <div class="setting-group">
-              <label for="url-filter">URL Filter Pattern (regex)</label>
-              <input type="text" id="url-filter" placeholder=".*" value=".*">
-              <div class="setting-help">Filter URLs that match this pattern</div>
-            </div>
-
-            <div class="setting-group">
-              <label for="capture-depth">Maximum Depth</label>
-              <select id="capture-depth">
-                <option value="0">Current page only</option>
-                <option value="1" selected>1 level deep</option>
-                <option value="2">2 levels deep</option>
-                <option value="3">3 levels deep</option>
-              </select>
-              <div class="setting-help">How many link levels to follow</div>
-            </div>
-
-            <div class="setting-group">
-              <label for="domain-option">Domain Options</label>
-              <select id="domain-option">
-                <option value="current-domain" selected>Current domain only</option>
-                <option value="include-subdomains">Include subdomains</option>
-                <option value="any-domain">Any domain</option>
-              </select>
-              <div class="setting-help">Limit which domains to include</div>
-            </div>
-
-            <div class="setting-group">
-              <label for="max-pages">Maximum Pages</label>
-              <input type="number" id="max-pages" min="1" max="100" value="20">
-              <div class="setting-help">Maximum number of pages to process</div>
-            </div>
-          </div>
-
-          <div class="setting-group checkbox-item">
-            <input type="checkbox" id="only-visible-links" checked>
-            <label for="only-visible-links">Only capture visible links</label>
-            <div class="setting-help">Ignore hidden links on the page</div>
-          </div>
-
-          <div class="setting-group checkbox-item">
-            <input type="checkbox" id="skip-media" checked>
-            <label for="skip-media">Skip media files</label>
-            <div class="setting-help">Skip PDFs, images, videos, etc.</div>
-          </div>
-        </div>
-
-        <div class="action-buttons">
-          <button id="scan-urls-button" class="primary-btn">Scan Page for URLs</button>
-        </div>
-
-        <div id="url-results" class="hidden">
-          <h3>Found URLs <span id="url-count">(0)</span></h3>
-          <div class="url-actions">
-            <button id="select-all" class="small-button">Select All</button>
-            <button id="deselect-all" class="small-button">Deselect All</button>
-          </div>
-          <div id="url-list" class="url-list"></div>
-          <div class="action-buttons">
-            <button id="capture-selected" class="primary-btn">Convert Selected URLs</button>
-          </div>
-        </div>
-
-        <div id="capture-progress" class="hidden" role="region" aria-label="URL conversion progress">
-          <h3>Converting URLs</h3>
-          <div class="progress-container">
-            <div id="progress-bar" class="progress-bar" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-          </div>
-          <div id="progress-status" aria-live="polite">Processing 0/0</div>
-          <button id="stop-capture" class="warning-button" aria-label="Stop conversion">Stop</button>
         </div>
       </div>
 
@@ -325,6 +246,7 @@
   <script src="chatgpt-turndown.js"></script>
   <script src="chatgpt-cleaner.js"></script>
   <script src="transcript-converter.js"></script>
+  <script src="conversion-utils.js"></script>
   <script src="popup.js"></script>
 </body>
 </html>

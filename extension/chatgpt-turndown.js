@@ -353,26 +353,18 @@ class ChatGPTTurndownService {
    * Remove common UI text that might be included 
    */
   removeUIText(markdown) {
+    const exactUiLines = new Set([
+      'skip to content',
+      'open sidebar',
+      'copy code',
+      'copy edit',
+      'regenerate response'
+    ]);
+
     return markdown
-      // Common ChatGPT UI elements
-      .replace(/\bSkip to content\b/g, '')
-      .replace(/\bOpen sidebar\b/g, '')
-      .replace(/\bChatGPT \d+o?\b/g, '')
-      .replace(/\bShare\b/g, '')
-      .replace(/\bSearch\b/g, '')
-      .replace(/\bDeep research\b/g, '')
-      .replace(/\bCreate image\b/g, '')
-      .replace(/\bChatGPT can make mistakes\.[^\n]*/g, '')
-      .replace(/\bCopy\s*Edit\b/g, '')
-      .replace(/\b4o\b/g, '')
-      .replace(/\bSearch\b/g, '')
-      .replace(/\bDeep research\b/g, '')
-      // Common buttons
-      .replace(/\bRegenerate\b/g, '')
-      .replace(/\bContinue\b/g, '')
-      // Remove extra space after cleaning
-      .replace(/\s{2,}/g, ' ')
-      // Fix extra line breaks
+      .split('\n')
+      .filter(line => !exactUiLines.has(line.trim().toLowerCase()))
+      .join('\n')
       .replace(/\n{3,}/g, '\n\n');
   }
   

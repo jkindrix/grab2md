@@ -49,6 +49,10 @@ jobs:
         run: python -m pip install "poetry==$POETRY_VERSION"
       - name: Build distributions
         run: poetry build
+      - name: Run extension static regressions
+        run: |
+          for file in extension/*.js extension/tests/*.js; do node --check "$file"; done
+          node --test extension/tests/*.test.js
       - name: Install and exercise the wheel
         run: |
           python -m venv "$RUNNER_TEMP/wheel-smoke"
@@ -77,4 +81,3 @@ jobs:
       - name: Mypy
         if: always()
         run: poetry run mypy src/html2md
-

@@ -576,20 +576,6 @@ var TurndownService = (function () {
 
     // Special processing for ChatGPT content
     if (isChatGPT || (typeof window !== 'undefined' && window.location.href.includes('chatgpt.com'))) {
-      // Pre-cleanup: Remove navigation & UI elements
-      output = output
-        // Remove common UI elements that shouldn't be in the markdown
-        .replace(/\bSkip to content\b/g, '')
-        .replace(/\bOpen sidebar\b/g, '')
-        .replace(/\bChatGPT \d+o?\b/g, '')
-        .replace(/\bShare\b/g, '')
-        .replace(/\bSearch\b/g, '')
-        .replace(/\bDeep research\b/g, '')
-        .replace(/\bCreate image\b/g, '')
-        .replace(/\bChatGPT can make mistakes\.[^\n]*/g, '')
-        .replace(/\bCopy\s*Edit\b/g, '')
-        .replace(/\b4o\b/g, '');
-      
       // Proper formatting for chat messages
       output = output
         // Fix chat message headers to proper markdown headers

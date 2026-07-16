@@ -42,7 +42,7 @@ Feature expansion is frozen while the project repairs and verifies its primary w
 - Signal handlers checkpoint without reliably terminating.
 - URL-derived output paths are not fully contained beneath the selected output root.
 - Debug logging can expose cookie and session-token values.
-- Several Chrome extension modes use APIs unavailable in Manifest V3 service workers or otherwise fail at runtime.
+- Unsupported Chrome extension URL/batch/element modes are now hidden and reject legacy messages; browser-level verification of the retained active-tab modes remains outstanding.
 - The project now carries its declared MIT grant and the required Turndown third-party notice.
 
 ## Test and quality status
@@ -77,6 +77,7 @@ Current remediation evidence for H2M-030 through H2M-032 supersedes those test-h
 - Ten real subprocess tests cover local and URL conversion, batch, crawl, state listing/resume, gzip, redirects, HTTP 404/429/500 failures, robots denial, output traversal containment, and failure exit behavior. Signal interruption/resume subprocess coverage is maintained separately in the committed signal suite.
 - Production-only statement coverage is **61.08%** (4,753 statements; 1,850 missed), with an enforced 59% non-regression floor and a documented 75% stabilization target. Package-internal tests are excluded from the denominator.
 - CI definitions now run the locked suite and coverage gate on Python 3.11–3.13 and build/smoke-test the wheel. Ruff, Black, and mypy remain explicitly non-blocking debt reports pending H2M-052–054, so H2M-033 is not yet complete.
+- Extension static regressions cover HTML salvage, unsupported control removal, packaged viewer scripts, and preservation of user-authored product words and fenced code. Chromium runtime coverage remains outstanding.
 - Chrome extension runtime coverage remains absent and is tracked by H2M-046.
 
 Coverage evidence is reproducible through the documented production-package command; future claims must retain the same denominator or explicitly explain a change.

@@ -17,19 +17,6 @@ const saveSettingsBtn = document.getElementById('save-settings');
 const resetDefaultsBtn = document.getElementById('reset-defaults');
 const cliLink = document.getElementById('cli-link');
 
-// URL Capture Elements
-const scanUrlsButton = document.getElementById('scan-urls-button');
-const urlResults = document.getElementById('url-results');
-const urlList = document.getElementById('url-list');
-const urlCount = document.getElementById('url-count');
-const selectAllButton = document.getElementById('select-all');
-const deselectAllButton = document.getElementById('deselect-all');
-const captureSelectedButton = document.getElementById('capture-selected');
-const captureProgress = document.getElementById('capture-progress');
-const progressBar = document.getElementById('progress-bar');
-const progressStatus = document.getElementById('progress-status');
-const stopCaptureButton = document.getElementById('stop-capture');
-
 // Default settings
 const defaultSettings = {
   theme: 'light',
@@ -44,14 +31,6 @@ const defaultSettings = {
     codeBlocks: true,
     inlineLinks: true,
     enableChatGPTMode: true
-  },
-  urlCaptureOptions: {
-    urlFilter: '.*',
-    maxDepth: 1,
-    domainOption: 'current-domain',
-    maxPages: 20,
-    onlyVisibleLinks: true,
-    skipMedia: true
   },
   cliPath: ''
 };
@@ -264,29 +243,6 @@ function setupEventListeners() {
     chrome.tabs.create({ url: 'https://github.com/jkindrix/html2md' });
   });
 
-  // URL Capture Tab Functionality
-  if (scanUrlsButton) {
-    // Scan URLs button
-    scanUrlsButton.addEventListener('click', handleUrlScan);
-
-    // Select/Deselect All buttons
-    selectAllButton.addEventListener('click', () => {
-      const checkboxes = document.querySelectorAll('.url-item input[type="checkbox"]');
-      checkboxes.forEach(checkbox => checkbox.checked = true);
-    });
-
-    deselectAllButton.addEventListener('click', () => {
-      const checkboxes = document.querySelectorAll('.url-item input[type="checkbox"]');
-      checkboxes.forEach(checkbox => checkbox.checked = false);
-    });
-
-    // Capture Selected URLs button
-    captureSelectedButton.addEventListener('click', handleCaptureSelected);
-
-    // Stop Capture button
-    stopCaptureButton.addEventListener('click', stopCapture);
-  }
-
   // Tab navigation with accessibility support
   const tabButtons = document.querySelectorAll('.tab-button');
   tabButtons.forEach(button => {
@@ -407,23 +363,15 @@ function handleConversion() {
         return;
       }
 
-      const htmlContent = results[0].result;
+      const extractedContent = results[0].result;
 
-      if (!htmlContent) {
+      if (!extractedContent) {
         showStatus('Error: Could not extract content', 'error');
         showSpinner(false);
         return;
       }
       
-      // If the HTML is very small or doesn't look like proper HTML,
-      // try to construct something meaningful
-      if (htmlContent.length < 100 || 
-          (!htmlContent.includes('<html') && !htmlContent.includes('<body'))) {
-        console.warn('HTML content looks broken or incomplete, attempting to salvage it');
-        
-        // Try to construct a basic HTML structure with the content
-        htmlContent = `<!DOCTYPE html><html><head><title>Conversation</title></head><body><div class="content">${htmlContent}</div></body></html>`;
-      }
+      const htmlContent = Html2MdConversionUtils.normalizeExtractedHtml(extractedContent);
 
       // Convert HTML to Markdown
       const markdown = convertToMarkdown(htmlContent, trimContent);
@@ -849,7 +797,6 @@ function convertToMarkdown(html, trim) {
         '[data-testid="search-box"]', '[data-testid="send-button"]',
         '[data-testid="model-switcher"]', '[data-testid="chat-sidebar"]',
         '[aria-label="Menu"]', '[data-testid="copy-button"]',
-        '[data-state="closed"]', '[data-state="open"]', '[data-message-id]',
         // Model indicator, buttons, etc.
         'button', '.toast', '.modal', '.cookie-banner', '.alert',
         '.buttons', '.actionbar', '.input-panel', '.toolbar', '.navigation',
@@ -857,8 +804,7 @@ function convertToMarkdown(html, trim) {
         '.skip-link', '.chat-history', '.main-header', '.main-footer',
         // More specific ChatGPT UI elements
         '.sticky', '.pointer-events-auto', '.chat-message-actions',
-        '.chat-message-edit-buttons', '.relative', '.absolute',
-        '.w-full', '.text-base', '.h-full'
+        '.chat-message-edit-buttons'
       ];
       
       removeSelectors.forEach(selector => {
@@ -868,28 +814,6 @@ function convertToMarkdown(html, trim) {
         } catch (e) { /* Ignore invalid selectors */ }
       });
 
-      // Remove common text strings that indicate UI elements
-      const uiStrings = [
-        'Skip to content', 'Chat history', 'Open sidebar', 'Share', 'Search',
-        'Deep research', 'Saved memory full', 'undefined', 'Answer in chat instead',
-        'ChatGPT can make mistakes', 'OpenAI doesn\'t use', 'workspace data',
-        'CopyEdit', 'Copy Edit', 'Copy code', 'chat', 'Chat', 'GPT', 'OpenAI',
-        '4o', 'Assistant can make mistakes', 'Information cutoff', 
-        'Justin\'s Workspace', 'search', 'Deep research', 'Create image',
-        'Clear conversations', 'Settings', 'Log out', 'API mode', 'Help',
-        'My plan', 'New chat', 'Previous conversations', 'Limited knowledge',
-        'may produce inaccurate information', 'trained on data'
-      ];
-      
-      // Create a sanitized version of the HTML
-      let cleanedHtml = tempDiv.innerHTML;
-      uiStrings.forEach(str => {
-        cleanedHtml = cleanedHtml.replace(new RegExp(str, 'gi'), '');
-      });
-      
-      // Clean up any sequences of newlines in the HTML
-      cleanedHtml = cleanedHtml.replace(/\n{3,}/g, '\n\n');
-      
       // Handle code blocks better at HTML level
       const codeElements = tempDiv.querySelectorAll('pre, code, .code-block, [class*="bg-black"], [class*="whitespace-pre"]');
       codeElements.forEach(codeEl => {
@@ -901,10 +825,11 @@ function convertToMarkdown(html, trim) {
         if (codeEl.innerHTML) {
           // Preserve line breaks and spaces in code
           codeEl.innerHTML = codeEl.innerHTML.replace(/<br\s*\/?>/gi, '\n');
-          // Remove any "Copy code" or similar text
-          codeEl.innerHTML = codeEl.innerHTML.replace(/Copy\s*code|CopyEdit|Copy\s*Edit/gi, '');
         }
       });
+
+      // DOM selectors remove UI without rewriting user-authored text.
+      const cleanedHtml = tempDiv.innerHTML.replace(/\n{3,}/g, '\n\n');
       
       // First check if this content is already in our transcript format
       if (cleanedHtml.includes('title: "ChatGPT Conversation Transcript"') && 
@@ -937,9 +862,7 @@ function convertToMarkdown(html, trim) {
       if (result && result.includes('# Conversation Transcript')) {
         // Make sure conversation structure is correct with additional clean up
         const finalResult = result
-          // Fix any remaining UI text at start or end 
-          .replace(/^(.*?)(---\s*title)/s, '$2')
-          .replace(/(Conversation\.\s*)\n+.*?(undefined|search|OpenAI|train its).*$/si, '$1\n\n');
+          .replace(/^(.*?)(---\s*title)/s, '$2');
         
         return finalResult;
       } else {

@@ -11,56 +11,46 @@ class ChatGPTCleaner {
    * @returns {string} - Cleaned markdown
    */
   static clean(markdown) {
-    // 1. Remove UI elements and artifacts
-    markdown = this.removeUIElements(markdown);
-    
-    // 2. Fix headings and dialog structure
-    markdown = this.fixChatStructure(markdown);
-    
-    // 3. Fix code blocks
-    markdown = this.fixCodeBlocks(markdown);
-    
-    // 4. Clean up whitespace and structure
-    markdown = this.cleanupWhitespace(markdown);
-    
-    return markdown;
+    const codeBlocks = [];
+    const protectedMarkdown = markdown.replace(
+      /(^|\n)(`{3,}|~{3,})[^\n]*\n[\s\S]*?\n\2(?=\n|$)/g,
+      block => {
+        const token = `\u0000HTML2MD_CODE_BLOCK_${codeBlocks.length}\u0000`;
+        codeBlocks.push(block);
+        return token;
+      }
+    );
+
+    let cleaned = this.removeUIElements(protectedMarkdown);
+    cleaned = this.fixChatStructure(cleaned);
+    cleaned = this.cleanupWhitespace(cleaned);
+
+    return cleaned.replace(/\u0000HTML2MD_CODE_BLOCK_(\d+)\u0000/g, (_match, index) => {
+      return codeBlocks[Number(index)];
+    });
   }
   
   /**
    * Remove UI elements and artifacts from the markdown
    */
   static removeUIElements(markdown) {
-    // Comprehensive list of UI elements to remove
-    const uiElements = [
-      'Skip to content', 'Chat history', 'Open sidebar', 'Share', 'Search',
-      'Deep research', 'Saved memory full', 'undefined', 'Answer in chat instead',
-      'ChatGPT can make mistakes', 'OpenAI doesn\'t use', 'workspace data',
-      'CopyEdit', 'Copy Edit', 'Copy code', 'Chat', 'GPT', 'OpenAI',
-      '4o', 'Assistant can make mistakes', 'Information cutoff', 
-      'Justin\'s Workspace', 'search', 'Deep research', 'Create image',
-      'Clear conversations', 'Settings', 'Log out', 'API mode', 'Help',
-      'My plan', 'New chat', 'Previous conversations', 'Limited knowledge',
-      'may produce inaccurate information', 'trained on data', 'regenerate response',
-      'model', 'GPT-4', 'GPT-3.5', 'GPT-4o'
-    ];
-    
-    let cleaned = markdown;
-    
-    // Remove all UI element strings
-    uiElements.forEach(element => {
-      cleaned = cleaned.replace(new RegExp(element, 'gi'), '');
-    });
-    
-    return cleaned
-      // Remove single-word tokens that are likely UI elements
-      .replace(/\b4o\b/g, '')
-      .replace(/\?\s*$/gm, '')
-      // Remove any lines that are just a single short word (likely UI elements)
-      .replace(/^\s*\b\w{1,8}\b\s*$/gm, '')
-      // Remove any lines starting with "undefined"
-      .replace(/^\s*undefined.*$/gm, '')
-      // Remove lines with just icons or emoji (common in UI)
-      .replace(/^\s*[👍👎🔄📋✉️📝⚙️🔍]+\s*$/gm, '');
+    const exactUiLines = new Set([
+      'skip to content',
+      'chat history',
+      'open sidebar',
+      'copy code',
+      'copy edit',
+      'regenerate response',
+      'new chat',
+      'clear conversations',
+      'saved memory full',
+      'answer in chat instead'
+    ]);
+
+    return markdown
+      .split('\n')
+      .filter(line => !exactUiLines.has(line.trim().toLowerCase()))
+      .join('\n');
   }
   
   /**

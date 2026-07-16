@@ -427,16 +427,12 @@ format: "transcript-v1.0"
       '[role="menubar"]', '[role="menu"]', '[role="tab"]', '[role="tabpanel"]',
       '[role="alert"]', '[role="status"]', '[role="button"]',
       
-      // ChatGPT specific UI elements
-      '.flex-shrink-0', '.self-end', '.text-gray-400', '.text-gray-600',
-      '.text-gray-500', '.text-xs', '.text-sm', '.py-2', '.px-3',
+      // ChatGPT UI elements with explicit semantic identifiers
       '[data-testid="search-box"]', '[data-testid="send-button"]',
       '[data-testid="model-switcher"]', '[data-testid="chat-sidebar"]',
       '[aria-label="Menu"]', '[data-testid="copy-button"]',
-      '[data-state="closed"]', '[data-state="open"]', '[data-message-id]',
-      '.markdown-render-content', '.w-full', '.text-base',
       '.text-token-text-secondary', '.text-token-text-tertiary',
-      'h1.text-4xl', '.flex-col', '.h-full', '.relative', '.absolute'
+      'h1.text-4xl'
     ];
     
     // Remove elements matching selectors
@@ -453,13 +449,8 @@ format: "transcript-v1.0"
     
     // Remove elements with specific text content patterns
     const uiTextPatterns = [
-      /skip to content/i, /open sidebar/i, /chat history/i, 
-      /search/i, /deep research/i, /create image/i, /share/i,
-      /answer in chat/i, /saved memory/i, /undefined/i,
-      /^openai$/i, /^chatgpt$/i, /^gpt-4$/i, /^gpt-3\.5$/i,
-      /^Model:.*/i, /^ChatGPT.*/i, /^GPT-4o.*/i,
-      /can make mistakes/i, /workspace data/i, /train its models/i,
-      /Justin('s)? Workspace/i, /Answer in chat/i
+      /^(skip to content|open sidebar|chat history|search|deep research)$/i,
+      /^(create image|share|answer in chat instead|saved memory full)$/i
     ];
     
     // Find and remove elements with UI text patterns
@@ -983,11 +974,6 @@ format: "transcript-v1.0"
       // Skip very short or empty paragraphs
       if (text.length < 5) continue;
       
-      // Skip obvious UI elements
-      if (text.match(/OpenAI|ChatGPT|4o|GPT-4o|Deep research|Create image|Share|Search|sidebar/i)) {
-        continue;
-      }
-      
       // If this is a large paragraph after accumulating some content, start a new message
       if (currentContent.length > 0 && text.length > 100) {
         messages.push({
@@ -1131,9 +1117,6 @@ format: "transcript-v1.0"
    * @param {Array} messages - Array to store messages
    */
   static extractSimpleSplit(text, messages) {
-    // Remove common UI text
-    text = text.replace(/OpenAI|ChatGPT|GPT-4o|4o|Deep research|Create image|Share|Search/g, '');
-    
     // Split on obvious markers if possible, or just double line breaks
     const sections = text.split(/\n\s*\n+/).filter(s => s.trim().length > 10);
     
@@ -1151,11 +1134,6 @@ format: "transcript-v1.0"
       
       // Skip very short sections
       if (trimmed.length < 10) continue;
-      
-      // Skip UI elements and metadata
-      if (trimmed.match(/OpenAI|ChatGPT|4o|GPT-4o|Deep research|Create image|Share|Search|sidebar/i)) {
-        continue;
-      }
       
       messages.push({
         role,
@@ -1180,8 +1158,7 @@ format: "transcript-v1.0"
     const contentDivs = Array.from(container.querySelectorAll('div, p'))
       .filter(div => {
         const text = div.textContent.trim();
-        return text.length > 50 && 
-               !text.match(/OpenAI|ChatGPT|GPT-4o|4o|Deep research|Create image|Share|Search|sidebar/i);
+        return text.length > 50;
       })
       .sort((a, b) => b.textContent.length - a.textContent.length);
     
@@ -1779,8 +1756,6 @@ format: "transcript-v1.0"
         .replace(/\n\s+```/g, '\n```')
         // Ensure empty line after code blocks (but not excessive)
         .replace(/```\s*\n(?!$|\n)/g, '```\n\n')
-        // Remove UI text
-        .replace(/OpenAI|ChatGPT|GPT-4o|4o|Deep research|Create image|Share|Search|sidebar/g, '')
         // Fix broken headers
         .replace(/##(\w+)/g, '## $1')
         // Fix "ConversationTranscript" (no space)

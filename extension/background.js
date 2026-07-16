@@ -7,7 +7,6 @@
 const MENU_ITEMS = {
   CONVERT_PAGE: "convert-page",
   CONVERT_SELECTION: "convert-selection",
-  CAPTURE_LINKS: "capture-links",
   SEPARATOR: "separator",
   OPEN_SETTINGS: "open-settings"
 };
@@ -39,12 +38,6 @@ chrome.runtime.onInstalled.addListener(() => {
     id: MENU_ITEMS.CONVERT_SELECTION,
     title: "Convert selection to Markdown",
     contexts: ["selection"]
-  });
-
-  chrome.contextMenus.create({
-    id: MENU_ITEMS.CAPTURE_LINKS,
-    title: "Capture Links from Page",
-    contexts: ["page"]
   });
 
   chrome.contextMenus.create({
@@ -109,10 +102,6 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       }, tab);
       break;
 
-    case MENU_ITEMS.CAPTURE_LINKS:
-      openPopupToUrlCapture();
-      break;
-
     case MENU_ITEMS.OPEN_SETTINGS:
       chrome.tabs.create({
         url: chrome.runtime.getURL("popup.html?settings=true")
@@ -120,17 +109,6 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       break;
   }
 });
-
-/**
- * Open the popup and navigate to URL capture tab
- */
-function openPopupToUrlCapture() {
-  chrome.action.openPopup();
-  // Need to wait for popup to load before sending message
-  setTimeout(() => {
-    chrome.runtime.sendMessage({ action: "openUrlCaptureTab" });
-  }, 200);
-}
 
 /**
  * Convert content with given options
@@ -660,24 +638,7 @@ function downloadMarkdown(tab, markdown) {
         args: [markdown, filename]
       });
     } else {
-      // Use chrome.downloads API for background contexts
-      // Create blob and URL
-      const blob = new Blob([markdown], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-
-      // Trigger download
-      chrome.downloads.download({
-        url: url,
-        filename: filename,
-        saveAs: true
-      }, (downloadId) => {
-        if (chrome.runtime.lastError) {
-          console.error("Download error:", chrome.runtime.lastError);
-        }
-
-        // Clean up the object URL (after a small delay to ensure download starts)
-        setTimeout(() => URL.revokeObjectURL(url), 100);
-      });
+      throw new Error("Downloads require an active browser tab");
     }
   } catch (error) {
     console.error("Error downloading markdown:", error);
@@ -723,13 +684,19 @@ function showErrorNotification(tab, errorMessage) {
  */
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === "convertUrl") {
-    processExternalUrl(request, sender, sendResponse);
-    return true; // Return true to indicate asynchronous response
+    sendResponse({
+      success: false,
+      error: "Direct URL conversion is not supported in this release"
+    });
+    return false;
   }
 
   if (request.action === "batchConvertUrls") {
-    processBatchUrls(request.urls, request.options, sender, sendResponse);
-    return true; // Return true to indicate asynchronous response
+    sendResponse({
+      success: false,
+      error: "Batch URL conversion is not supported in this release"
+    });
+    return false;
   }
 
   if (request.action === "convertElement") {
