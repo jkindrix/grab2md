@@ -24,6 +24,11 @@ This script will:
 
 ## Manual Deployment
 
+The distribution is named `html2md-cli`; it installs the `html2md` command and
+the `html2md` Python package. Before publishing, verify that the normalized
+distribution name is still available on both TestPyPI and PyPI. A local build
+or pipx installation does not reserve the registry name.
+
 If you prefer to deploy manually, follow these steps:
 
 ### 1. Run tests

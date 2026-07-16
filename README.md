@@ -61,9 +61,14 @@ poetry shell
 
 ### Install with pip
 
+The planned PyPI distribution name is `html2md-cli`; the installed command and
+Python import remain `html2md`. No public release has been declared yet, so use
+the source installation below during stabilization. Registry availability must
+be checked again immediately before the first publication.
+
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/html2md.git
+git clone https://github.com/jkindrix/html2md.git
 cd html2md
 
 # Create a virtual environment (recommended)

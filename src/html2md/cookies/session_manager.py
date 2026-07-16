@@ -72,7 +72,7 @@ def load_tokens():
     """Load OAuth tokens from a local file."""
     if not HAS_GOOGLE_AUTH:
         raise ImportError(
-            "Google auth libraries are required for OAuth. Install with: pip install google-auth google-auth-oauthlib google-auth-httplib2"
+            "Google auth libraries are required for OAuth. Install html2md-cli with its declared dependencies."
         )
 
     validate_oauth_config()  # Validate when tokens are actually needed
@@ -105,7 +105,7 @@ def authenticate_google():
     """Authenticate using Google OAuth and obtain an access token."""
     if not HAS_GOOGLE_AUTH:
         raise ImportError(
-            "Google auth libraries are required for OAuth. Install with: pip install google-auth google-auth-oauthlib google-auth-httplib2"
+            "Google auth libraries are required for OAuth. Install html2md-cli with its declared dependencies."
         )
 
     validate_oauth_config()  # Validate when OAuth is actually needed
@@ -174,7 +174,7 @@ def get_credentials():
     """Get credentials using stored tokens or authenticate fresh."""
     if not HAS_GOOGLE_AUTH:
         raise ImportError(
-            "Google auth libraries are required for OAuth. Install with: pip install google-auth google-auth-oauthlib google-auth-httplib2"
+            "Google auth libraries are required for OAuth. Install html2md-cli with its declared dependencies."
         )
 
     validate_oauth_config()  # Validate when OAuth is actually needed
@@ -302,7 +302,7 @@ def get_chrome_encryption_key():
     """Get encryption key for Chrome cookies"""
     if not HAS_CRYPTO:
         raise ImportError(
-            "pycryptodome is required for browser cookie extraction. Install with: pip install pycryptodome"
+            "pycryptodomex is required for browser cookie extraction. Install html2md-cli with its declared dependencies."
         )
 
     if sys.platform == "win32":  # Windows
@@ -373,7 +373,7 @@ def decrypt_chrome_cookie(encrypted_value, key):
     """Decrypt Chrome cookie value"""
     if not HAS_CRYPTO:
         raise ImportError(
-            "pycryptodome is required for browser cookie extraction. Install with: pip install pycryptodome"
+            "pycryptodomex is required for browser cookie extraction. Install html2md-cli with its declared dependencies."
         )
 
     try:

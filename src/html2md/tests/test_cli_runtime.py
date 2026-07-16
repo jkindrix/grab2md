@@ -16,7 +16,7 @@ def test_cli_version_uses_installed_distribution_metadata():
     result = CliRunner().invoke(cli.app, ["--version"])
 
     assert result.exit_code == 0
-    assert result.output.strip() == version("html2md") == __version__
+    assert result.output.strip() == version("html2md-cli") == __version__
 
 
 def test_cli_import_does_not_read_or_validate_user_config(tmp_path):
