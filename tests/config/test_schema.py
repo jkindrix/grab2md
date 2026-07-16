@@ -66,7 +66,10 @@ def test_numeric_coercion_is_narrow_and_deterministic():
     "supplied, path",
     [
         ({"concurrent": {"error_threshold": 1.5}}, "concurrent.error_threshold"),
-        ({"cli_defaults": {"crawl": {"rate_limit": "30"}}}, "cli_defaults.crawl.rate_limit"),
+        (
+            {"cli_defaults": {"crawl": {"rate_limit": "30"}}},
+            "cli_defaults.crawl.rate_limit",
+        ),
         ({"cli_defaults": {"crawl": {"delay": True}}}, "cli_defaults.crawl.delay"),
         ({"logging": {"level": "VERBOSE"}}, "logging.level"),
     ],

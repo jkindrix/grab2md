@@ -100,13 +100,9 @@ def test_browser_cookie_mapping_honors_explicit_browser():
         "html2md.cookies.session_manager.get_domain_cookies",
         return_value={"session": "value"},
     ) as extract:
-        apply_browser_cookies(
-            session, "https://example.com/page", browser="firefox"
-        )
+        apply_browser_cookies(session, "https://example.com/page", browser="firefox")
 
-    extract.assert_called_once_with(
-        "https://example.com/page", browser="firefox"
-    )
+    extract.assert_called_once_with("https://example.com/page", browser="firefox")
 
 
 def test_domain_cookie_loader_routes_to_configured_browser():

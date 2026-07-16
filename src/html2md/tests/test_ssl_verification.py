@@ -114,7 +114,9 @@ class TestHtmlToMarkdownVerifySsl:
 
     def test_verify_ssl_false_disables_on_provided_session(self):
         session = self._mock_session()
-        html_to_markdown("https://internal.example.com", session=session, verify_ssl=False)
+        html_to_markdown(
+            "https://internal.example.com", session=session, verify_ssl=False
+        )
         assert session.verify is False
 
     def test_default_leaves_provided_session_untouched(self):
@@ -139,12 +141,15 @@ class TestHtmlToMarkdownVerifySsl:
 
     def test_connection_error_includes_details(self, caplog):
         session = self._mock_session()
-        session.get.side_effect = requests.exceptions.ConnectionError("connection refused")
+        session.get.side_effect = requests.exceptions.ConnectionError(
+            "connection refused"
+        )
         with caplog.at_level(logging.ERROR, logger="html2md"):
             result = html_to_markdown("https://internal.example.com", session=session)
         assert result is None
         assert any(
-            "Connection error" in record.message and "connection refused" in record.message
+            "Connection error" in record.message
+            and "connection refused" in record.message
             for record in caplog.records
         )
 

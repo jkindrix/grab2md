@@ -87,7 +87,9 @@ def test_local_conversion_uses_source_directory_for_downloaded_images(
 
 
 def test_conversion_exceptions_become_typed_failures(monkeypatch):
-    monkeypatch.setattr(conversion_service, "load_config", Mock(side_effect=OSError("bad config")))
+    monkeypatch.setattr(
+        conversion_service, "load_config", Mock(side_effect=OSError("bad config"))
+    )
 
     result = conversion_service.convert_source(
         "https://example.com",
@@ -106,7 +108,9 @@ def test_conversion_exceptions_become_typed_failures(monkeypatch):
 def test_empty_conversion_is_not_success(monkeypatch, tmp_path):
     source = tmp_path / "empty.html"
     source.write_text("", encoding="utf-8")
-    monkeypatch.setattr(conversion_service, "local_html_to_markdown", Mock(return_value=None))
+    monkeypatch.setattr(
+        conversion_service, "local_html_to_markdown", Mock(return_value=None)
+    )
 
     result = conversion_service.convert_source(
         str(source),

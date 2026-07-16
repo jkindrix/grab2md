@@ -7,7 +7,11 @@ from html2md.cookies.session_manager import get_session
 from html2md.markdown.converter import html_to_markdown
 from html2md.markdown.link_rewriter import rewrite_archived_files
 from html2md.utils.parser import generate_safe_filename, get_urls_from_file
-from html2md.utils.path_safety import contained_output_file, contained_path, safe_path_segment
+from html2md.utils.path_safety import (
+    contained_output_file,
+    contained_path,
+    safe_path_segment,
+)
 
 # Setup logger
 logger = logging.getLogger("html2md")
@@ -36,21 +40,25 @@ def build_headers(url):
         "Sec-Fetch-User": "?1",
         "Sec-Fetch-Dest": "document",
     }
-    
+
     # Special case for ChatGPT which has stricter bot detection
     if "chatgpt.com" in domain:
-        headers.update({
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-            "Origin": f"https://{domain}",
-            "dnt": "1",
-            "authority": domain,
-            "Pragma": "no-cache",
-        })
-        
+        headers.update(
+            {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+                "Origin": f"https://{domain}",
+                "dnt": "1",
+                "authority": domain,
+                "Pragma": "no-cache",
+            }
+        )
+
     return headers
 
 
-def create_directory_structure(output_dir, url, flatten_domain=False, flatten_all=False, hierarchical_domains=False):
+def create_directory_structure(
+    output_dir, url, flatten_domain=False, flatten_all=False, hierarchical_domains=False
+):
     """
     Create a directory structure based on the URL's domain.
 
@@ -76,9 +84,9 @@ def create_directory_structure(output_dir, url, flatten_domain=False, flatten_al
     elif hierarchical_domains:
         # Split domain into parts and reverse them
         # e.g., www.jetbrains.com -> ['com', 'jetbrains', 'www']
-        domain_parts = [safe_path_segment(part) for part in domain.split('.')]
+        domain_parts = [safe_path_segment(part) for part in domain.split(".")]
         domain_parts.reverse()
-        
+
         # Build hierarchical path
         domain_dir = output_root
         for part in domain_parts:
@@ -91,7 +99,9 @@ def create_directory_structure(output_dir, url, flatten_domain=False, flatten_al
         domain_dir = output_root / domain
 
         # Create path directories if they exist
-        path_parts = [safe_path_segment(part) for part in parsed_url.path.strip("/").split("/")]
+        path_parts = [
+            safe_path_segment(part) for part in parsed_url.path.strip("/").split("/")
+        ]
         if path_parts and path_parts[0]:
             # If there are path components, create directories for them
             for i in range(len(path_parts) - 1):  # Exclude the last part (filename)
@@ -106,9 +116,16 @@ def create_directory_structure(output_dir, url, flatten_domain=False, flatten_al
 
 
 def process_markdown_links(
-    source_files, output_dir, trim=True, progress_callback=None, flatten_output=False,
-    flatten_all=False, hierarchical_domains=False, download_images=False, images_dir="images",
-    verify_ssl=True
+    source_files,
+    output_dir,
+    trim=True,
+    progress_callback=None,
+    flatten_output=False,
+    flatten_all=False,
+    hierarchical_domains=False,
+    download_images=False,
+    images_dir="images",
+    verify_ssl=True,
 ):
     """
     Process markdown files, extract URLs, and convert each URL to markdown.
@@ -186,8 +203,11 @@ def process_markdown_links(
 
             # Create directory structure for the URL
             url_dir = create_directory_structure(
-                output_dir, url, flatten_domain=flatten_output, flatten_all=flatten_all,
-                hierarchical_domains=hierarchical_domains
+                output_dir,
+                url,
+                flatten_domain=flatten_output,
+                flatten_all=flatten_all,
+                hierarchical_domains=hierarchical_domains,
             )
 
             # Generate a safe filename for the URL
@@ -202,8 +222,13 @@ def process_markdown_links(
 
                 # Convert HTML to markdown
                 markdown_content = html_to_markdown(
-                    url, session=session, headers=headers, trim=trim,
-                    download_images=download_images, output_dir=url_dir, images_dir=images_dir
+                    url,
+                    session=session,
+                    headers=headers,
+                    trim=trim,
+                    download_images=download_images,
+                    output_dir=url_dir,
+                    images_dir=images_dir,
                 )
 
                 if markdown_content:

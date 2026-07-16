@@ -28,7 +28,9 @@ PATTERNS = (
         r"(?i)(['\"]?(?:access_token|refresh_token|session_token|password|client_secret)"
         r"['\"]?\s*[:=]\s*['\"]?)([^'\"\s,;}]+)"
     ),
-    re.compile(r"(?i)([?&](?:token|access_token|key|password|secret|session)=)[^&#\s]+"),
+    re.compile(
+        r"(?i)([?&](?:token|access_token|key|password|secret|session)=)[^&#\s]+"
+    ),
 )
 
 

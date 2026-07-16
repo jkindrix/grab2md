@@ -128,7 +128,9 @@ class ImageDownloader:
         if declared_type:
             declared = cls._content_type(declared_type)
             if declared not in cls.MIME_EXTENSIONS:
-                raise UnsafeImageSource(f"Unsupported image Content-Type: {declared or 'missing'}")
+                raise UnsafeImageSource(
+                    f"Unsupported image Content-Type: {declared or 'missing'}"
+                )
             if cls.MIME_EXTENSIONS[declared] != cls.MIME_EXTENSIONS[detected]:
                 raise UnsafeImageSource(
                     f"Image Content-Type {declared} does not match detected {detected}"
@@ -142,7 +144,9 @@ class ImageDownloader:
         try:
             addresses = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
         except socket.gaierror as error:
-            raise UnsafeImageSource(f"Image host cannot be resolved: {hostname}") from error
+            raise UnsafeImageSource(
+                f"Image host cannot be resolved: {hostname}"
+            ) from error
         if not addresses:
             raise UnsafeImageSource(f"Image host has no addresses: {hostname}")
 
@@ -151,7 +155,9 @@ class ImageDownloader:
             try:
                 parsed_address = ipaddress.ip_address(raw_address)
             except ValueError as error:
-                raise UnsafeImageSource(f"Invalid resolved image address: {raw_address}") from error
+                raise UnsafeImageSource(
+                    f"Invalid resolved image address: {raw_address}"
+                ) from error
             if not parsed_address.is_global:
                 raise UnsafeImageSource(
                     f"Image host resolves to a non-public address: {raw_address}"
@@ -161,7 +167,9 @@ class ImageDownloader:
     def _validate_remote_url(cls, url: str) -> None:
         parsed = urlparse(url)
         if parsed.scheme.lower() not in cls.ALLOWED_REMOTE_SCHEMES:
-            raise UnsafeImageSource(f"Unsupported remote image scheme: {parsed.scheme or 'missing'}")
+            raise UnsafeImageSource(
+                f"Unsupported remote image scheme: {parsed.scheme or 'missing'}"
+            )
         if parsed.username is not None or parsed.password is not None:
             raise UnsafeImageSource("Image URLs containing credentials are not allowed")
         try:
@@ -242,7 +250,9 @@ class ImageDownloader:
                     if byte_count > self.max_file_bytes:
                         raise UnsafeImageSource("Image exceeds the per-file byte limit")
                     if self.total_downloaded_bytes + byte_count > self.max_total_bytes:
-                        raise UnsafeImageSource("Images exceed the aggregate byte limit")
+                        raise UnsafeImageSource(
+                            "Images exceed the aggregate byte limit"
+                        )
                     temporary.write(chunk)
                 temporary.flush()
                 os.fsync(temporary.fileno())
@@ -295,7 +305,9 @@ class ImageDownloader:
         try:
             source.relative_to(self.local_root)
         except ValueError as error:
-            raise UnsafeImageSource("Local image escapes the HTML document directory") from error
+            raise UnsafeImageSource(
+                "Local image escapes the HTML document directory"
+            ) from error
         if not source.is_file():
             raise UnsafeImageSource("Local image source is not a regular file")
 
@@ -324,9 +336,13 @@ class ImageDownloader:
             elif scheme in self.ALLOWED_REMOTE_SCHEMES:
                 destination = self._acquire_remote(url, output_dir)
             else:
-                raise UnsafeImageSource(f"Unsupported image scheme: {scheme or 'missing'}")
+                raise UnsafeImageSource(
+                    f"Unsupported image scheme: {scheme or 'missing'}"
+                )
 
-            relative_path = destination.relative_to(Path(output_dir).resolve()).as_posix()
+            relative_path = destination.relative_to(
+                Path(output_dir).resolve()
+            ).as_posix()
             self.downloaded_images[url] = relative_path
             logger.debug("Acquired image: %s -> %s", url, relative_path)
             return destination
@@ -359,7 +375,9 @@ class ImageDownloader:
                 )
             local_path = self.download_image(url, output_dir)
             if local_path:
-                results[url] = local_path.relative_to(Path(output_dir).resolve()).as_posix()
+                results[url] = local_path.relative_to(
+                    Path(output_dir).resolve()
+                ).as_posix()
         return results
 
     def rewrite_image_urls(
@@ -393,6 +411,10 @@ class ImageDownloader:
         if not image_urls:
             return markdown_content
 
-        task = progress.add_task("Downloading images...", total=len(image_urls)) if progress else None
+        task = (
+            progress.add_task("Downloading images...", total=len(image_urls))
+            if progress
+            else None
+        )
         url_mapping = self.download_images(image_urls, output_dir, progress, task)
         return self.rewrite_image_urls(markdown_content, url_mapping, base_url)

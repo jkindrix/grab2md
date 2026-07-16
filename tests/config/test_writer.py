@@ -22,7 +22,7 @@ class TestAtomicWriteJson:
 
         # Verify file exists and contains correct data
         assert config_file.exists()
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             loaded_data = json.load(f)
         assert loaded_data == test_data
 
@@ -49,7 +49,7 @@ class TestAtomicWriteJson:
         atomic_write_json(config_file, new_data)
 
         # Verify new data is present
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             loaded_data = json.load(f)
         assert loaded_data == new_data
         assert loaded_data != initial_data
@@ -62,7 +62,7 @@ class TestAtomicWriteJson:
         atomic_write_json(config_file, test_data, indent=2)
 
         # Verify indentation in raw file
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             content = f.read()
 
         # 2-space indent should produce specific spacing
@@ -72,14 +72,11 @@ class TestAtomicWriteJson:
     def test_atomic_write_preserves_unicode(self, tmp_path):
         """Test atomic write correctly handles unicode characters."""
         config_file = tmp_path / "config.json"
-        test_data = {
-            "unicode": "Hello 世界 🌍",
-            "special": "Ñoño Müller"
-        }
+        test_data = {"unicode": "Hello 世界 🌍", "special": "Ñoño Müller"}
 
         atomic_write_json(config_file, test_data)
 
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             loaded_data = json.load(f)
 
         assert loaded_data == test_data
@@ -155,7 +152,7 @@ class TestAtomicWriteJson:
 
         # Verify original file is unchanged
         assert config_file.exists()
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             loaded_data = json.load(f)
         assert loaded_data == original_data
 
@@ -176,7 +173,7 @@ class TestAtomicWriteJson:
             fsync_called.append(fd)
             return original_fsync(fd)
 
-        monkeypatch.setattr(os, 'fsync', mock_fsync)
+        monkeypatch.setattr(os, "fsync", mock_fsync)
 
         atomic_write_json(config_file, test_data)
 

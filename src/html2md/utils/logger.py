@@ -6,6 +6,7 @@ from html2md.utils.redaction import RedactingFilter
 
 try:
     from pythonjsonlogger import jsonlogger
+
     HAS_JSON_LOGGER = True
 except ImportError:
     HAS_JSON_LOGGER = False
@@ -16,7 +17,9 @@ DEFAULT_LOG_FILE = os.path.join(DEFAULT_LOG_DIR, "html2md.log")
 
 LOG_FILE = os.getenv("HTML2MD_LOG_PATH", DEFAULT_LOG_FILE)
 LOG_LEVEL = os.getenv("HTML2MD_LOG_LEVEL", "WARNING").upper()
-ENABLE_JSON_LOGGING = os.getenv("HTML2MD_JSON_LOGGING", "false").lower() == "true" and HAS_JSON_LOGGER
+ENABLE_JSON_LOGGING = (
+    os.getenv("HTML2MD_JSON_LOGGING", "false").lower() == "true" and HAS_JSON_LOGGER
+)
 
 
 def setup_logging(console_output=True, debug_file=None):
@@ -87,16 +90,18 @@ def setup_logging(console_output=True, debug_file=None):
     file_handler.setFormatter(file_formatter)
     file_handler.addFilter(redacting_filter)
     logger.addHandler(file_handler)
-    
+
     # Optional dedicated debug log file
     if debug_file:
         # Create parent directory if needed
         debug_dir = os.path.dirname(debug_file)
         if debug_dir and not os.path.exists(debug_dir):
             os.makedirs(debug_dir, exist_ok=True)
-            
+
         # Create a file handler that captures everything at DEBUG level
-        debug_handler = logging.FileHandler(debug_file, mode='w')  # 'w' to overwrite each time
+        debug_handler = logging.FileHandler(
+            debug_file, mode="w"
+        )  # 'w' to overwrite each time
         debug_handler.setLevel(logging.DEBUG)  # Force DEBUG level for this handler
         debug_formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s"

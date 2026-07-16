@@ -41,7 +41,9 @@ def test_deferred_cli_default_reads_config_each_time(monkeypatch):
 def test_all_network_commands_share_one_header_config_factory():
     source = Path(cli.__file__).read_text(encoding="utf-8")
     conversion_source = (
-        Path(cli.__file__).with_name("conversion_service.py").read_text(encoding="utf-8")
+        Path(cli.__file__)
+        .with_name("conversion_service.py")
+        .read_text(encoding="utf-8")
     )
 
     assert source.count("build_header_config(") == 1

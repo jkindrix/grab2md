@@ -19,7 +19,9 @@ def test_complete_mit_grant_matches_project_attribution():
 
 
 def test_package_metadata_and_readmes_point_to_mit_grant():
-    metadata = tomllib.loads((PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    metadata = tomllib.loads(
+        (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    )
     root_readme = (PROJECT_ROOT / "README.md").read_text(encoding="utf-8")
     extension_readme = (PROJECT_ROOT / "extension" / "README.md").read_text(
         encoding="utf-8"

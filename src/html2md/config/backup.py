@@ -52,7 +52,7 @@ class ConfigBackupManager:
 
         self.config_file = config_file
         self.max_backups = max_backups
-        self.backup_dir = config_file.parent / 'backups'
+        self.backup_dir = config_file.parent / "backups"
 
     def create_backup(self, reason: str = "manual") -> Optional[Path]:
         """
@@ -85,8 +85,8 @@ class ConfigBackupManager:
         self.backup_dir.mkdir(parents=True, exist_ok=True)
 
         # Generate timestamped filename
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        backup_name = f'config.{timestamp}.{reason}.json'
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        backup_name = f"config.{timestamp}.{reason}.json"
         backup_path = self.backup_dir / backup_name
 
         # Copy file with metadata preservation
@@ -121,10 +121,12 @@ class ConfigBackupManager:
             PosixPath('/home/user/.config/html2md/config.json.corrupt')
         """
         if not self.config_file.exists():
-            logger.warning(f"Cannot save corrupt config: {self.config_file} does not exist")
+            logger.warning(
+                f"Cannot save corrupt config: {self.config_file} does not exist"
+            )
             return None
 
-        corrupt_path = self.config_file.with_suffix('.json.corrupt')
+        corrupt_path = self.config_file.with_suffix(".json.corrupt")
 
         try:
             # Overwrite any existing .corrupt file (only keep most recent)
@@ -156,9 +158,9 @@ class ConfigBackupManager:
             return []
 
         backups = sorted(
-            self.backup_dir.glob('config.*.json'),
+            self.backup_dir.glob("config.*.json"),
             key=lambda p: p.name,  # Sort by filename (contains timestamp)
-            reverse=True
+            reverse=True,
         )
         return backups
 
@@ -189,7 +191,7 @@ class ConfigBackupManager:
 
         try:
             # Validate backup contains valid JSON
-            with open(backup_path, 'r', encoding='utf-8') as f:
+            with open(backup_path, "r", encoding="utf-8") as f:
                 json.load(f)
 
             # Copy backup to config location (with metadata)
@@ -217,7 +219,7 @@ class ConfigBackupManager:
         backups = self.list_backups()
 
         # Remove backups beyond max_backups limit
-        for old_backup in backups[self.max_backups:]:
+        for old_backup in backups[self.max_backups :]:
             try:
                 old_backup.unlink()
                 logger.debug(f"Removed old backup: {old_backup}")

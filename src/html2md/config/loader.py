@@ -30,7 +30,7 @@ DEFAULT_CONFIG = {
         "backoff_multiplier": 2.0,
         "error_threshold": 3,
         "respect_retry_after": True,
-        "polite_delay_multiplier": 2.0
+        "polite_delay_multiplier": 2.0,
     },
     "logging": {"level": "WARNING"},
     "oauth": {"CLIENT_ID": "", "CLIENT_SECRET": ""},
@@ -49,7 +49,7 @@ DEFAULT_CONFIG = {
         "respect_caching": True,
         "include_accept_language": True,
         "preferred_language": "en-US,en;q=0.9",
-        "custom_headers": {}
+        "custom_headers": {},
     },
     "cli_defaults": {
         "batch": {
@@ -58,7 +58,7 @@ DEFAULT_CONFIG = {
             "flatten_all": False,
             "trim": True,
             "visualize": False,
-            "quiet": False
+            "quiet": False,
         },
         "crawl": {
             "hierarchical": False,
@@ -76,7 +76,7 @@ DEFAULT_CONFIG = {
             "show_progress": True,
             "trim": True,
             "visualize": False,
-            "quiet": False
+            "quiet": False,
         },
         "convert": {
             "browser_cookies": False,
@@ -89,9 +89,9 @@ DEFAULT_CONFIG = {
             "download_images": False,
             "images_dir": "images",
             "fancy": False,
-            "local": False
-        }
-    }
+            "local": False,
+        },
+    },
 }
 
 
@@ -141,6 +141,7 @@ def get_backup_manager():
     global _backup_manager
     if _backup_manager is None:
         from html2md.config.backup import ConfigBackupManager
+
         _backup_manager = ConfigBackupManager(CONFIG_FILE, max_backups=5)
     return _backup_manager
 
@@ -155,10 +156,9 @@ def get_recovery_handler():
     global _recovery_handler
     if _recovery_handler is None:
         from html2md.config.recovery import ConfigRecoveryHandler
+
         _recovery_handler = ConfigRecoveryHandler(
-            CONFIG_FILE,
-            get_backup_manager(),
-            DEFAULT_CONFIG
+            CONFIG_FILE, get_backup_manager(), DEFAULT_CONFIG
         )
     return _recovery_handler
 
@@ -179,9 +179,13 @@ def validate_config(config_data, *, strict=True):
     Returns:
         Validated and merged configuration dictionary
     """
-    merged_config, errors = validate_and_merge(config_data, DEFAULT_CONFIG, strict=strict)
+    merged_config, errors = validate_and_merge(
+        config_data, DEFAULT_CONFIG, strict=strict
+    )
     for error in errors:
-        logger.warning("Invalid persisted config value: %s. Using default in memory.", error)
+        logger.warning(
+            "Invalid persisted config value: %s. Using default in memory.", error
+        )
     return merged_config
 
 
@@ -193,6 +197,7 @@ def ensure_config_exists():
         )
         # Use atomic write to ensure even initial creation is safe
         from html2md.config.writer import atomic_write_json
+
         atomic_write_json(CONFIG_FILE, DEFAULT_CONFIG, private=True)
         return True
     return False
@@ -229,7 +234,9 @@ def save_config(config_data: Dict[str, Any]) -> None:
     # Thread-safe: Entire save operation is atomic with respect to other config ops
     with _config_lock:
         # Validate before saving
-        validated_config, _ = validate_and_merge(config_data, DEFAULT_CONFIG, strict=True)
+        validated_config, _ = validate_and_merge(
+            config_data, DEFAULT_CONFIG, strict=True
+        )
 
         # Create backup before overwriting (if file exists)
         if CONFIG_FILE.exists():
@@ -239,13 +246,17 @@ def save_config(config_data: Dict[str, Any]) -> None:
         # Atomic write using our safe writer with disk-full error handling
         try:
             from html2md.config.writer import atomic_write_json
+
             atomic_write_json(CONFIG_FILE, validated_config, indent=4, private=True)
         except OSError as e:
             # Handle disk full error gracefully
             if e.errno == 28:  # errno.ENOSPC - No space left on device
-                logger.critical(f"Disk full: Cannot save configuration to {CONFIG_FILE}")
+                logger.critical(
+                    f"Disk full: Cannot save configuration to {CONFIG_FILE}"
+                )
                 # Import here to avoid circular dependency issues
                 from rich.console import Console
+
                 console = Console()
                 console.print(
                     "[bold red]Error: Disk is full. Configuration could not be saved.[/bold red]"
@@ -255,6 +266,7 @@ def save_config(config_data: Dict[str, Any]) -> None:
                 )
                 # Exit with error code in CLI context
                 import typer
+
                 raise typer.Exit(1)
             else:
                 # Re-raise other OSErrors

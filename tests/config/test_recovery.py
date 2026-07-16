@@ -28,7 +28,7 @@ class TestConfigRecoveryHandler:
             "config_file": config_file,
             "backup_manager": backup_manager,
             "default_config": default_config,
-            "tmp_path": tmp_path
+            "tmp_path": tmp_path,
         }
 
     def test_init_detects_interactive_mode(self, setup_recovery):
@@ -38,9 +38,11 @@ class TestConfigRecoveryHandler:
         # is_interactive depends on actual terminal, so just check it's a boolean
         assert isinstance(handler.is_interactive, bool)
 
-    @mock.patch('sys.stdin.isatty', return_value=False)
-    @mock.patch('sys.stdout.isatty', return_value=False)
-    def test_non_interactive_mode_detection(self, mock_stdout, mock_stdin, setup_recovery):
+    @mock.patch("sys.stdin.isatty", return_value=False)
+    @mock.patch("sys.stdout.isatty", return_value=False)
+    def test_non_interactive_mode_detection(
+        self, mock_stdout, mock_stdin, setup_recovery
+    ):
         """Test handler detects non-interactive mode correctly."""
         config_file = setup_recovery["config_file"]
         backup_manager = setup_recovery["backup_manager"]
@@ -49,8 +51,8 @@ class TestConfigRecoveryHandler:
         handler = ConfigRecoveryHandler(config_file, backup_manager, default_config)
         assert handler.is_interactive is False
 
-    @mock.patch('sys.stdin.isatty', return_value=True)
-    @mock.patch('sys.stdout.isatty', return_value=True)
+    @mock.patch("sys.stdin.isatty", return_value=True)
+    @mock.patch("sys.stdout.isatty", return_value=True)
     def test_interactive_mode_detection(self, mock_stdout, mock_stdin, setup_recovery):
         """Test handler detects interactive mode correctly."""
         config_file = setup_recovery["config_file"]
@@ -67,7 +69,7 @@ class TestConfigRecoveryHandler:
         backup_manager = setup_recovery["backup_manager"]
 
         # Create a backup
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump({"backup": "data"}, f)
         backup_manager.create_backup(reason="test")
 
@@ -85,7 +87,7 @@ class TestConfigRecoveryHandler:
         action = handler._non_interactive_recovery()
         assert action == RecoveryAction.USE_DEFAULTS
 
-    @mock.patch('html2md.config.recovery.Prompt.ask', return_value='r')
+    @mock.patch("html2md.config.recovery.Prompt.ask", return_value="r")
     def test_interactive_recovery_restore_backup(self, mock_prompt, setup_recovery):
         """Test interactive mode allows selecting backup restoration."""
         handler = setup_recovery["handler"]
@@ -93,7 +95,7 @@ class TestConfigRecoveryHandler:
         backup_manager = setup_recovery["backup_manager"]
 
         # Create a backup
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump({"backup": "data"}, f)
         backup_manager.create_backup(reason="test")
 
@@ -102,8 +104,8 @@ class TestConfigRecoveryHandler:
 
         assert action == RecoveryAction.RESTORE_BACKUP
 
-    @mock.patch('html2md.config.recovery.Confirm.ask', return_value=True)
-    @mock.patch('html2md.config.recovery.Prompt.ask', return_value='d')
+    @mock.patch("html2md.config.recovery.Confirm.ask", return_value=True)
+    @mock.patch("html2md.config.recovery.Prompt.ask", return_value="d")
     def test_interactive_recovery_use_defaults_confirmed(
         self, mock_prompt, mock_confirm, setup_recovery
     ):
@@ -114,7 +116,7 @@ class TestConfigRecoveryHandler:
         action = handler._prompt_user_recovery()
         assert action == RecoveryAction.USE_DEFAULTS
 
-    @mock.patch('html2md.config.recovery.Prompt.ask', return_value='m')
+    @mock.patch("html2md.config.recovery.Prompt.ask", return_value="m")
     def test_interactive_recovery_manual_fix(self, mock_prompt, setup_recovery):
         """Test interactive mode allows choosing manual fix."""
         handler = setup_recovery["handler"]
@@ -123,7 +125,7 @@ class TestConfigRecoveryHandler:
         action = handler._prompt_user_recovery()
         assert action == RecoveryAction.MANUAL_FIX
 
-    @mock.patch('html2md.config.recovery.Prompt.ask', return_value='q')
+    @mock.patch("html2md.config.recovery.Prompt.ask", return_value="q")
     def test_interactive_recovery_quit(self, mock_prompt, setup_recovery):
         """Test interactive mode allows choosing to quit."""
         handler = setup_recovery["handler"]
@@ -140,12 +142,12 @@ class TestConfigRecoveryHandler:
 
         # Create original config and backup
         original_data = {"original": True, "version": 1}
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump(original_data, f)
         backup_manager.create_backup(reason="test")
 
         # Corrupt the config
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             f.write('{"invalid": json}')
 
         # Execute restoration
@@ -173,7 +175,7 @@ class TestConfigRecoveryHandler:
         default_config = setup_recovery["default_config"]
 
         # Create corrupt config
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             f.write('{"corrupt": json}')
 
         handler.is_interactive = False
@@ -183,7 +185,7 @@ class TestConfigRecoveryHandler:
         assert result == default_config
 
         # Config file should still contain corrupt data (NOT overwritten)
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             content = f.read()
         assert '{"corrupt": json}' in content
 
@@ -194,7 +196,7 @@ class TestConfigRecoveryHandler:
         default_config = setup_recovery["default_config"]
 
         # Create corrupt config
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             f.write('{"corrupt": json}')
 
         handler.is_interactive = True
@@ -204,7 +206,7 @@ class TestConfigRecoveryHandler:
         assert result == default_config
 
         # Config file should now contain defaults (overwritten)
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             saved_data = json.load(f)
         assert saved_data == default_config
 
@@ -234,7 +236,7 @@ class TestConfigRecoveryHandler:
         config_file = setup_recovery["config_file"]
 
         # Create corrupt config
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             f.write('{"corrupt": json}')
 
         # Force non-interactive mode to avoid prompts
@@ -244,7 +246,7 @@ class TestConfigRecoveryHandler:
         handler.handle_corrupt_config(error)
 
         # Check corrupt file was saved
-        corrupt_path = config_file.with_suffix('.json.corrupt')
+        corrupt_path = config_file.with_suffix(".json.corrupt")
         assert corrupt_path.exists()
 
     def test_handle_corrupt_config_returns_valid_config(self, setup_recovery):
@@ -254,7 +256,7 @@ class TestConfigRecoveryHandler:
         default_config = setup_recovery["default_config"]
 
         # Create corrupt config
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             f.write('{"corrupt": json}')
 
         handler.is_interactive = False
@@ -274,12 +276,12 @@ class TestConfigRecoveryHandler:
 
         # Create original config and backup
         original_data = {"original": True, "restored": True}
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump(original_data, f)
         backup_manager.create_backup(reason="test")
 
         # Corrupt the config
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             f.write('{"corrupt": json}')
 
         handler.is_interactive = False
@@ -290,8 +292,8 @@ class TestConfigRecoveryHandler:
         # Should restore from backup
         assert result == original_data
 
-    @mock.patch('html2md.config.recovery.Confirm.ask', side_effect=[False, True])
-    @mock.patch('html2md.config.recovery.Prompt.ask', side_effect=['d', 'd'])
+    @mock.patch("html2md.config.recovery.Confirm.ask", side_effect=[False, True])
+    @mock.patch("html2md.config.recovery.Prompt.ask", side_effect=["d", "d"])
     def test_interactive_recovery_retry_on_cancelled_confirmation(
         self, mock_prompt, mock_confirm, setup_recovery
     ):
@@ -313,7 +315,7 @@ class TestConfigRecoveryHandler:
         backup_manager = setup_recovery["backup_manager"]
 
         # Create corrupt config
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             f.write('{"corrupt": json}')
 
         handler.is_interactive = True

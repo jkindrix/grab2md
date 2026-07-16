@@ -82,16 +82,23 @@ def test_remote_policy_blocks_non_public_and_metadata_destinations(
         del args, kwargs
         return [(family, 1, 6, "", (resolved_address, 443))]
 
-    session = FakeSession(FakeResponse(headers={"Content-Type": "image/png"}, chunks=[PNG]))
+    session = FakeSession(
+        FakeResponse(headers={"Content-Type": "image/png"}, chunks=[PNG])
+    )
     downloader = ImageDownloader(session=session)
     with patch("html2md.network.image_downloader.socket.getaddrinfo", private_dns):
-        assert downloader.download_image("https://metadata.test/image.png", tmp_path) is None
+        assert (
+            downloader.download_image("https://metadata.test/image.png", tmp_path)
+            is None
+        )
 
     assert session.calls == []
 
 
 def test_redirect_target_is_resolved_and_revalidated(tmp_path):
-    redirect = FakeResponse(302, {"Location": "http://169.254.169.254/latest/meta-data"})
+    redirect = FakeResponse(
+        302, {"Location": "http://169.254.169.254/latest/meta-data"}
+    )
     session = FakeSession(redirect)
     downloader = ImageDownloader(session=session)
 
@@ -158,12 +165,18 @@ def test_content_length_and_streaming_enforce_per_file_limit(tmp_path):
     streamed = FakeResponse(200, {"Content-Type": "image/png"}, [PNG[:8], b"x" * 20])
 
     with patch("html2md.network.image_downloader.socket.getaddrinfo", public_dns):
-        assert ImageDownloader(
-            session=FakeSession(stated), max_file_bytes=32
-        ).download_image("https://example.com/stated", tmp_path) is None
-        assert ImageDownloader(
-            session=FakeSession(streamed), max_file_bytes=16
-        ).download_image("https://example.com/streamed", tmp_path) is None
+        assert (
+            ImageDownloader(
+                session=FakeSession(stated), max_file_bytes=32
+            ).download_image("https://example.com/stated", tmp_path)
+            is None
+        )
+        assert (
+            ImageDownloader(
+                session=FakeSession(streamed), max_file_bytes=16
+            ).download_image("https://example.com/streamed", tmp_path)
+            is None
+        )
 
     assert not list(tmp_path.glob(".html2md-image-*"))
 
@@ -191,7 +204,9 @@ def test_output_images_directory_cannot_escape_root(tmp_path):
     downloader = ImageDownloader(session=FakeSession(response), images_dir="../escaped")
 
     with patch("html2md.network.image_downloader.socket.getaddrinfo", public_dns):
-        assert downloader.download_image("https://example.com/image.png", tmp_path) is None
+        assert (
+            downloader.download_image("https://example.com/image.png", tmp_path) is None
+        )
 
     assert not (tmp_path.parent / "escaped").exists()
 
@@ -233,7 +248,9 @@ def test_file_urls_are_disabled_without_an_explicit_local_root(tmp_path):
     source = tmp_path / "image.png"
     source.write_bytes(PNG)
 
-    assert ImageDownloader().download_image(source.as_uri(), tmp_path / "output") is None
+    assert (
+        ImageDownloader().download_image(source.as_uri(), tmp_path / "output") is None
+    )
 
 
 def test_exact_rewrite_does_not_replace_an_unrelated_same_basename():

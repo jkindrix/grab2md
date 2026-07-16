@@ -8,11 +8,13 @@ from unittest import mock
 
 import pytest
 
+
 # Import after setting environment to avoid module-level CONFIG_FILE creation
 def setup_test_config_path(tmp_path):
     """Setup test config path before importing loader."""
     import os
-    os.environ['HTML2MD_CONFIG_PATH'] = str(tmp_path / 'config.json')
+
+    os.environ["HTML2MD_CONFIG_PATH"] = str(tmp_path / "config.json")
 
 
 class TestLoaderIntegration:
@@ -22,22 +24,23 @@ class TestLoaderIntegration:
     def setup_env(self, tmp_path, monkeypatch):
         """Setup test environment with isolated config path."""
         test_config = tmp_path / "config.json"
-        monkeypatch.setenv('HTML2MD_CONFIG_PATH', str(test_config))
+        monkeypatch.setenv("HTML2MD_CONFIG_PATH", str(test_config))
 
         # Force reload of loader module to pick up new env var
         import sys
-        if 'html2md.config.loader' in sys.modules:
-            del sys.modules['html2md.config.loader']
-        if 'html2md.config.backup' in sys.modules:
-            del sys.modules['html2md.config.backup']
-        if 'html2md.config.recovery' in sys.modules:
-            del sys.modules['html2md.config.recovery']
+
+        if "html2md.config.loader" in sys.modules:
+            del sys.modules["html2md.config.loader"]
+        if "html2md.config.backup" in sys.modules:
+            del sys.modules["html2md.config.backup"]
+        if "html2md.config.recovery" in sys.modules:
+            del sys.modules["html2md.config.recovery"]
 
         yield
 
         # Cleanup
         for module in list(sys.modules.keys()):
-            if module.startswith('html2md.config'):
+            if module.startswith("html2md.config"):
                 del sys.modules[module]
 
     def test_save_config_creates_file(self, tmp_path):
@@ -48,7 +51,7 @@ class TestLoaderIntegration:
         save_config(test_data)
 
         assert CONFIG_FILE.exists()
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             saved_data = json.load(f)
         assert saved_data["test"] == "data"
 
@@ -58,7 +61,7 @@ class TestLoaderIntegration:
 
         original_data = {
             "domains": {"example.com": {"footer_marker": "test"}},
-            "logging": {"level": "DEBUG"}
+            "logging": {"level": "DEBUG"},
         }
 
         save_config(original_data)
@@ -78,8 +81,8 @@ class TestLoaderIntegration:
         assert "domains" in config
         assert "logging" in config
 
-    @mock.patch('sys.stdin.isatty', return_value=False)
-    @mock.patch('sys.stdout.isatty', return_value=False)
+    @mock.patch("sys.stdin.isatty", return_value=False)
+    @mock.patch("sys.stdout.isatty", return_value=False)
     def test_load_corrupt_config_non_interactive_uses_defaults(
         self, mock_stdout, mock_stdin, tmp_path
     ):
@@ -87,7 +90,7 @@ class TestLoaderIntegration:
         from html2md.config.loader import load_config, CONFIG_FILE, DEFAULT_CONFIG
 
         # Create corrupt config
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             f.write('{"invalid": json}')
 
         config = load_config()
@@ -96,18 +99,21 @@ class TestLoaderIntegration:
         assert config == DEFAULT_CONFIG
 
         # Corrupt file should still exist (not overwritten in non-interactive)
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             content = f.read()
         assert '{"invalid": json}' in content
 
-    @mock.patch('sys.stdin.isatty', return_value=False)
-    @mock.patch('sys.stdout.isatty', return_value=False)
+    @mock.patch("sys.stdin.isatty", return_value=False)
+    @mock.patch("sys.stdout.isatty", return_value=False)
     def test_load_corrupt_config_with_backup_restores(
         self, mock_stdout, mock_stdin, tmp_path
     ):
         """Test loading corrupt config with backup available restores from backup."""
         from html2md.config.loader import (
-            load_config, save_config, get_backup_manager, CONFIG_FILE
+            load_config,
+            save_config,
+            get_backup_manager,
+            CONFIG_FILE,
         )
 
         # Save valid config
@@ -119,7 +125,7 @@ class TestLoaderIntegration:
         backup_mgr.create_backup(reason="test")
 
         # Corrupt the config
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             f.write('{"corrupt": json}')
 
         # Load should restore from backup
@@ -128,8 +134,8 @@ class TestLoaderIntegration:
         assert config["original"] is True
         assert config["version"] == 1
 
-    @mock.patch('sys.stdin.isatty', return_value=False)
-    @mock.patch('sys.stdout.isatty', return_value=False)
+    @mock.patch("sys.stdin.isatty", return_value=False)
+    @mock.patch("sys.stdout.isatty", return_value=False)
     def test_load_corrupt_config_saves_corrupt_file(
         self, mock_stdout, mock_stdin, tmp_path
     ):
@@ -137,15 +143,15 @@ class TestLoaderIntegration:
         from html2md.config.loader import load_config, CONFIG_FILE
 
         # Create corrupt config
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             f.write('{"invalid": json}')
 
         load_config()
 
         # Check .corrupt file was created
-        corrupt_file = CONFIG_FILE.with_suffix('.json.corrupt')
+        corrupt_file = CONFIG_FILE.with_suffix(".json.corrupt")
         assert corrupt_file.exists()
-        with open(corrupt_file, 'r', encoding='utf-8') as f:
+        with open(corrupt_file, "r", encoding="utf-8") as f:
             content = f.read()
         assert '{"invalid": json}' in content
 
@@ -302,10 +308,10 @@ class TestLoaderIntegration:
 
         assert handler1 is handler2
 
-    @mock.patch('sys.stdin.isatty', return_value=True)
-    @mock.patch('sys.stdout.isatty', return_value=True)
-    @mock.patch('html2md.config.recovery.Confirm.ask', return_value=True)
-    @mock.patch('html2md.config.recovery.Prompt.ask', return_value='d')
+    @mock.patch("sys.stdin.isatty", return_value=True)
+    @mock.patch("sys.stdout.isatty", return_value=True)
+    @mock.patch("html2md.config.recovery.Confirm.ask", return_value=True)
+    @mock.patch("html2md.config.recovery.Prompt.ask", return_value="d")
     def test_load_corrupt_interactive_confirms_before_reset(
         self, mock_prompt, mock_confirm, mock_stdout, mock_stdin, tmp_path
     ):
@@ -313,7 +319,7 @@ class TestLoaderIntegration:
         from html2md.config.loader import load_config, CONFIG_FILE, DEFAULT_CONFIG
 
         # Create corrupt config
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             f.write('{"invalid": json}')
 
         load_config()
@@ -322,7 +328,7 @@ class TestLoaderIntegration:
         assert mock_confirm.called
 
         # Config should be reset to defaults
-        with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+        with open(CONFIG_FILE, "r", encoding="utf-8") as f:
             saved_config = json.load(f)
 
         assert saved_config == DEFAULT_CONFIG

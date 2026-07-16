@@ -14,7 +14,12 @@ from html2md.markdown.batch_processor import create_directory_structure
 from html2md.markdown.crawler import crawl_website
 from html2md.network.chatgpt_handler import get_conversation_html
 from html2md.network.request_handler import FetchResult
-from html2md.utils.redaction import REDACTED, get_redacting_logger, redact_mapping, redact_text
+from html2md.utils.redaction import (
+    REDACTED,
+    get_redacting_logger,
+    redact_mapping,
+    redact_text,
+)
 from html2md.utils.state_manager import StateManager
 
 
@@ -53,7 +58,9 @@ def test_crawler_traversal_url_cannot_write_outside_root(tmp_path):
     manager = StateManager(state_dir=tmp_path / "states")
     with (
         patch("html2md.markdown.crawler.fetch_html", return_value=response),
-        patch("html2md.markdown.crawler.html_content_to_markdown", return_value="# Safe"),
+        patch(
+            "html2md.markdown.crawler.html_content_to_markdown", return_value="# Safe"
+        ),
     ):
         result = crawl_website(
             url,
@@ -79,7 +86,11 @@ def test_redaction_covers_headers_tokens_passwords_and_url_queries():
 
     redacted = redact_text(text)
     headers = redact_mapping(
-        {"Authorization": f"Bearer {secret}", "Set-Cookie": secret, "Accept": "text/html"}
+        {
+            "Authorization": f"Bearer {secret}",
+            "Set-Cookie": secret,
+            "Accept": "text/html",
+        }
     )
 
     assert secret not in redacted
@@ -93,7 +104,13 @@ def test_redacting_logger_sanitizes_every_log_level(caplog):
     logger = get_redacting_logger("html2md.security-test")
     secret = "level-secret"
     with caplog.at_level(logging.DEBUG, logger=logger.name):
-        for level in (logging.DEBUG, logging.INFO, logging.WARNING, logging.ERROR, logging.CRITICAL):
+        for level in (
+            logging.DEBUG,
+            logging.INFO,
+            logging.WARNING,
+            logging.ERROR,
+            logging.CRITICAL,
+        ):
             logger.log(level, "Authorization: Bearer %s", secret)
 
     rendered = "\n".join(record.getMessage() for record in caplog.records)
@@ -103,7 +120,9 @@ def test_redacting_logger_sanitizes_every_log_level(caplog):
 
 def test_chatgpt_diagnostics_never_log_cookies_headers_or_response_body(caplog):
     secret = "conversation-secret"
-    response = Mock(status_code=401, text=f"body contains {secret}", headers={"Set-Cookie": secret})
+    response = Mock(
+        status_code=401, text=f"body contains {secret}", headers={"Set-Cookie": secret}
+    )
     response.json.side_effect = ValueError("invalid")
     session = Mock()
     session.cookies.get_dict.return_value = {"session": secret}
@@ -156,7 +175,10 @@ def test_cookie_copy_rejects_preexisting_symlink_destination(tmp_path):
     fake_directory.name = str(temp_dir)
     fake_directory.cleanup.side_effect = lambda: shutil.rmtree(temp_dir)
     with (
-        patch("html2md.cookies.session_manager.tempfile.TemporaryDirectory", return_value=fake_directory),
+        patch(
+            "html2md.cookies.session_manager.tempfile.TemporaryDirectory",
+            return_value=fake_directory,
+        ),
         pytest.raises(FileExistsError),
     ):
         session_manager._copy_cookie_database(source)
@@ -165,8 +187,12 @@ def test_cookie_copy_rejects_preexisting_symlink_destination(tmp_path):
     fake_directory.cleanup.assert_called_once()
 
 
-@pytest.mark.parametrize("failure", [RuntimeError("broken sqlite"), KeyboardInterrupt()])
-def test_chrome_cookie_temp_storage_cleans_up_on_failure_and_interruption(tmp_path, failure):
+@pytest.mark.parametrize(
+    "failure", [RuntimeError("broken sqlite"), KeyboardInterrupt()]
+)
+def test_chrome_cookie_temp_storage_cleans_up_on_failure_and_interruption(
+    tmp_path, failure
+):
     source = tmp_path / "cookies.sqlite"
     source.write_bytes(b"fixture")
     captured = {}
@@ -178,9 +204,18 @@ def test_chrome_cookie_temp_storage_cleans_up_on_failure_and_interruption(tmp_pa
         return directory, copied
 
     with (
-        patch("html2md.cookies.session_manager.get_browser_cookie_path", return_value=source),
-        patch("html2md.cookies.session_manager.get_chrome_encryption_key", return_value=b"key"),
-        patch("html2md.cookies.session_manager._copy_cookie_database", side_effect=capture_copy),
+        patch(
+            "html2md.cookies.session_manager.get_browser_cookie_path",
+            return_value=source,
+        ),
+        patch(
+            "html2md.cookies.session_manager.get_chrome_encryption_key",
+            return_value=b"key",
+        ),
+        patch(
+            "html2md.cookies.session_manager._copy_cookie_database",
+            side_effect=capture_copy,
+        ),
         patch("html2md.cookies.session_manager.sqlite3.connect", side_effect=failure),
     ):
         if isinstance(failure, KeyboardInterrupt):
@@ -197,7 +232,9 @@ def test_private_config_tokens_and_state_use_owner_only_modes(tmp_path, monkeypa
     config_file = tmp_path / "config" / "config.json"
     atomic_write_json(config_file, {"oauth": {"CLIENT_SECRET": "secret"}}, private=True)
     os.chmod(config_file, 0o644)
-    atomic_write_json(config_file, {"oauth": {"CLIENT_SECRET": "updated"}}, private=True)
+    atomic_write_json(
+        config_file, {"oauth": {"CLIENT_SECRET": "updated"}}, private=True
+    )
     assert config_file.stat().st_mode & 0o777 == 0o600
     assert config_file.parent.stat().st_mode & 0o777 == 0o700
 
@@ -208,7 +245,9 @@ def test_private_config_tokens_and_state_use_owner_only_modes(tmp_path, monkeypa
     assert token_file.parent.stat().st_mode & 0o777 == 0o700
 
     manager = StateManager(state_dir=tmp_path / "states")
-    state = manager.create_new_state("https://example.com/?token=secret", tmp_path / "out", {})
+    state = manager.create_new_state(
+        "https://example.com/?token=secret", tmp_path / "out", {}
+    )
     state_file = manager.state_dir / f"{state.crawl_id}.json"
     assert state_file.stat().st_mode & 0o777 == 0o600
     assert state_file.parent.stat().st_mode & 0o777 == 0o700

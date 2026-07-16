@@ -87,10 +87,15 @@ def test_signal_saves_one_valid_resumable_checkpoint_and_terminates(tmp_path, si
     assert state_data["progress"]["urls_queued"] == [[queued_url, 0]]
 
     manager = StateManager(state_dir=state_dir)
-    fetched = FetchResult(queued_url, queued_url, status_code=200, body="<h1>Resumed</h1>")
+    fetched = FetchResult(
+        queued_url, queued_url, status_code=200, body="<h1>Resumed</h1>"
+    )
     with (
         patch("html2md.markdown.crawler.fetch_html", return_value=fetched),
-        patch("html2md.markdown.crawler.html_content_to_markdown", return_value="# Resumed"),
+        patch(
+            "html2md.markdown.crawler.html_content_to_markdown",
+            return_value="# Resumed",
+        ),
     ):
         result = crawl_website(
             queued_url,
@@ -173,6 +178,7 @@ def test_cli_ctrl_c_checkpoints_in_flight_url(tmp_path):
     assert len(state_files) == 1
     state_data = json.loads(state_files[0].read_text(encoding="utf-8"))
     assert state_data["progress"]["urls_queued"] == [[url, 0]]
-    assert len(
-        [item for item in state_data["checkpoints"] if item["trigger"] == "signal"]
-    ) == 1
+    assert (
+        len([item for item in state_data["checkpoints"] if item["trigger"] == "signal"])
+        == 1
+    )

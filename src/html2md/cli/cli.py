@@ -68,6 +68,7 @@ def get_cli_default(command: str, option: str, default_value=None):
 
     return resolve_default
 
+
 # Add config app as a subcommand
 app.add_typer(config_app, name="config")
 
@@ -83,10 +84,11 @@ class LogLevel(str, Enum):
     WARNING = "WARNING"
     ERROR = "ERROR"
     CRITICAL = "CRITICAL"
-    
+
+
 class Browser(str, Enum):
     """Supported browsers for cookie extraction."""
-    
+
     CHROME = "chrome"
     FIREFOX = "firefox"
     EDGE = "edge"
@@ -96,13 +98,14 @@ class Browser(str, Enum):
 def set_log_level(level: LogLevel, debug_log: Optional[Path] = None) -> None:
     """Set the logging level and optionally enable debug logging to a file."""
     global logger
-    
+
     # If debug log is specified, reconfigure the logger
     if debug_log:
         from html2md.utils.logger import setup_logging
+
         logger = setup_logging(console_output=True, debug_file=str(debug_log))
         logger.info(f"Debug logs will be written to: {debug_log}")
-    
+
     # Set the log level
     logger.setLevel(getattr(logging, level))
 
@@ -215,9 +218,15 @@ def process_single_with_progress(
 
     progress.stop()
     if output:
-        action = "Downloaded and converted" if result.is_remote else "Converted local file"
-        console.print(f"[bold green]✓[/bold green] {action} [bold]{result.source_label}[/bold]")
-        console.print(f"[bold green]✓[/bold green] Saved output to [bold]{output}[/bold]")
+        action = (
+            "Downloaded and converted" if result.is_remote else "Converted local file"
+        )
+        console.print(
+            f"[bold green]✓[/bold green] {action} [bold]{result.source_label}[/bold]"
+        )
+        console.print(
+            f"[bold green]✓[/bold green] Saved output to [bold]{output}[/bold]"
+        )
     else:
         label = "URL" if result.is_remote else "File"
         console.print(Panel.fit(f"# {label}: {result.source_label}", title="Source"))
@@ -293,19 +302,29 @@ def convert_command(
         None, "--output", "-o", help="Output file to save converted markdown."
     ),
     no_cookies: bool = typer.Option(
-        get_cli_default("convert", "no_cookies", False), "--no-cookies/--cookies", help="Disable loading cookies from the browser."
+        get_cli_default("convert", "no_cookies", False),
+        "--no-cookies/--cookies",
+        help="Disable loading cookies from the browser.",
     ),
     browser_cookies: bool = typer.Option(
-        get_cli_default("convert", "browser_cookies", False), "--browser-cookies/--no-browser-cookies", help="Use cookies from the local browser to authenticate with websites."
+        get_cli_default("convert", "browser_cookies", False),
+        "--browser-cookies/--no-browser-cookies",
+        help="Use cookies from the local browser to authenticate with websites.",
     ),
     browser: Optional[Browser] = typer.Option(
-        get_cli_default("convert", "browser", None), "--browser", help="Specify which browser to extract cookies from (default: chrome)."
+        get_cli_default("convert", "browser", None),
+        "--browser",
+        help="Specify which browser to extract cookies from (default: chrome).",
     ),
     cookie_path: Optional[Path] = typer.Option(
-        None, "--cookie-path", help="Path to browser cookies database file (helps with Windows/WSL)."
+        None,
+        "--cookie-path",
+        help="Path to browser cookies database file (helps with Windows/WSL).",
     ),
     cookie_json: Optional[Path] = typer.Option(
-        None, "--cookie-json", help="Path to JSON file with exported cookies (from browser developer tools)."
+        None,
+        "--cookie-json",
+        help="Path to JSON file with exported cookies (from browser developer tools).",
     ),
     local: bool = typer.Option(
         get_cli_default("convert", "local", False),
@@ -351,7 +370,9 @@ def convert_command(
         None, "--debug-log", help="Write debug logs to specified file."
     ),
     fancy: bool = typer.Option(
-        get_cli_default("convert", "fancy", False), "--fancy/--plain", help="Enable fancy output with progress bars and decorations."
+        get_cli_default("convert", "fancy", False),
+        "--fancy/--plain",
+        help="Enable fancy output with progress bars and decorations.",
     ),
 ):
     """Convert HTML content from URLs or local files to Markdown."""
@@ -360,12 +381,12 @@ def convert_command(
     # Handle config updates for cookie path
     if cookie_path:
         config = load_config()
-        config.setdefault('browser', {}).setdefault('custom_path', {})
+        config.setdefault("browser", {}).setdefault("custom_path", {})
         if browser:
-            config['browser']['custom_path'][browser] = str(cookie_path)
+            config["browser"]["custom_path"][browser] = str(cookie_path)
         else:
-            pref_browser = config.get('browser', {}).get('preferred', 'chrome')
-            config['browser']['custom_path'][pref_browser] = str(cookie_path)
+            pref_browser = config.get("browser", {}).get("preferred", "chrome")
+            config["browser"]["custom_path"][pref_browser] = str(cookie_path)
         save_config(config)
 
     if fancy:
@@ -395,13 +416,13 @@ def convert_command(
             successes = 0
             for source in sources:
                 task_id = tasks[source]
-                    
+
                 if process_single_with_progress(
-                    source=source, 
-                    trim=trim, 
-                    output=output, 
-                    no_cookies=no_cookies, 
-                    browser_cookies=browser_cookies, 
+                    source=source,
+                    trim=trim,
+                    output=output,
+                    no_cookies=no_cookies,
+                    browser_cookies=browser_cookies,
                     browser=browser,
                     cookie_path=cookie_path,
                     cookie_json=cookie_json,
@@ -413,7 +434,7 @@ def convert_command(
                     simulate_browser=simulate_browser,
                     insecure=insecure,
                     progress=progress,
-                    task_id=task_id
+                    task_id=task_id,
                 ):
                     successes += 1
                 progress.update(task_id, completed=1)
@@ -518,10 +539,14 @@ def batch_command(
 
     # Validate flatten options
     if flatten_output and flatten_all:
-        console.print("[bold red]Error:[/bold red] Cannot use both --flatten and --flatten-all options together.")
+        console.print(
+            "[bold red]Error:[/bold red] Cannot use both --flatten and --flatten-all options together."
+        )
         raise typer.Exit(1)
     if (flatten_output or flatten_all) and hierarchical:
-        console.print("[bold red]Error:[/bold red] Cannot use --hierarchical with --flatten or --flatten-all options.")
+        console.print(
+            "[bold red]Error:[/bold red] Cannot use --hierarchical with --flatten or --flatten-all options."
+        )
         raise typer.Exit(1)
 
     # Start time for processing report
@@ -808,15 +833,19 @@ def crawl_command(
         help="How to follow links. Options: 'domain-only', 'host-only', 'subdomain', or a regex pattern.",
     ),
     max_depth: int = typer.Option(
-        get_cli_default("crawl", "max_depth", 3), "--max-depth", help="Maximum link depth to follow."
+        get_cli_default("crawl", "max_depth", 3),
+        "--max-depth",
+        help="Maximum link depth to follow.",
     ),
     max_pages: int = typer.Option(
-        get_cli_default("crawl", "max_pages", 100), "--max-pages", help="Maximum number of pages to crawl."
+        get_cli_default("crawl", "max_pages", 100),
+        "--max-pages",
+        help="Maximum number of pages to crawl.",
     ),
     delay: float = typer.Option(
-        get_cli_default("crawl", "delay", 0.0), 
-        "--delay", 
-        help="Delay between requests in seconds (e.g., 1.5). A random jitter of ±30% will be added."
+        get_cli_default("crawl", "delay", 0.0),
+        "--delay",
+        help="Delay between requests in seconds (e.g., 1.5). A random jitter of ±30% will be added.",
     ),
     respect_robots: bool = typer.Option(
         get_cli_default("crawl", "respect_robots", True),
@@ -946,7 +975,9 @@ def crawl_command(
         console.print(f"[bold]Maximum pages:[/bold] {max_pages}")
         if delay > 0:
             console.print(f"[bold]Request delay:[/bold] {delay}s (±30% jitter)")
-        console.print(f"[bold]Respect robots.txt:[/bold] {'Yes' if respect_robots else 'No'}")
+        console.print(
+            f"[bold]Respect robots.txt:[/bold] {'Yes' if respect_robots else 'No'}"
+        )
         if rate_limit:
             console.print(f"[bold]Rate limit:[/bold] {rate_limit} requests/minute")
 
@@ -1003,11 +1034,15 @@ def crawl_command(
                     user_agent_contact=user_agent_contact,
                     simulate_browser=simulate_browser,
                 )
-                
+
                 # Build concurrent configuration from CLI options and config
-                from html2md.network.concurrent_limiter import ConcurrentConfig, BackoffStrategy
+                from html2md.network.concurrent_limiter import (
+                    ConcurrentConfig,
+                    BackoffStrategy,
+                )
+
                 concurrent_settings = config.get("concurrent", {})
-                
+
                 # Parse backoff strategy
                 backoff_str = concurrent_settings.get("backoff_strategy", "exponential")
                 backoff_strategy = BackoffStrategy.EXPONENTIAL
@@ -1017,17 +1052,25 @@ def crawl_command(
                     backoff_strategy = BackoffStrategy.LINEAR
                 elif backoff_str == "fibonacci":
                     backoff_strategy = BackoffStrategy.FIBONACCI
-                
+
                 concurrent_config = ConcurrentConfig(
                     backoff_strategy=backoff_strategy,
                     initial_backoff=concurrent_settings.get("initial_backoff", 1.0),
                     max_backoff=concurrent_settings.get("max_backoff", 300.0),
-                    backoff_multiplier=concurrent_settings.get("backoff_multiplier", 2.0),
-                    error_threshold_for_backoff=concurrent_settings.get("error_threshold", 3),
-                    retry_after_respect=concurrent_settings.get("respect_retry_after", True),
-                    polite_delay_multiplier=concurrent_settings.get("polite_delay_multiplier", 2.0)
+                    backoff_multiplier=concurrent_settings.get(
+                        "backoff_multiplier", 2.0
+                    ),
+                    error_threshold_for_backoff=concurrent_settings.get(
+                        "error_threshold", 3
+                    ),
+                    retry_after_respect=concurrent_settings.get(
+                        "respect_retry_after", True
+                    ),
+                    polite_delay_multiplier=concurrent_settings.get(
+                        "polite_delay_multiplier", 2.0
+                    ),
                 )
-                
+
                 # Signal handling is explicit and scoped to active crawl work.
                 state_manager = StateManager()
                 with state_manager.signal_handling():
@@ -1205,9 +1248,7 @@ def main(
     debug_log: Optional[Path] = typer.Option(
         None, "--debug-log", help="Write debug logs to specified file."
     ),
-    banner: bool = typer.Option(
-        False, "--banner", help="Display the welcome banner."
-    ),
+    banner: bool = typer.Option(False, "--banner", help="Display the welcome banner."),
 ):
     """Main entry point for the application."""
     set_log_level(log_level, debug_log)

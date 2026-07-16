@@ -99,7 +99,9 @@ def test_batch_mapping_and_rewrites_exclude_failed_outputs(tmp_path):
             side_effect=[f"[Failed]({failed})", None],
         ),
     ):
-        count, mapping = process_markdown_links([source], tmp_path / "output", trim=False)
+        count, mapping = process_markdown_links(
+            [source], tmp_path / "output", trim=False
+        )
 
     assert count == 1
     assert set(mapping) == {good}

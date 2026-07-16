@@ -32,18 +32,20 @@ class RobotsFetchResult:
 class RobotsChecker:
     """
     A robots.txt parser that respects website crawling policies.
-    
+
     Features:
     - Caches robots.txt content to avoid repeated fetches
     - Supports crawl-delay directives
     - Handles various edge cases (missing robots.txt, malformed content)
     - Serializes cache/session access for concurrent callers
     """
-    
-    def __init__(self, user_agent: str = "html2md", session: Optional[requests.Session] = None):
+
+    def __init__(
+        self, user_agent: str = "html2md", session: Optional[requests.Session] = None
+    ):
         """
         Initialize the robots checker.
-        
+
         Args:
             user_agent: The user agent string to use when checking rules
             session: Optional requests session for connection pooling
@@ -54,50 +56,52 @@ class RobotsChecker:
         self._cache: Dict[str, Tuple[RobotFileParser, Optional[float], float]] = {}
         self._cache_duration = 3600  # Cache robots.txt for 1 hour
         self._lock = threading.RLock()
-        
+
     def _get_robots_url(self, url: str) -> str:
         """Get the robots.txt URL for a given URL."""
         parsed = urlparse(url)
         return f"{parsed.scheme}://{parsed.netloc}/robots.txt"
-    
+
     def _fetch_robots_txt(self, robots_url: str) -> RobotsFetchResult:
         """
         Fetch robots.txt content from a URL.
-        
+
         Returns:
             Content and HTTP status, or no status for a network failure.
         """
         try:
             response = self.session.get(
-                robots_url, 
-                timeout=10,
-                headers={'User-Agent': self.user_agent}
+                robots_url, timeout=10, headers={"User-Agent": self.user_agent}
             )
             if 200 <= response.status_code < 300:
                 return RobotsFetchResult(response.text, response.status_code)
             if 400 <= response.status_code < 500:
-                logger.debug(f"robots.txt unavailable at {robots_url}: HTTP {response.status_code}")
+                logger.debug(
+                    f"robots.txt unavailable at {robots_url}: HTTP {response.status_code}"
+                )
                 return RobotsFetchResult("", response.status_code)
             else:
-                logger.warning(f"Failed to fetch robots.txt from {robots_url}: HTTP {response.status_code}")
+                logger.warning(
+                    f"Failed to fetch robots.txt from {robots_url}: HTTP {response.status_code}"
+                )
                 return RobotsFetchResult(None, response.status_code)
         except requests.RequestException as e:
             logger.warning(f"Error fetching robots.txt from {robots_url}: {e}")
             return RobotsFetchResult(None, None)
-    
+
     def _parse_crawl_delay(self, content: str) -> Optional[float]:
         """
         Extract crawl-delay directive from robots.txt content.
-        
+
         Args:
             content: The robots.txt content
-            
+
         Returns:
             Crawl delay in seconds, or None if not specified
         """
         if not content:
             return None
-            
+
         # Group consecutive User-agent fields and apply the product-token group
         # in preference to the wildcard group.
         groups = []
@@ -141,11 +145,11 @@ class RobotsChecker:
 
         specific_delay = delay_for(self._product_token)
         return specific_delay if specific_delay is not None else delay_for("*")
-    
+
     def _get_cached_or_fetch(self, url: str) -> Tuple[RobotFileParser, Optional[float]]:
         """
         Get robots.txt parser from cache or fetch if needed.
-        
+
         Returns:
             Tuple of (RobotFileParser, crawl_delay)
         """
@@ -162,11 +166,14 @@ class RobotsChecker:
             parser = RobotFileParser()
             parser.set_url(robots_url)
 
-            if fetch_result.status_code is not None and 400 <= fetch_result.status_code < 500:
+            if (
+                fetch_result.status_code is not None
+                and 400 <= fetch_result.status_code < 500
+            ):
                 # RFC 9309: an unavailable robots.txt permits access.
                 parser.allow_all = True
             elif content is not None:
-                parser.parse(content.split('\n'))
+                parser.parse(content.split("\n"))
             else:
                 # RFC 9309: unreachable or 5xx robots.txt is temporarily unavailable;
                 # crawlers must assume complete disallow.
@@ -175,14 +182,14 @@ class RobotsChecker:
             crawl_delay = self._parse_crawl_delay(content) if content else None
             self._cache[robots_url] = (parser, crawl_delay, time.time())
             return parser, crawl_delay
-    
+
     def can_fetch(self, url: str) -> bool:
         """
         Check if a URL can be fetched according to robots.txt.
-        
+
         Args:
             url: The URL to check
-            
+
         Returns:
             True if the URL can be fetched, False otherwise
         """
@@ -192,14 +199,14 @@ class RobotsChecker:
         except Exception as e:
             logger.error(f"Error checking robots.txt for {url}: {e}")
             return False
-    
+
     def get_crawl_delay(self, url: str) -> Optional[float]:
         """
         Get the crawl-delay for a given URL from robots.txt.
-        
+
         Args:
             url: The URL to check
-            
+
         Returns:
             Crawl delay in seconds, or None if not specified
         """
@@ -209,14 +216,14 @@ class RobotsChecker:
         except Exception as e:
             logger.error(f"Error getting crawl-delay for {url}: {e}")
             return None
-    
+
     def filter_urls(self, urls: list) -> list:
         """
         Filter a list of URLs to only include those allowed by robots.txt.
-        
+
         Args:
             urls: List of URLs to filter
-            
+
         Returns:
             List of allowed URLs
         """
@@ -227,7 +234,7 @@ class RobotsChecker:
             else:
                 logger.info(f"URL disallowed by robots.txt: {url}")
         return allowed_urls
-    
+
     def clear_cache(self):
         """Clear the robots.txt cache."""
         with self._lock:

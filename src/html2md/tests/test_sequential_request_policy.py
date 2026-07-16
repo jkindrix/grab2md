@@ -31,7 +31,10 @@ def test_only_one_request_slot_can_be_active_across_threads():
         outcomes.append(limiter.acquire_slot("https://other.example/second"))
         release.set()
 
-    threads = [threading.Thread(target=first_request), threading.Thread(target=competing_request)]
+    threads = [
+        threading.Thread(target=first_request),
+        threading.Thread(target=competing_request),
+    ]
     for thread in threads:
         thread.start()
     for thread in threads:

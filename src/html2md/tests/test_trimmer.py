@@ -37,9 +37,7 @@ def test_matching_path_rule_selects_heading_occurrence_and_footer():
     content = "# Navigation\nlinks\n# Guide\nbody\nEND\nfooter"
     rules = {
         "example.com": {
-            "path_rules": {
-                "/docs": {"h1_occurrence": 2, "footer_marker": "END"}
-            }
+            "path_rules": {"/docs": {"h1_occurrence": 2, "footer_marker": "END"}}
         }
     }
     with configured(rules):

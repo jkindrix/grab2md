@@ -83,9 +83,7 @@ def test_config_add_domain_quick_persists_domain():
 def test_config_backup_reports_created_path(tmp_path):
     manager = Mock()
     manager.create_backup.return_value = tmp_path / "config.backup.json"
-    with patch(
-        "html2md.cli.config_commands.get_backup_manager", return_value=manager
-    ):
+    with patch("html2md.cli.config_commands.get_backup_manager", return_value=manager):
         result = runner.invoke(app, ["config", "backup"])
 
     assert result.exit_code == 0
@@ -99,12 +97,8 @@ def test_config_restore_uses_explicit_backup(tmp_path):
     manager = Mock()
     manager.create_backup.return_value = Path("pre-restore.json")
     manager.restore_backup.return_value = True
-    with patch(
-        "html2md.cli.config_commands.get_backup_manager", return_value=manager
-    ):
-        result = runner.invoke(
-            app, ["config", "restore", str(backup)], input="y\n"
-        )
+    with patch("html2md.cli.config_commands.get_backup_manager", return_value=manager):
+        result = runner.invoke(app, ["config", "restore", str(backup)], input="y\n")
 
     assert result.exit_code == 0
     assert "restored successfully" in result.output
@@ -131,9 +125,7 @@ def test_set_cli_default_parses_and_saves_schema_type(command, option, raw, expe
         patch("html2md.cli.config_commands.load_config", return_value=config),
         patch("html2md.cli.config_commands.save_config", save),
     ):
-        result = runner.invoke(
-            app, ["config", "set-cli-default", command, option, raw]
-        )
+        result = runner.invoke(app, ["config", "set-cli-default", command, option, raw])
 
     assert result.exit_code == 0
     saved = save.call_args.args[0]

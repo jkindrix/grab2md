@@ -8,9 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from html2md.utils.state_manager import (
-    CrawlState, CrawlStatistics, StateManager
-)
+from html2md.utils.state_manager import CrawlState, CrawlStatistics, StateManager
 
 
 class TestCrawlStatistics:
@@ -28,11 +26,7 @@ class TestCrawlStatistics:
 
     def test_statistics_serialization(self):
         """Test serializing statistics."""
-        stats = CrawlStatistics(
-            total_urls=100,
-            urls_processed=50,
-            urls_failed=5
-        )
+        stats = CrawlStatistics(total_urls=100, urls_processed=50, urls_failed=5)
 
         data = stats.to_dict()
         assert data["total_urls"] == 100
@@ -50,10 +44,7 @@ class TestCrawlState:
 
     def test_state_creation(self):
         """Test creating crawl state."""
-        state = CrawlState(
-            start_url="https://example.com",
-            output_dir="/tmp/output"
-        )
+        state = CrawlState(start_url="https://example.com", output_dir="/tmp/output")
 
         assert state.version == "1.0"
         assert state.crawl_id  # Should have UUID
@@ -68,7 +59,7 @@ class TestCrawlState:
         state = CrawlState(
             start_url="https://example.com",
             output_dir="/tmp/output",
-            config={"max_depth": 3}
+            config={"max_depth": 3},
         )
 
         # Add some data
@@ -125,7 +116,7 @@ class TestStateManager:
         state = state_manager.create_new_state(
             start_url="https://example.com",
             output_dir="/tmp/output",
-            config={"max_depth": 3}
+            config={"max_depth": 3},
         )
 
         assert state.start_url == "https://example.com"
@@ -138,9 +129,7 @@ class TestStateManager:
         """Test saving and loading state."""
         # Create state
         state = state_manager.create_new_state(
-            start_url="https://example.com",
-            output_dir="/tmp/output",
-            config={}
+            start_url="https://example.com", output_dir="/tmp/output", config={}
         )
         crawl_id = state.crawl_id
 
@@ -163,14 +152,14 @@ class TestStateManager:
         assert loaded_state.crawl_id == crawl_id
         assert loaded_state.start_url == "https://example.com"
         assert len(loaded_state.urls_queued) == 1
-        assert loaded_state.urls_visited["https://example.com"] == "/tmp/output/index.md"
+        assert (
+            loaded_state.urls_visited["https://example.com"] == "/tmp/output/index.md"
+        )
 
     def test_checkpoint_saving(self, state_manager):
         """Test checkpoint functionality."""
         state = state_manager.create_new_state(
-            start_url="https://example.com",
-            output_dir="/tmp/output",
-            config={}
+            start_url="https://example.com", output_dir="/tmp/output", config={}
         )
 
         # Save manual checkpoint
@@ -182,10 +171,8 @@ class TestStateManager:
 
     def test_should_checkpoint(self, state_manager):
         """Test checkpoint triggers."""
-        state = state_manager.create_new_state(
-            start_url="https://example.com",
-            output_dir="/tmp/output",
-            config={}
+        state_manager.create_new_state(
+            start_url="https://example.com", output_dir="/tmp/output", config={}
         )
 
         # Initially should not checkpoint
@@ -203,16 +190,12 @@ class TestStateManager:
     def test_update_progress(self, state_manager):
         """Test progress updates."""
         state = state_manager.create_new_state(
-            start_url="https://example.com",
-            output_dir="/tmp/output",
-            config={}
+            start_url="https://example.com", output_dir="/tmp/output", config={}
         )
 
         # Update successful URL
         state_manager.update_progress(
-            url="https://example.com",
-            success=True,
-            output_file="/tmp/output/index.md"
+            url="https://example.com", success=True, output_file="/tmp/output/index.md"
         )
 
         assert state.statistics.urls_processed == 1
@@ -221,9 +204,7 @@ class TestStateManager:
 
         # Update failed URL
         state_manager.update_progress(
-            url="https://example.com/404",
-            success=False,
-            error_message="404 Not Found"
+            url="https://example.com/404", success=False, error_message="404 Not Found"
         )
 
         assert state.statistics.urls_processed == 2
@@ -233,16 +214,14 @@ class TestStateManager:
     def test_queue_management(self, state_manager):
         """Test URL queue management."""
         state = state_manager.create_new_state(
-            start_url="https://example.com",
-            output_dir="/tmp/output",
-            config={}
+            start_url="https://example.com", output_dir="/tmp/output", config={}
         )
 
         # Add URLs
         urls = [
             ("https://example.com/page1", 1),
             ("https://example.com/page2", 1),
-            ("https://example.com/page3", 2)
+            ("https://example.com/page3", 2),
         ]
         state_manager.add_urls_to_queue(urls)
 
@@ -262,7 +241,7 @@ class TestStateManager:
             state = state_manager.create_new_state(
                 start_url=f"https://example{i}.com",
                 output_dir=f"/tmp/output{i}",
-                config={}
+                config={},
             )
             crawl_ids.append(state.crawl_id)
             time.sleep(0.1)  # Ensure different timestamps
@@ -279,9 +258,7 @@ class TestStateManager:
         """Test cleaning old states."""
         # Create a state
         state = state_manager.create_new_state(
-            start_url="https://example.com",
-            output_dir="/tmp/output",
-            config={}
+            start_url="https://example.com", output_dir="/tmp/output", config={}
         )
         crawl_id = state.crawl_id
 
@@ -299,9 +276,7 @@ class TestStateManager:
     def test_atomic_writes(self, state_manager, temp_state_dir):
         """Test atomic write functionality."""
         state = state_manager.create_new_state(
-            start_url="https://example.com",
-            output_dir="/tmp/output",
-            config={}
+            start_url="https://example.com", output_dir="/tmp/output", config={}
         )
         crawl_id = state.crawl_id
 
@@ -320,7 +295,7 @@ class TestStateManager:
         assert backup_file.exists()
 
         # Verify backup has old data
-        with open(backup_file, 'r') as f:
+        with open(backup_file, "r") as f:
             backup_data = json.load(f)
         assert "https://example.com/new" not in backup_data["progress"]["urls_visited"]
 
@@ -330,7 +305,7 @@ class TestStateManager:
         state = state_manager.create_new_state(
             start_url="https://example.com",
             output_dir="/tmp/output",
-            config={"test": True}
+            config={"test": True},
         )
         original_id = state.crawl_id
         state.urls_visited["https://example.com"] = "/tmp/output/index.md"

@@ -36,9 +36,14 @@ class TestStateIntegration:
         </html>
         """
 
-    @patch('html2md.markdown.crawler.html_content_to_markdown', return_value="# Test Content")
-    @patch('html2md.markdown.crawler.fetch_html')
-    def test_crawler_with_state_manager(self, mock_fetch, mock_convert, temp_dirs, mock_html_response):
+    @patch(
+        "html2md.markdown.crawler.html_content_to_markdown",
+        return_value="# Test Content",
+    )
+    @patch("html2md.markdown.crawler.fetch_html")
+    def test_crawler_with_state_manager(
+        self, mock_fetch, mock_convert, temp_dirs, mock_html_response
+    ):
         """Test crawler with state manager enabled."""
         state_dir, output_dir = temp_dirs
 
@@ -61,7 +66,7 @@ class TestStateIntegration:
             max_depth=1,
             state_manager=state_manager,
             enable_checkpoints=True,
-            checkpoint_page_count=1  # Checkpoint after each page
+            checkpoint_page_count=1,  # Checkpoint after each page
         )
 
         # Verify crawl completed
@@ -75,18 +80,23 @@ class TestStateIntegration:
         assert state_file.exists()
 
         # Verify state contents
-        with open(state_file, 'r') as f:
+        with open(state_file, "r") as f:
             state_data = json.load(f)
 
-        assert state_data['crawl_id'] == result.crawl_id
-        assert state_data['start_url'] == "https://example.com"
-        assert state_data['output_dir'] == str(output_dir)
-        assert len(state_data['checkpoints']) >= 1
-        assert state_data['progress']['statistics']['urls_processed'] >= 1
+        assert state_data["crawl_id"] == result.crawl_id
+        assert state_data["start_url"] == "https://example.com"
+        assert state_data["output_dir"] == str(output_dir)
+        assert len(state_data["checkpoints"]) >= 1
+        assert state_data["progress"]["statistics"]["urls_processed"] >= 1
 
-    @patch('html2md.markdown.crawler.html_content_to_markdown', return_value="# Test Content")
-    @patch('html2md.markdown.crawler.fetch_html')
-    def test_crawler_resume_functionality(self, mock_fetch, mock_convert, temp_dirs, mock_html_response):
+    @patch(
+        "html2md.markdown.crawler.html_content_to_markdown",
+        return_value="# Test Content",
+    )
+    @patch("html2md.markdown.crawler.fetch_html")
+    def test_crawler_resume_functionality(
+        self, mock_fetch, mock_convert, temp_dirs, mock_html_response
+    ):
         """Test resuming a crawl from saved state."""
         state_dir, output_dir = temp_dirs
 
@@ -108,7 +118,7 @@ class TestStateIntegration:
             max_pages=1,
             max_depth=1,
             state_manager=state_manager,
-            enable_checkpoints=True
+            enable_checkpoints=True,
         )
 
         # Verify initial crawl
@@ -122,7 +132,7 @@ class TestStateIntegration:
             output_dir=str(output_dir),
             state_manager=resuming_manager,
             resume_crawl_id=initial_result.crawl_id,
-            enable_checkpoints=True
+            enable_checkpoints=True,
         )
 
         # Verify resume worked
@@ -134,13 +144,18 @@ class TestStateIntegration:
         state_file = state_dir / f"{initial_result.crawl_id}.json"
         assert state_file.exists()
 
-        with open(state_file, 'r') as f:
+        with open(state_file, "r") as f:
             final_state = json.load(f)
 
-        assert final_state['progress']['statistics']['urls_processed'] >= initial_result.processed_count
+        assert (
+            final_state["progress"]["statistics"]["urls_processed"]
+            >= initial_result.processed_count
+        )
 
-    @patch('html2md.markdown.crawler.html_content_to_markdown', return_value="# Resumed")
-    @patch('html2md.markdown.crawler.fetch_html')
+    @patch(
+        "html2md.markdown.crawler.html_content_to_markdown", return_value="# Resumed"
+    )
+    @patch("html2md.markdown.crawler.fetch_html")
     def test_resume_page_budget_counts_only_prior_successes(
         self, mock_fetch, mock_convert, temp_dirs, mock_html_response
     ):
@@ -190,14 +205,14 @@ class TestStateIntegration:
         crawl_state = state_manager.create_new_state(
             start_url="https://example.com",
             output_dir=str(output_dir),
-            config={"max_pages": 10}
+            config={"max_pages": 10},
         )
 
         # Test listing states
         crawls = state_manager.list_resumable_crawls()
         assert len(crawls) == 1
-        assert crawls[0]['crawl_id'] == crawl_state.crawl_id
-        assert crawls[0]['start_url'] == "https://example.com"
+        assert crawls[0]["crawl_id"] == crawl_state.crawl_id
+        assert crawls[0]["start_url"] == "https://example.com"
 
         # Test export/import
         export_file = state_dir / "exported.state-export"
@@ -225,9 +240,7 @@ class TestStateIntegration:
 
         state_manager = StateManager(state_dir=state_dir)
         crawl_state = state_manager.create_new_state(
-            start_url="https://example.com",
-            output_dir=str(output_dir),
-            config={}
+            start_url="https://example.com", output_dir=str(output_dir), config={}
         )
 
         # Manual checkpoint
@@ -247,10 +260,10 @@ class TestStateIntegration:
         state_file = state_dir / f"{crawl_state.crawl_id}.json"
         assert state_file.exists()
 
-        with open(state_file, 'r') as f:
+        with open(state_file, "r") as f:
             saved_state = json.load(f)
 
-        assert len(saved_state['checkpoints']) >= 2
+        assert len(saved_state["checkpoints"]) >= 2
 
     def test_state_corruption_recovery(self, temp_dirs):
         """Test recovery from corrupted state files."""
@@ -258,9 +271,7 @@ class TestStateIntegration:
 
         state_manager = StateManager(state_dir=state_dir)
         crawl_state = state_manager.create_new_state(
-            start_url="https://example.com",
-            output_dir=str(output_dir),
-            config={}
+            start_url="https://example.com", output_dir=str(output_dir), config={}
         )
 
         state_file = state_dir / f"{crawl_state.crawl_id}.json"
@@ -274,7 +285,7 @@ class TestStateIntegration:
         assert backup_file.exists()
 
         # Corrupt the main state file
-        with open(state_file, 'w') as f:
+        with open(state_file, "w") as f:
             f.write("invalid json")
 
         # Should recover from backup

@@ -18,8 +18,16 @@ logger = logging.getLogger("html2md")
 # This ensures consistent header handling across the application
 
 
-def html_to_markdown(url, session=None, headers=None, trim=False,
-                    download_images=False, output_dir=None, images_dir="images", verify_ssl=True):
+def html_to_markdown(
+    url,
+    session=None,
+    headers=None,
+    trim=False,
+    download_images=False,
+    output_dir=None,
+    images_dir="images",
+    verify_ssl=True,
+):
     """
     Fetch HTML and convert to Markdown.
 
@@ -46,12 +54,14 @@ def html_to_markdown(url, session=None, headers=None, trim=False,
     if is_chatgpt_url(url):
         logger.info(f"Detected ChatGPT URL: {url}")
         html_content = get_conversation_html(url, session, headers)
-            
+
         if not html_content:
             logger.error(f"Failed to retrieve ChatGPT conversation content from {url}")
             return None
-            
-        logger.info(f"Successfully retrieved ChatGPT conversation content ({len(html_content)} bytes)")
+
+        logger.info(
+            f"Successfully retrieved ChatGPT conversation content ({len(html_content)} bytes)"
+        )
     else:
         # Standard HTML retrieval for non-ChatGPT URLs
         try:
@@ -59,21 +69,25 @@ def html_to_markdown(url, session=None, headers=None, trim=False,
             # Send GET request to fetch the HTML content
             response = session.get(url, headers=headers, timeout=30)
             response.raise_for_status()
-            
+
             # Detect encoding if possible
             if response.encoding is None:
                 # Default to UTF-8 if encoding can't be determined
-                response.encoding = 'utf-8'
-            
+                response.encoding = "utf-8"
+
             # Log content type and encoding info for debugging
-            logger.info(f"Response Content-Type: {response.headers.get('Content-Type', 'Not specified')}")
-            logger.info(f"Response Content-Encoding: {response.headers.get('Content-Encoding', 'Not specified')}")
+            logger.info(
+                f"Response Content-Type: {response.headers.get('Content-Type', 'Not specified')}"
+            )
+            logger.info(
+                f"Response Content-Encoding: {response.headers.get('Content-Encoding', 'Not specified')}"
+            )
             logger.info(f"Response encoding detected: {response.encoding}")
-            
+
             # The requests library automatically handles decompression based on Content-Encoding header
             # So we should just use response.text which gives us the decoded content
             html_content = response.text
-            
+
             # Log raw content info for debugging
             # Requests decodes every advertised Content-Encoding when the
             # corresponding decoder is installed. Brotli is a runtime
@@ -81,7 +95,7 @@ def html_to_markdown(url, session=None, headers=None, trim=False,
             # should happen here.
             if html_content.lstrip().lower().startswith(("<!doctype", "<html")):
                 logger.debug("Content appears to be valid HTML")
-            
+
             # Log response details
             logger.info(f"Received {len(html_content)} bytes of HTML from {url}.")
             logger.info(f"Response status code: {response.status_code}")
@@ -105,7 +119,9 @@ def html_to_markdown(url, session=None, headers=None, trim=False,
             logger.error(f"Connection error while fetching {url}: {e}")
             return None
         except requests.exceptions.HTTPError as e:
-            status_code = e.response.status_code if hasattr(e, "response") else "unknown"
+            status_code = (
+                e.response.status_code if hasattr(e, "response") else "unknown"
+            )
             logger.error(f"HTTP error {status_code} while fetching {url}: {e}")
             return None
         except requests.RequestException as e:
@@ -123,8 +139,15 @@ def html_to_markdown(url, session=None, headers=None, trim=False,
     )
 
 
-def html_content_to_markdown(html_content, base_url, session=None, trim=False,
-                             download_images=False, output_dir=None, images_dir="images"):
+def html_content_to_markdown(
+    html_content,
+    base_url,
+    session=None,
+    trim=False,
+    download_images=False,
+    output_dir=None,
+    images_dir="images",
+):
     """Convert an already-fetched HTML document to Markdown."""
     if not html_content or not html_content.strip():
         logger.warning(f"Empty HTML response from {base_url}")
@@ -159,8 +182,14 @@ def html_content_to_markdown(html_content, base_url, session=None, trim=False,
     return formatted_markdown
 
 
-def local_html_to_markdown(file_path, trim=False, download_images=False, output_dir=None, images_dir="images",
-                           verify_ssl=True):
+def local_html_to_markdown(
+    file_path,
+    trim=False,
+    download_images=False,
+    output_dir=None,
+    images_dir="images",
+    verify_ssl=True,
+):
     """
     Convert HTML from a local file to Markdown.
 

@@ -49,7 +49,10 @@ def test_each_page_is_fetched_once_and_same_body_is_converted(tmp_path):
     result = fetch_result()
     with (
         patch("html2md.markdown.crawler.fetch_html", return_value=result) as fetch,
-        patch("html2md.markdown.crawler.html_content_to_markdown", return_value="# Converted") as convert,
+        patch(
+            "html2md.markdown.crawler.html_content_to_markdown",
+            return_value="# Converted",
+        ) as convert,
     ):
         crawl_result = crawl(tmp_path)
 
@@ -89,7 +92,9 @@ def test_concurrency_deferred_url_is_requeued_not_dropped(tmp_path):
     limiter = limiter_mock(acquire=[False, True])
     with (
         patch("html2md.markdown.crawler.ConcurrentLimiter", return_value=limiter),
-        patch("html2md.markdown.crawler.fetch_html", return_value=fetch_result()) as fetch,
+        patch(
+            "html2md.markdown.crawler.fetch_html", return_value=fetch_result()
+        ) as fetch,
     ):
         result = crawl(tmp_path)
 

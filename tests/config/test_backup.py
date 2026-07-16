@@ -34,7 +34,7 @@ class TestConfigBackupManager:
         test_data = {"test": "data", "version": 1}
 
         # Create config file
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump(test_data, f)
 
         manager = ConfigBackupManager(config_file)
@@ -47,7 +47,7 @@ class TestConfigBackupManager:
         assert "test" in backup_path.name
 
         # Verify backup contains correct data
-        with open(backup_path, 'r', encoding='utf-8') as f:
+        with open(backup_path, "r", encoding="utf-8") as f:
             backup_data = json.load(f)
         assert backup_data == test_data
 
@@ -65,7 +65,7 @@ class TestConfigBackupManager:
         config_file = tmp_path / "config.json"
 
         # Create config file
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump({"test": "data"}, f)
 
         manager = ConfigBackupManager(config_file)
@@ -84,7 +84,7 @@ class TestConfigBackupManager:
         """Test backups created with different reasons have distinct names."""
         config_file = tmp_path / "config.json"
 
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump({"test": "data"}, f)
 
         manager = ConfigBackupManager(config_file)
@@ -104,7 +104,7 @@ class TestConfigBackupManager:
         """Test old backups are cleaned up when limit is exceeded."""
         config_file = tmp_path / "config.json"
 
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump({"test": "data"}, f)
 
         # Set max_backups to 3
@@ -124,15 +124,15 @@ class TestConfigBackupManager:
         # Verify oldest backups were removed
         assert not backups[0].exists()  # Oldest
         assert not backups[1].exists()  # Second oldest
-        assert backups[2].exists()      # Should still exist
-        assert backups[3].exists()      # Should still exist
-        assert backups[4].exists()      # Newest - should exist
+        assert backups[2].exists()  # Should still exist
+        assert backups[3].exists()  # Should still exist
+        assert backups[4].exists()  # Newest - should exist
 
     def test_list_backups_sorted_newest_first(self, tmp_path):
         """Test list_backups returns backups sorted by timestamp (newest first)."""
         config_file = tmp_path / "config.json"
 
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump({"test": "data"}, f)
 
         manager = ConfigBackupManager(config_file, max_backups=10)
@@ -165,7 +165,7 @@ class TestConfigBackupManager:
         config_file = tmp_path / "config.json"
 
         # Create corrupt config file (invalid JSON)
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             f.write('{"invalid": json}')
 
         manager = ConfigBackupManager(config_file)
@@ -177,7 +177,7 @@ class TestConfigBackupManager:
         assert corrupt_path.name == "config.json.corrupt"
 
         # Verify content matches original
-        with open(corrupt_path, 'r', encoding='utf-8') as f:
+        with open(corrupt_path, "r", encoding="utf-8") as f:
             corrupt_content = f.read()
         assert corrupt_content == '{"invalid": json}'
 
@@ -186,14 +186,14 @@ class TestConfigBackupManager:
         config_file = tmp_path / "config.json"
 
         # Create first corrupt file
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             f.write('{"corrupt": 1}')
 
         manager = ConfigBackupManager(config_file)
         corrupt_path1 = manager.save_corrupted_config()
 
         # Create second corrupt file
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             f.write('{"corrupt": 2}')
 
         corrupt_path2 = manager.save_corrupted_config()
@@ -202,7 +202,7 @@ class TestConfigBackupManager:
         assert corrupt_path1 == corrupt_path2
 
         # Content should be from second file
-        with open(corrupt_path2, 'r', encoding='utf-8') as f:
+        with open(corrupt_path2, "r", encoding="utf-8") as f:
             content = f.read()
         assert '{"corrupt": 2}' in content
 
@@ -212,7 +212,7 @@ class TestConfigBackupManager:
 
         # Create original config
         original_data = {"version": 1, "original": True}
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump(original_data, f)
 
         manager = ConfigBackupManager(config_file)
@@ -220,7 +220,7 @@ class TestConfigBackupManager:
 
         # Modify config
         new_data = {"version": 2, "modified": True}
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump(new_data, f)
 
         # Restore backup
@@ -229,7 +229,7 @@ class TestConfigBackupManager:
         assert success is True
 
         # Verify config was restored
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             restored_data = json.load(f)
         assert restored_data == original_data
 
@@ -248,12 +248,12 @@ class TestConfigBackupManager:
         config_file = tmp_path / "config.json"
 
         # Create valid config
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump({"valid": True}, f)
 
         # Create invalid "backup" file
         invalid_backup = tmp_path / "invalid.json"
-        with open(invalid_backup, 'w', encoding='utf-8') as f:
+        with open(invalid_backup, "w", encoding="utf-8") as f:
             f.write('{"invalid": json}')
 
         manager = ConfigBackupManager(config_file)
@@ -263,7 +263,7 @@ class TestConfigBackupManager:
         assert success is False
 
         # Original config should be unchanged
-        with open(config_file, 'r', encoding='utf-8') as f:
+        with open(config_file, "r", encoding="utf-8") as f:
             data = json.load(f)
         assert data == {"valid": True}
 
@@ -272,7 +272,7 @@ class TestConfigBackupManager:
         config_file = tmp_path / "config.json"
 
         # Create config with specific content
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump({"test": "data"}, f)
 
         # Get original modification time
@@ -289,7 +289,7 @@ class TestConfigBackupManager:
         """Test multiple backups can be created in quick succession."""
         config_file = tmp_path / "config.json"
 
-        with open(config_file, 'w', encoding='utf-8') as f:
+        with open(config_file, "w", encoding="utf-8") as f:
             json.dump({"test": "data"}, f)
 
         manager = ConfigBackupManager(config_file, max_backups=10)

@@ -52,22 +52,22 @@ def atomic_write_json(
         raise ValueError(f"file_path must be a Path object, got {type(file_path)}")
 
     # Ensure parent directory exists
-    file_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700 if private else 0o777)
+    file_path.parent.mkdir(
+        parents=True, exist_ok=True, mode=0o700 if private else 0o777
+    )
     if private and os.name == "posix":
         os.chmod(file_path.parent, 0o700)
 
     # Create temp file in same directory (ensures same filesystem for atomic rename)
     fd, temp_path = tempfile.mkstemp(
-        dir=file_path.parent,
-        prefix=f'.{file_path.stem}.',
-        suffix='.tmp'
+        dir=file_path.parent, prefix=f".{file_path.stem}.", suffix=".tmp"
     )
 
     try:
         if private and os.name == "posix":
             os.fchmod(fd, 0o600)
         # Write JSON data to temp file
-        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=indent, ensure_ascii=False)
             f.flush()
             # Force write to disk (prevent data loss on crash/power failure)

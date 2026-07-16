@@ -19,7 +19,9 @@ def build_header_config(
     header_settings = config.get("headers", {})
     contact_email = user_agent_contact if "@" in (user_agent_contact or "") else None
     contact_url = (
-        user_agent_contact if user_agent_contact and "@" not in user_agent_contact else None
+        user_agent_contact
+        if user_agent_contact and "@" not in user_agent_contact
+        else None
     )
 
     return HeaderConfig(
@@ -29,8 +31,12 @@ def build_header_config(
         user_agent_name=header_settings.get("user_agent_name", "html2md"),
         user_agent_version=header_settings.get("user_agent_version", "1.0"),
         enable_compression=header_settings.get("enable_compression", True),
-        compression_methods=header_settings.get("compression_methods", "gzip, deflate, br"),
-        enable_conditional_requests=header_settings.get("enable_conditional_requests", True),
+        compression_methods=header_settings.get(
+            "compression_methods", "gzip, deflate, br"
+        ),
+        enable_conditional_requests=header_settings.get(
+            "enable_conditional_requests", True
+        ),
         simulate_browser=simulate_browser,
         browser_type=header_settings.get("browser_type", "chrome"),
         respect_caching=header_settings.get("respect_caching", True),

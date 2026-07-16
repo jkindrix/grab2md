@@ -53,10 +53,7 @@ class ConfigRecoveryHandler:
     """
 
     def __init__(
-        self,
-        config_file: Path,
-        backup_manager,
-        default_config: Dict[str, Any]
+        self, config_file: Path, backup_manager, default_config: Dict[str, Any]
     ):
         """
         Initialize recovery handler.
@@ -102,9 +99,7 @@ class ConfigRecoveryHandler:
         corrupt_path = self.backup_manager.save_corrupted_config()
 
         # Log error with context
-        logger.error(
-            f"Configuration file corrupt: {type(error).__name__}: {error}"
-        )
+        logger.error(f"Configuration file corrupt: {type(error).__name__}: {error}")
         logger.error(f"Config file location: {self.config_file}")
 
         if corrupt_path:
@@ -163,20 +158,22 @@ class ConfigRecoveryHandler:
             console.print(f"[green]Found {len(backups)} backup(s)[/green]")
             for i, backup in enumerate(backups[:3], 1):
                 # Extract timestamp from filename: config.20251029_143100.reason.json
-                parts = backup.stem.split('.')
+                parts = backup.stem.split(".")
                 if len(parts) >= 2:
                     timestamp = parts[1]
                     console.print(f"  {i}. {timestamp}")
             console.print()
             options.append("R) Restore most recent backup")
-            valid_choices.append('r')
+            valid_choices.append("r")
 
-        options.extend([
-            "D) Use default configuration (will lose custom settings)",
-            "M) Exit and manually fix config file",
-            "Q) Quit"
-        ])
-        valid_choices.extend(['d', 'm', 'q'])
+        options.extend(
+            [
+                "D) Use default configuration (will lose custom settings)",
+                "M) Exit and manually fix config file",
+                "Q) Quit",
+            ]
+        )
+        valid_choices.extend(["d", "m", "q"])
 
         # Display options
         console.print("[bold]Recovery Options:[/bold]")
@@ -189,26 +186,26 @@ class ConfigRecoveryHandler:
             choice = Prompt.ask(
                 "Choose recovery action",
                 choices=valid_choices,
-                default='m',
-                show_choices=False
+                default="m",
+                show_choices=False,
             ).lower()
 
-            if choice == 'r' and backups:
+            if choice == "r" and backups:
                 return RecoveryAction.RESTORE_BACKUP
-            elif choice == 'd':
+            elif choice == "d":
                 # Confirm destructive action
                 console.print()
                 if Confirm.ask(
                     "[yellow]⚠️  This will reset all custom settings. Continue?[/yellow]",
-                    default=False
+                    default=False,
                 ):
                     return RecoveryAction.USE_DEFAULTS
                 else:
                     console.print("[dim]Cancelled. Choose another option.[/dim]\n")
                     # Loop back to prompt
-            elif choice == 'm':
+            elif choice == "m":
                 return RecoveryAction.MANUAL_FIX
-            elif choice == 'q':
+            elif choice == "q":
                 return RecoveryAction.EXIT
 
     def _non_interactive_recovery(self) -> RecoveryAction:
@@ -311,7 +308,7 @@ class ConfigRecoveryHandler:
 
             # Load and return restored config
             try:
-                with open(self.config_file, 'r', encoding='utf-8') as f:
+                with open(self.config_file, "r", encoding="utf-8") as f:
                     return json.load(f)
             except Exception as e:
                 logger.error(f"Failed to load restored config: {e}")
@@ -352,6 +349,7 @@ class ConfigRecoveryHandler:
 
             # Write defaults atomically
             from html2md.config.writer import atomic_write_json
+
             atomic_write_json(self.config_file, self.default_config, private=True)
 
             console.print("[yellow]Configuration reset to defaults[/yellow]")
@@ -361,11 +359,7 @@ class ConfigRecoveryHandler:
         else:
             # Non-interactive: DO NOT write to disk
             logger.warning("Using default config IN MEMORY ONLY (non-interactive)")
-            logger.warning(
-                f"Config file preserved at: {self.config_file}"
-            )
-            logger.warning(
-                "To permanently reset, run: html2md config reset"
-            )
+            logger.warning(f"Config file preserved at: {self.config_file}")
+            logger.warning("To permanently reset, run: html2md config reset")
 
         return self.default_config.copy()

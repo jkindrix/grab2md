@@ -115,7 +115,8 @@ def test_local_conversion_subprocess_writes_markdown(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("path", "heading"), [("/ok", "Page /ok"), ("/redirect", "Page /ok"), ("/gzip", "Compressed")]
+    ("path", "heading"),
+    [("/ok", "Page /ok"), ("/redirect", "Page /ok"), ("/gzip", "Compressed")],
 )
 def test_url_conversion_handles_plain_redirected_and_compressed_responses(
     tmp_path, cli_server, path, heading
@@ -171,10 +172,14 @@ def test_batch_subprocess_fetches_and_writes_url(tmp_path, cli_server):
     assert result.returncode == 0, result.stderr
     markdown_files = list(output_dir.rglob("*.md"))
     assert markdown_files
-    assert any("# Page /ok" in path.read_text(encoding="utf-8") for path in markdown_files)
+    assert any(
+        "# Page /ok" in path.read_text(encoding="utf-8") for path in markdown_files
+    )
 
 
-def test_crawl_state_resume_and_traversal_containment_in_subprocess(tmp_path, cli_server):
+def test_crawl_state_resume_and_traversal_containment_in_subprocess(
+    tmp_path, cli_server
+):
     output_dir = tmp_path / "crawl-output"
     url = f"{cli_server}/docs/%2e%2e/escape"
 

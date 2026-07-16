@@ -102,11 +102,15 @@ def _expected_types(path: ConfigPath, default: Any) -> tuple[type, ...]:
     try:
         return VALUE_TYPES[path]
     except KeyError as error:
-        raise RuntimeError(f"Configuration schema missing {_path_name(path)}") from error
+        raise RuntimeError(
+            f"Configuration schema missing {_path_name(path)}"
+        ) from error
 
 
 def _type_names(types: tuple[type, ...]) -> str:
-    return " or ".join("null" if expected is NoneType else expected.__name__ for expected in types)
+    return " or ".join(
+        "null" if expected is NoneType else expected.__name__ for expected in types
+    )
 
 
 def _coerce_known_value(path: ConfigPath, value: Any, default: Any) -> Any:
@@ -141,7 +145,9 @@ def _coerce_known_value(path: ConfigPath, value: Any, default: Any) -> Any:
 def _validate_enum(path: ConfigPath, value: Any) -> Any:
     allowed = ENUM_VALUES.get(path)
     if allowed is not None and value not in allowed:
-        choices = ", ".join("null" if item is None else str(item) for item in sorted(allowed, key=str))
+        choices = ", ".join(
+            "null" if item is None else str(item) for item in sorted(allowed, key=str)
+        )
         raise ConfigValidationError([f"{_path_name(path)} must be one of: {choices}"])
     return value
 
@@ -207,12 +213,16 @@ def default_at_path(defaults: Mapping[str, Any], path: ConfigPath) -> Any:
     current: Any = defaults
     for component in path:
         if not isinstance(current, Mapping) or component not in current:
-            raise ConfigValidationError([f"unknown configuration path: {_path_name(path)}"])
+            raise ConfigValidationError(
+                [f"unknown configuration path: {_path_name(path)}"]
+            )
         current = current[component]
     return deepcopy(current)
 
 
-def parse_cli_value(defaults: Mapping[str, Any], path: ConfigPath, raw_value: str) -> Any:
+def parse_cli_value(
+    defaults: Mapping[str, Any], path: ConfigPath, raw_value: str
+) -> Any:
     """Parse a CLI string using the same leaf schema used during load and save."""
     default = default_at_path(defaults, path)
     expected = _expected_types(path, default)
@@ -246,7 +256,9 @@ def parse_cli_value(defaults: Mapping[str, Any], path: ConfigPath, raw_value: st
         try:
             candidate = float(normalized)
         except ValueError as error:
-            raise ConfigValidationError([f"{_path_name(path)} expected float"]) from error
+            raise ConfigValidationError(
+                [f"{_path_name(path)} expected float"]
+            ) from error
     elif str in expected:
         candidate = raw_value
     else:

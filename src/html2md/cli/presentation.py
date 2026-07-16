@@ -111,7 +111,11 @@ def display_directory_tree(path, max_depth=3):
                 if depth < max_depth - 1:
                     add_directory(branch, item_path, depth + 1)
             else:
-                icon = "📝" if item.endswith(".md") else "🌐" if item.endswith(".html") else "📄"
+                icon = (
+                    "📝"
+                    if item.endswith(".md")
+                    else "🌐" if item.endswith(".html") else "📄"
+                )
                 tree.add(f"{icon} {item}", style="green")
 
     try:

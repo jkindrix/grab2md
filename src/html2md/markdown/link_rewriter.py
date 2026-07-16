@@ -28,7 +28,11 @@ def rewrite_links(content, url_mapping, source_file):
 
     def replace(match):
         raw_destination = match.group("destination")
-        destination = raw_destination[1:-1] if raw_destination.startswith("<") else raw_destination
+        destination = (
+            raw_destination[1:-1]
+            if raw_destination.startswith("<")
+            else raw_destination
+        )
         parts = urlsplit(destination)
         without_fragment = urlunsplit(parts._replace(fragment=""))
         without_query_or_fragment = urlunsplit(parts._replace(query="", fragment=""))
@@ -43,7 +47,9 @@ def rewrite_links(content, url_mapping, source_file):
         if target is None:
             return match.group(0)
 
-        relative_path = os.path.relpath(os.fspath(target), source_dir).replace(os.sep, "/")
+        relative_path = os.path.relpath(os.fspath(target), source_dir).replace(
+            os.sep, "/"
+        )
         if preserve_query:
             relative_path += f"?{parts.query}"
         if parts.fragment:

@@ -66,7 +66,9 @@ def fetch_html(url, session, headers, method="GET", data=None, max_retries=3):
 
     for attempt in range(1, max_retries + 1):
         try:
-            logger.info("Attempt %s/%s: Fetching %s %s", attempt, max_retries, method, url)
+            logger.info(
+                "Attempt %s/%s: Fetching %s %s", attempt, max_retries, method, url
+            )
             response = session.request(
                 method, url, headers=headers, data=data, timeout=10
             )
@@ -89,7 +91,9 @@ def fetch_html(url, session, headers, method="GET", data=None, max_retries=3):
                 if result.success:
                     logger.info("Success: %s [HTTP %s]", url, response.status_code)
                 else:
-                    logger.warning("Request failed: %s [HTTP %s]", url, response.status_code)
+                    logger.warning(
+                        "Request failed: %s [HTTP %s]", url, response.status_code
+                    )
                 return result
 
             last_error = result.error
@@ -105,7 +109,9 @@ def fetch_html(url, session, headers, method="GET", data=None, max_retries=3):
             last_error = f"{error.__class__.__name__}: {error}"
             if attempt == max_retries:
                 break
-            logger.warning("%s while fetching %s. Retrying in %ss...", last_error, url, backoff)
+            logger.warning(
+                "%s while fetching %s. Retrying in %ss...", last_error, url, backoff
+            )
         except requests.RequestException as error:
             last_error = f"{error.__class__.__name__}: {error}"
             logger.error("Request failed for %s: %s", url, last_error)

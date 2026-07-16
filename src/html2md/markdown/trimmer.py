@@ -89,14 +89,14 @@ def trim_markdown(markdown_content, url):
                     break
         elif "footer_marker" in domain_rules:
             footer_marker = domain_rules["footer_marker"]
-        
+
         if footer_marker:
             footer_index = markdown_content.find(footer_marker, h1_index)
             if footer_index == -1:
                 # Try with HTML entities unescaped
                 unescaped_marker = html.unescape(footer_marker)
                 footer_index = markdown_content.find(unescaped_marker, h1_index)
-        
+
         if footer_index == -1:
             logging.warning(
                 f"No footer marker found after H1 for {domain}. Returning content from H1 onwards."

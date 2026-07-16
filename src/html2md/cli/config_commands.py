@@ -19,7 +19,11 @@ from html2md.config.loader import (
     load_config,
     save_config,
 )
-from html2md.config.schema import ConfigValidationError, default_at_path, parse_cli_value
+from html2md.config.schema import (
+    ConfigValidationError,
+    default_at_path,
+    parse_cli_value,
+)
 
 console = Console()
 config_app = typer.Typer(
@@ -191,20 +195,34 @@ def delete_config_value(
 
 @config_app.command(name="add-domain")
 def add_domain_config(
-    domain: Optional[str] = typer.Option(None, "--domain", "-d", help="Domain name (e.g., example.com). If not provided, runs in interactive mode."),
-    quick: bool = typer.Option(False, "--quick", "-q", help="Quick mode: add domain with default settings without prompts")
+    domain: Optional[str] = typer.Option(
+        None,
+        "--domain",
+        "-d",
+        help="Domain name (e.g., example.com). If not provided, runs in interactive mode.",
+    ),
+    quick: bool = typer.Option(
+        False,
+        "--quick",
+        "-q",
+        help="Quick mode: add domain with default settings without prompts",
+    ),
 ):
     """Add domain-specific configuration. Use --domain to specify domain directly, or run interactively."""
     config = load_config()
 
     # Domain name
     if domain is None:
-        domain = Prompt.ask("[bold blue]Enter domain name[/bold blue] (e.g., example.com)")
+        domain = Prompt.ask(
+            "[bold blue]Enter domain name[/bold blue] (e.g., example.com)"
+        )
 
     # Check if domain already exists
     if domain in config.get("domains", {}):
         if quick:
-            console.print(f"[yellow]Domain '{domain}' already exists. Use interactive mode to update it.[/yellow]")
+            console.print(
+                f"[yellow]Domain '{domain}' already exists. Use interactive mode to update it.[/yellow]"
+            )
             return
         elif not Confirm.ask(
             f"Domain '{domain}' already exists. Do you want to update it?"
@@ -221,7 +239,9 @@ def add_domain_config(
     if quick:
         # Save the config
         save_config(config)
-        console.print(f"[bold green]✓[/bold green] Domain '{domain}' added with default settings")
+        console.print(
+            f"[bold green]✓[/bold green] Domain '{domain}' added with default settings"
+        )
         return
 
     # Ask for footer marker
@@ -312,7 +332,7 @@ def reset_config():
     """Reset the configuration to default values."""
     if not Confirm.ask(
         "[bold red]Warning:[/bold red] This will reset all settings to default values. Continue?",
-        default=False
+        default=False,
     ):
         console.print("[yellow]Reset cancelled[/yellow]")
         return
@@ -341,29 +361,39 @@ def reset_config():
 @config_app.command(name="set-cli-default")
 def set_cli_default(
     command: str = typer.Argument(..., help="Command name (convert, batch, crawl)"),
-    option: str = typer.Argument(..., help="Option name (e.g., browser_cookies, hierarchical)"),
-    value: Optional[str] = typer.Argument(None, help="Typed value to set; use null for optional values"),
-    reset: bool = typer.Option(False, "--reset", help="Reset this option to its built-in default"),
+    option: str = typer.Argument(
+        ..., help="Option name (e.g., browser_cookies, hierarchical)"
+    ),
+    value: Optional[str] = typer.Argument(
+        None, help="Typed value to set; use null for optional values"
+    ),
+    reset: bool = typer.Option(
+        False, "--reset", help="Reset this option to its built-in default"
+    ),
 ):
     """Set a default value for a CLI option."""
     config = load_config()
-    
+
     # Ensure cli_defaults exists
     if "cli_defaults" not in config:
         config["cli_defaults"] = deepcopy(DEFAULT_CONFIG["cli_defaults"])
-    
+
     # Validate command
     if command not in config["cli_defaults"]:
-        console.print(f"[bold red]Error:[/bold red] Unknown command '{command}'. Valid commands: convert, batch, crawl")
+        console.print(
+            f"[bold red]Error:[/bold red] Unknown command '{command}'. Valid commands: convert, batch, crawl"
+        )
         raise typer.Exit(1)
-    
+
     # Validate option exists in the command defaults
     if option not in config["cli_defaults"][command]:
         valid_options = ", ".join(config["cli_defaults"][command].keys())
-        console.print(f"[bold red]Error:[/bold red] Unknown option '{option}' for command '{command}'.")
+        console.print(
+            f"[bold red]Error:[/bold red] Unknown option '{option}' for command '{command}'."
+        )
         console.print(f"Valid options: {valid_options}")
         raise typer.Exit(1)
-    
+
     config_path = ("cli_defaults", command, option)
     try:
         if reset:
@@ -377,15 +407,19 @@ def set_cli_default(
     except ConfigValidationError as error:
         console.print(f"[bold red]Error:[/bold red] {error}")
         raise typer.Exit(1)
-    
+
     # Set the value
     config["cli_defaults"][command][option] = parsed_value
-    
+
     # Save the updated config
     save_config(config)
-    
-    console.print(f"[bold green]Updated:[/bold green] {command}.{option} = {parsed_value}")
-    console.print(f"\n[bold blue]Tip:[/bold blue] This will be the default value for --{option.replace('_', '-')} when using 'html2md {command}'")
+
+    console.print(
+        f"[bold green]Updated:[/bold green] {command}.{option} = {parsed_value}"
+    )
+    console.print(
+        f"\n[bold blue]Tip:[/bold blue] This will be the default value for --{option.replace('_', '-')} when using 'html2md {command}'"
+    )
 
 
 @config_app.command(name="list-cli-defaults")
@@ -393,22 +427,22 @@ def list_cli_defaults():
     """List all CLI default settings."""
     config = load_config()
     cli_defaults = config.get("cli_defaults", {})
-    
+
     if not cli_defaults:
         console.print("[yellow]No CLI defaults configured yet.[/yellow]")
         return
-    
+
     # Create a table for each command
     for command, options in cli_defaults.items():
         table = Table(title=f"{command.capitalize()} Command Defaults")
         table.add_column("Option", style="cyan")
         table.add_column("Default Value", style="green")
         table.add_column("CLI Flag", style="magenta")
-        
+
         for option, value in options.items():
             cli_flag = f"--{option.replace('_', '-')}"
             table.add_row(option, str(value), cli_flag)
-        
+
         console.print(table)
         console.print()  # Add spacing between tables
 
@@ -416,35 +450,48 @@ def list_cli_defaults():
 @config_app.command(name="show-options")
 def show_config_options():
     """Show all available configuration options with descriptions."""
-    console.print(Panel.fit("[bold cyan]HTML2MD Configuration Options[/bold cyan]", border_style="cyan"))
-    
+    console.print(
+        Panel.fit(
+            "[bold cyan]HTML2MD Configuration Options[/bold cyan]", border_style="cyan"
+        )
+    )
+
     # CLI Defaults Section
     console.print("\n[bold yellow]CLI Defaults[/bold yellow]")
     console.print("Configure default values for command-line options\n")
-    
+
     cli_options = {
         "convert": {
             "browser_cookies": ("bool", "Use cookies from browser automatically"),
             "no_cookies": ("bool", "Disable cookie loading by default"),
-            "browser": ("str", "Default browser for cookie extraction (chrome/firefox/edge/safari)"),
+            "browser": (
+                "str",
+                "Default browser for cookie extraction (chrome/firefox/edge/safari)",
+            ),
             "trim": ("bool", "Enable/disable content trimming"),
             "download_images": ("bool", "Download images from pages"),
             "images_dir": ("str", "Directory name for downloaded images"),
             "fancy": ("bool", "Enable fancy output with progress bars"),
-            "local": ("bool", "Treat sources as local files by default")
+            "local": ("bool", "Treat sources as local files by default"),
         },
         "batch": {
-            "hierarchical": ("bool", "Create hierarchical domain folders (com/example/www)"),
+            "hierarchical": (
+                "bool",
+                "Create hierarchical domain folders (com/example/www)",
+            ),
             "flatten": ("bool", "Output files directly to domain directories"),
             "flatten_all": ("bool", "Output all files to single directory"),
             "trim": ("bool", "Enable/disable content trimming"),
             "visualize": ("bool", "Show visual directory structure"),
-            "quiet": ("bool", "Reduce output verbosity")
+            "quiet": ("bool", "Reduce output verbosity"),
         },
         "crawl": {
             "hierarchical": ("bool", "Create hierarchical domain folders"),
             "flatten": ("bool", "Output files directly to domain directories"),
-            "follow": ("str", "Link following strategy (domain-only/host-only/subdomain/regex)"),
+            "follow": (
+                "str",
+                "Link following strategy (domain-only/host-only/subdomain/regex)",
+            ),
             "max_depth": ("int", "Maximum crawl depth"),
             "max_pages": ("int", "Maximum pages to crawl"),
             "delay": ("float", "Delay between requests in seconds (with ±30% jitter)"),
@@ -452,64 +499,76 @@ def show_config_options():
             "rate_limit": ("int", "Maximum requests per minute with circuit breaker"),
             "trim": ("bool", "Enable/disable content trimming"),
             "visualize": ("bool", "Show visual directory structure"),
-            "quiet": ("bool", "Reduce output verbosity")
-        }
+            "quiet": ("bool", "Reduce output verbosity"),
+        },
     }
-    
+
     for command, options in cli_options.items():
-        table = Table(title=f"{command.capitalize()} Command Options", title_style="bold blue")
+        table = Table(
+            title=f"{command.capitalize()} Command Options", title_style="bold blue"
+        )
         table.add_column("Option", style="cyan")
         table.add_column("Type", style="green")
         table.add_column("Description", style="white")
-        
+
         for option, (opt_type, description) in options.items():
             table.add_row(option, opt_type, description)
-        
+
         console.print(table)
         console.print()
-    
+
     # Domain Configuration Section
     console.print("[bold yellow]Domain-Specific Trimming[/bold yellow]")
     console.print("Configure content trimming rules per domain\n")
-    
+
     domain_table = Table(title="Domain Configuration Options")
     domain_table.add_column("Setting", style="cyan")
     domain_table.add_column("Description", style="white")
-    
+
     domain_table.add_row("footer_marker", "Text that marks where to trim content")
     domain_table.add_row("path_rules", "Path-specific trimming rules")
-    domain_table.add_row("path_rules.*.h1_occurrence", "Which h1 heading to keep (e.g., 2 = second h1)")
+    domain_table.add_row(
+        "path_rules.*.h1_occurrence", "Which h1 heading to keep (e.g., 2 = second h1)"
+    )
     domain_table.add_row("path_rules.*.footer_marker", "Path-specific footer marker")
-    
+
     console.print(domain_table)
     console.print()
-    
+
     # Browser Configuration Section
     console.print("[bold yellow]Browser Configuration[/bold yellow]")
     console.print("Configure browser cookie extraction settings\n")
-    
+
     browser_table = Table(title="Browser Options")
     browser_table.add_column("Setting", style="cyan")
     browser_table.add_column("Description", style="white")
-    
+
     browser_table.add_row("preferred", "Default browser (chrome/firefox/edge/safari)")
-    browser_table.add_row("custom_path.<browser>", "Custom path to browser cookie database")
-    
+    browser_table.add_row(
+        "custom_path.<browser>", "Custom path to browser cookie database"
+    )
+
     console.print(browser_table)
     console.print()
-    
+
     # Examples
     console.print("[bold yellow]Examples[/bold yellow]\n")
-    
+
     examples = [
-        ("Set browser cookies as default", "html2md config set-cli-default convert browser_cookies true"),
-        ("Enable hierarchical folders", "html2md config set-cli-default batch hierarchical true"),
+        (
+            "Set browser cookies as default",
+            "html2md config set-cli-default convert browser_cookies true",
+        ),
+        (
+            "Enable hierarchical folders",
+            "html2md config set-cli-default batch hierarchical true",
+        ),
         ("Set max crawl pages", "html2md config set-cli-default crawl max_pages 500"),
         ("Add domain trimming rule", "html2md config add-domain --domain example.com"),
         ("Set config value directly", "html2md config set browser.preferred firefox"),
         ("View current config", "html2md config show"),
     ]
-    
+
     for desc, cmd in examples:
         console.print(f"[bold blue]{desc}:[/bold blue]")
         console.print(f"  [dim]$[/dim] {cmd}\n")
@@ -547,13 +606,13 @@ def list_backups_command():
 
     for backup in backups:
         # Parse filename: config.20251029_143022.manual.json
-        parts = backup.stem.split('.')
+        parts = backup.stem.split(".")
         if len(parts) >= 3:
             timestamp = parts[1]
             reason = parts[2] if len(parts) > 2 else "unknown"
 
             # Format for display: YYYYMMDD_HHMMSS
-            if len(timestamp) >= 15 and '_' in timestamp:
+            if len(timestamp) >= 15 and "_" in timestamp:
                 date_part = timestamp[:8]  # YYYYMMDD
                 time_part = timestamp[9:]  # HHMMSS
 
@@ -573,8 +632,7 @@ def list_backups_command():
 @config_app.command(name="restore")
 def restore_config_command(
     backup_file: Optional[Path] = typer.Argument(
-        None,
-        help="Path to backup file (or omit to restore most recent)"
+        None, help="Path to backup file (or omit to restore most recent)"
     )
 ):
     """Restore configuration from a backup file."""
@@ -591,8 +649,7 @@ def restore_config_command(
 
     # Confirm restore
     if not Confirm.ask(
-        f"[yellow]⚠️  Restore config from {backup_file.name}?[/yellow]",
-        default=False
+        f"[yellow]⚠️  Restore config from {backup_file.name}?[/yellow]", default=False
     ):
         console.print("[yellow]Restore cancelled[/yellow]")
         return
@@ -604,8 +661,9 @@ def restore_config_command(
     if backup_manager.restore_backup(backup_file):
         console.print("[green]✓ Configuration restored successfully[/green]")
         if current_backup:
-            console.print(f"[dim]Previous config backed up to: {current_backup.name}[/dim]")
+            console.print(
+                f"[dim]Previous config backed up to: {current_backup.name}[/dim]"
+            )
     else:
         console.print("[red]Failed to restore backup[/red]")
         raise typer.Exit(1)
-
