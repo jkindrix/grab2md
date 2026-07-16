@@ -1,34 +1,31 @@
-# HTML2MD Requirements
-# Generated from pyproject.toml for pip users
-
-# Core dependencies
-beautifulsoup4>=4.12.0
-certifi>=2023.0.0
-charset-normalizer>=3.0.0
-idna>=3.4
-markdownify>=0.11.6
-requests>=2.31.0
-six>=1.16.0
-soupsieve>=2.5
-typing-extensions>=4.8.0
-urllib3>=2.0.0
-
-# Cookie handling
-browser-cookie3>=0.19.0
-jeepney>=0.8.0  # Linux keyring support
-lz4>=4.3.0
-pycryptodomex>=3.19.0
-pycryptodome>=3.20.0
-
-# Authentication
-python-json-logger>=2.0.0
-pyjwt>=2.8.0
-google-auth-oauthlib==1.2.1
-google-auth==2.38.0
-
-# CLI and UI
-typer[all]>=0.15.1
-rich>=13.7.0
-
-# Platform-specific
-pywin32>=306; sys_platform == 'win32'
+annotated-doc==0.0.4 ; python_version >= "3.11" and python_version < "4.0"
+beautifulsoup4==4.15.0 ; python_version >= "3.11" and python_version < "4.0"
+brotli==1.2.0 ; python_version >= "3.11" and python_version < "4.0"
+certifi==2025.4.26 ; python_version >= "3.11" and python_version < "4.0"
+cffi==2.1.0 ; python_version >= "3.11" and python_version < "4.0" and platform_python_implementation != "PyPy"
+charset-normalizer==3.4.1 ; python_version >= "3.11" and python_version < "4.0"
+colorama==0.4.6 ; python_version >= "3.11" and python_version < "4.0" and platform_system == "Windows"
+cryptography==49.0.0 ; python_version >= "3.11" and python_version < "4.0"
+google-auth-oauthlib==1.4.0 ; python_version >= "3.11" and python_version < "4.0"
+google-auth==2.56.0 ; python_version >= "3.11" and python_version < "4.0"
+idna==3.18 ; python_version >= "3.11" and python_version < "4.0"
+markdown-it-py==3.0.0 ; python_version >= "3.11" and python_version < "4.0"
+markdownify==1.2.3 ; python_version >= "3.11" and python_version < "4.0"
+mdurl==0.1.2 ; python_version >= "3.11" and python_version < "4.0"
+oauthlib==3.2.2 ; python_version >= "3.11" and python_version < "4.0"
+pyasn1-modules==0.4.2 ; python_version >= "3.11" and python_version < "4.0"
+pyasn1==0.6.4 ; python_version >= "3.11" and python_version < "4.0"
+pycparser==3.0 ; python_version >= "3.11" and python_version < "4.0" and platform_python_implementation != "PyPy" and implementation_name != "PyPy"
+pycryptodomex==3.22.0 ; python_version >= "3.11" and python_version < "4.0"
+pygments==2.20.0 ; python_version >= "3.11" and python_version < "4.0"
+python-json-logger==3.3.0 ; python_version >= "3.11" and python_version < "4.0"
+pywin32==306 ; python_version >= "3.11" and python_version < "4.0" and sys_platform == "win32"
+requests-oauthlib==2.0.0 ; python_version >= "3.11" and python_version < "4.0"
+requests==2.34.2 ; python_version >= "3.11" and python_version < "4.0"
+rich==13.9.4 ; python_version >= "3.11" and python_version < "4.0"
+shellingham==1.5.4 ; python_version >= "3.11" and python_version < "4.0"
+six==1.17.0 ; python_version >= "3.11" and python_version < "4.0"
+soupsieve==2.8.4 ; python_version >= "3.11" and python_version < "4.0"
+typer==0.27.0 ; python_version >= "3.11" and python_version < "4.0"
+typing-extensions==4.13.2 ; python_version >= "3.11" and python_version < "4.0"
+urllib3==2.7.0 ; python_version >= "3.11" and python_version < "4.0"
