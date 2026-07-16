@@ -20,6 +20,8 @@ pip-delete-this-directory.txt
 
 # Test artifacts
 .coverage
+coverage.json
+htmlcov/
 .tox/
 .nox/
 .pytest_cache/

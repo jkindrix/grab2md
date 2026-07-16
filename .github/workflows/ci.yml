@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  POETRY_VERSION: "1.8.3"
+
+jobs:
+  test:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install Poetry
+        run: python -m pip install "poetry==$POETRY_VERSION"
+      - name: Install locked dependencies
+        run: poetry install --with dev --sync
+      - name: Validate metadata and lock
+        run: poetry check
+      - name: Run tests with production coverage gate
+        run: poetry run pytest src/html2md/tests tests/config --cov=html2md --cov-report=term-missing:skip-covered
+
+  package:
+    name: Build and wheel smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install Poetry
+        run: python -m pip install "poetry==$POETRY_VERSION"
+      - name: Build distributions
+        run: poetry build
+      - name: Install and exercise the wheel
+        run: |
+          python -m venv "$RUNNER_TEMP/wheel-smoke"
+          "$RUNNER_TEMP/wheel-smoke/bin/python" -m pip install dist/*.whl
+          "$RUNNER_TEMP/wheel-smoke/bin/html2md" --help
+          "$RUNNER_TEMP/wheel-smoke/bin/python" -m html2md --help
+
+  quality-debt:
+    name: Quality debt report (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+      - name: Install Poetry
+        run: python -m pip install "poetry==$POETRY_VERSION"
+      - name: Install locked dependencies
+        run: poetry install --with dev --sync
+      - name: Ruff
+        run: poetry run ruff check src tests
+      - name: Black
+        if: always()
+        run: poetry run black --check src tests
+      - name: Mypy
+        if: always()
+        run: poetry run mypy src/html2md
+

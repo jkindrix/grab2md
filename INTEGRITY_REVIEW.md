@@ -43,7 +43,7 @@ Feature expansion is frozen while the project repairs and verifies its primary w
 - URL-derived output paths are not fully contained beneath the selected output root.
 - Debug logging can expose cookie and session-token values.
 - Several Chrome extension modes use APIs unavailable in Manifest V3 service workers or otherwise fail at runtime.
-- The project now carries its declared MIT grant; required third-party notices for vendored extension code remain a release blocker.
+- The project now carries its declared MIT grant and the required Turndown third-party notice.
 
 ## Test and quality status
 
@@ -75,14 +75,16 @@ Current remediation evidence for H2M-030 through H2M-032 supersedes those test-h
 - The previously failing state modules pass both alone and in the canonical suite: **22 passed**.
 - Converter, cookie-loader, request-handler, and trimmer modules now contain behavior and error-path tests; no core placeholder test remains empty.
 - Ten real subprocess tests cover local and URL conversion, batch, crawl, state listing/resume, gzip, redirects, HTTP 404/429/500 failures, robots denial, output traversal containment, and failure exit behavior. Signal interruption/resume subprocess coverage is maintained separately in the committed signal suite.
+- Production-only statement coverage is **61.08%** (4,753 statements; 1,850 missed), with an enforced 59% non-regression floor and a documented 75% stabilization target. Package-internal tests are excluded from the denominator.
+- CI definitions now run the locked suite and coverage gate on Python 3.11–3.13 and build/smoke-test the wheel. Ruff, Black, and mypy remain explicitly non-blocking debt reports pending H2M-052–054, so H2M-033 is not yet complete.
 - Chrome extension runtime coverage remains absent and is tracked by H2M-046.
 
-No coverage percentage is a release claim until it is produced by the documented production-package command in a clean, reproducible environment.
+Coverage evidence is reproducible through the documented production-package command; future claims must retain the same denominator or explicitly explain a change.
 
 ## Supported environment
 
 - Python 3.11 is the current verified development baseline.
-- Python 3.12 and 3.13 are intended compatibility targets, pending a required CI matrix.
+- Python 3.12 and 3.13 are CI matrix targets; they become supported claims only after the hosted matrix produces green evidence.
 - Poetry and the committed lockfile define the canonical development installation.
 
 ## Evidence and update policy

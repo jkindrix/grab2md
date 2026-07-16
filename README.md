@@ -104,7 +104,8 @@ poetry check
 poetry run pytest src/html2md/tests tests/config
 
 # Measure production-package coverage with the same suite
-poetry run pytest src/html2md/tests tests/config --cov=html2md --cov-report=term-missing
+poetry run coverage erase
+poetry run pytest src/html2md/tests tests/config --cov=html2md --cov-report=term-missing:skip-covered
 
 # Static quality baselines (currently expected to expose tracked remediation work)
 poetry run ruff check src tests
@@ -112,7 +113,9 @@ poetry run black --check src tests
 poetry run mypy src/html2md
 ```
 
-Record the commit, Python version, Poetry version, and exact command whenever publishing a result. A check is not considered green merely because unrelated files or failing suites were omitted. CI enforcement is tracked separately and has not yet been delivered.
+Record the commit, Python version, Poetry version, and exact command whenever publishing a result. A check is not considered green merely because unrelated files or failing suites were omitted. See [the coverage baseline](docs/coverage.md) for the denominator, current gaps, enforced floor, and planned target.
+
+CI runs the locked test and coverage suite on Python 3.11, 3.12, and 3.13, then builds and smoke-tests the wheel. Ruff, Black, and mypy are visible non-blocking debt reports until H2M-052–054 are resolved; they must become required before a stabilization release. Pre-push runs the same canonical test scope locally.
 
 ## Usage
 
