@@ -41,7 +41,7 @@ from html2md.config.loader import (
     save_config,
 )
 from html2md.cookies.session_manager import get_session, apply_browser_cookies
-from html2md.markdown.batch_processor import build_headers, process_markdown_links
+from html2md.markdown.batch_processor import process_markdown_links
 from html2md.markdown.converter import html_to_markdown, local_html_to_markdown
 from html2md.markdown.crawler import crawl_website
 from html2md.network.header_manager import HeaderConfig
@@ -271,7 +271,7 @@ def process_single_with_progress(
         header_config = HeaderConfig(
             use_enhanced_user_agent=enhanced_headers,
             contact_email=user_agent_contact if "@" in (user_agent_contact or "") else None,
-            contact_url=user_agent_contact if user_agent_contact and not "@" in user_agent_contact else None,
+            contact_url=user_agent_contact if user_agent_contact and "@" not in user_agent_contact else None,
             user_agent_name=header_settings.get("user_agent_name", "html2md"),
             user_agent_version=header_settings.get("user_agent_version", "1.0"),
             enable_compression=header_settings.get("enable_compression", True),
@@ -484,7 +484,7 @@ def process_single_quiet(
         header_config = HeaderConfig(
             use_enhanced_user_agent=enhanced_headers,
             contact_email=user_agent_contact if "@" in (user_agent_contact or "") else None,
-            contact_url=user_agent_contact if user_agent_contact and not "@" in user_agent_contact else None,
+            contact_url=user_agent_contact if user_agent_contact and "@" not in user_agent_contact else None,
             user_agent_name=header_settings.get("user_agent_name", "html2md"),
             user_agent_version=header_settings.get("user_agent_version", "1.0"),
             enable_compression=header_settings.get("enable_compression", True),
@@ -1333,7 +1333,7 @@ def crawl_command(
                 header_config = HeaderConfig(
                     use_enhanced_user_agent=enhanced_headers,
                     contact_email=user_agent_contact if "@" in (user_agent_contact or "") else None,
-                    contact_url=user_agent_contact if user_agent_contact and not "@" in user_agent_contact else None,
+                    contact_url=user_agent_contact if user_agent_contact and "@" not in user_agent_contact else None,
                     user_agent_name=header_settings.get("user_agent_name", "html2md"),
                     user_agent_version=header_settings.get("user_agent_version", "1.0"),
                     enable_compression=header_settings.get("enable_compression", True),
@@ -1374,31 +1374,30 @@ def crawl_command(
                     polite_delay_multiplier=concurrent_settings.get("polite_delay_multiplier", 2.0)
                 )
                 
-                # Check for domain-specific limits
-                domain_limits = config.get("domain_limits", {})
-                # This could be passed to the crawler for domain-specific configuration
-                
-                # Crawl the website
-                result = crawl_website(
-                    start_url,
-                    output_dir,
-                    follow_option=follow_option,
-                    max_depth=max_depth,
-                    max_pages=max_pages,
-                    delay=delay,
-                    respect_robots=respect_robots,
-                    rate_limit=rate_limit,
-                    header_config=header_config,
-                    concurrent_config=concurrent_config,
-                    polite_mode=polite,
-                    max_concurrent=max_concurrent,
-                    show_progress=show_progress,
-                    trim=trim,
-                    progress_callback=progress_callback,
-                    flatten_output=flatten_output,
-                    hierarchical_domains=hierarchical,
-                    verify_ssl=not insecure,
-                )
+                # Signal handling is explicit and scoped to active crawl work.
+                state_manager = StateManager()
+                with state_manager.signal_handling():
+                    result = crawl_website(
+                        start_url,
+                        output_dir,
+                        follow_option=follow_option,
+                        max_depth=max_depth,
+                        max_pages=max_pages,
+                        delay=delay,
+                        respect_robots=respect_robots,
+                        rate_limit=rate_limit,
+                        header_config=header_config,
+                        concurrent_config=concurrent_config,
+                        polite_mode=polite,
+                        max_concurrent=max_concurrent,
+                        show_progress=show_progress,
+                        trim=trim,
+                        progress_callback=progress_callback,
+                        flatten_output=flatten_output,
+                        hierarchical_domains=hierarchical,
+                        verify_ssl=not insecure,
+                        state_manager=state_manager,
+                    )
 
                 if not result.success:
                     failed_total += 1
@@ -1646,13 +1645,14 @@ def resume_crawl(
         ):
             resume_options.pop(explicit_option, None)
 
-        result = crawl_website(
-            start_url=crawl_state.start_url,
-            output_dir=crawl_state.output_dir,
-            state_manager=state_manager,
-            resume_crawl_id=crawl_id,
-            **resume_options,
-        )
+        with state_manager.signal_handling():
+            result = crawl_website(
+                start_url=crawl_state.start_url,
+                output_dir=crawl_state.output_dir,
+                state_manager=state_manager,
+                resume_crawl_id=crawl_id,
+                **resume_options,
+            )
 
         if not result.success:
             console.print(f"[red]Crawl resume failed: {result.error}[/red]")
@@ -2085,13 +2085,13 @@ def set_cli_default(
         elif value.lower() in ["false", "no", "0", "off"]:
             parsed_value = False
         else:
-            console.print(f"[bold red]Error:[/bold red] Boolean value expected. Use 'true' or 'false'.")
+            console.print("[bold red]Error:[/bold red] Boolean value expected. Use 'true' or 'false'.")
             return
     elif isinstance(current_value, int):
         try:
             parsed_value = int(value)
         except ValueError:
-            console.print(f"[bold red]Error:[/bold red] Integer value expected.")
+            console.print("[bold red]Error:[/bold red] Integer value expected.")
             return
     else:
         parsed_value = value

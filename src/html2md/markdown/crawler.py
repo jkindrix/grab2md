@@ -1,6 +1,5 @@
 import logging
 import os
-import re
 import time
 import random
 from collections import defaultdict, deque
@@ -9,6 +8,7 @@ from typing import Dict, Optional
 
 from html2md.cookies.session_manager import get_session
 from html2md.markdown.converter import html_content_to_markdown
+from html2md.markdown.link_rewriter import rewrite_links
 from html2md.markdown.batch_processor import create_directory_structure
 from html2md.network.request_handler import fetch_html
 from html2md.network.robots_parser import RobotsChecker
@@ -39,30 +39,6 @@ class CrawlResult:
     error: Optional[str] = None
 
 
-
-
-def rewrite_links(content, url_mapping, base_output_dir):
-    """
-    Rewrite links in markdown content to point to local files.
-
-    Args:
-        content (str): Markdown content to process
-        url_mapping (dict): Mapping from URLs to local file paths
-        base_output_dir (str): Base output directory
-
-    Returns:
-        str: Markdown content with rewritten links
-    """
-    for url, local_path in url_mapping.items():
-        # Create relative path from base_output_dir
-        relative_path = os.path.relpath(local_path, base_output_dir)
-
-        # Replace the URL with the relative path in markdown links
-        pattern = rf"\[(.*?)\]\({re.escape(url)}\)"
-        replacement = rf"[\1]({relative_path})"
-        content = re.sub(pattern, replacement, content)
-
-    return content
 
 
 def crawl_website(
@@ -203,6 +179,8 @@ def crawl_website(
             return False
         queue.append((url, depth))
         queued_urls.add(url)
+        if enable_checkpoints:
+            state_manager.current_state.urls_queued = list(queue)
         return True
 
     # Now update progress for resume case
@@ -280,14 +258,17 @@ def crawl_website(
         if url in visited_urls:
             continue
 
-        # Update state manager queue
+        # Keep the active URL in persisted state until it reaches a terminal
+        # outcome so a signal checkpoint can resume it.
         if enable_checkpoints:
-            state_manager.current_state.urls_queued = list(queue)
+            state_manager.current_state.urls_queued = [(url, depth), *queue]
         
         # Check robots.txt for this URL
         if robots_checker and not robots_checker.can_fetch(url):
             update_progress(f"URL disallowed by robots.txt: {url}", url, "blocked")
             visited_urls.add(url)
+            if enable_checkpoints:
+                state_manager.current_state.urls_queued = list(queue)
             continue
 
         # Process the URL
@@ -404,6 +385,7 @@ def crawl_website(
                 update_progress(f"Failed to fetch content from {url}: {error_message}", url, "failed")
                 failed_urls_count += 1
                 if enable_checkpoints:
+                    state_manager.current_state.urls_queued = list(queue)
                     state_manager.update_progress(
                         url, False, error_message=error_message
                     )
@@ -421,9 +403,6 @@ def crawl_website(
             safe_filename = generate_safe_filename(url)
             output_file = os.path.join(url_dir, safe_filename)
 
-            # Save mapping
-            url_to_file_mapping[url] = output_file
-
             # Convert HTML to markdown
             markdown_content = html_content_to_markdown(
                 html_content, fetch_result.final_url, session=session, trim=trim,
@@ -436,11 +415,14 @@ def crawl_website(
                 with open(output_file, "w", encoding="utf-8") as f:
                     f.write(markdown_content)
 
+                # Only durable output files are eligible for local rewriting.
+                url_to_file_mapping[url] = output_file
                 update_progress(f"Saved markdown to: {output_file}", url, "saved")
                 processed_urls_count += 1
                 
                 # Update state manager with successful processing
                 if enable_checkpoints:
+                    state_manager.current_state.urls_queued = list(queue)
                     state_manager.update_progress(url, True, output_file)
                 
                 # Apply delay with jitter if configured
@@ -488,6 +470,7 @@ def crawl_website(
                 update_progress(f"Failed to convert HTML from {url}", url, "failed")
                 failed_urls_count += 1
                 if enable_checkpoints:
+                    state_manager.current_state.urls_queued = list(queue)
                     state_manager.update_progress(
                         url, False, error_message="Failed to convert HTML"
                     )
@@ -506,6 +489,7 @@ def crawl_website(
             
             # Update state manager with failed processing
             if enable_checkpoints:
+                state_manager.current_state.urls_queued = list(queue)
                 state_manager.update_progress(url, False, error_message=str(e))
 
     # Rewrite links in all files to point to local files
@@ -526,7 +510,7 @@ def crawl_website(
 
                 # Rewrite links
                 updated_content = rewrite_links(
-                    content, url_to_file_mapping, output_dir
+                    content, url_to_file_mapping, output_file
                 )
 
                 # Save updated content

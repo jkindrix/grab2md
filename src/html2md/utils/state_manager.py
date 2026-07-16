@@ -9,6 +9,7 @@ import json
 import signal
 import time
 import uuid
+from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from pathlib import Path
@@ -159,7 +160,6 @@ class StateManager:
             self.state_dir = Path(state_dir)
         
         self.state_dir.mkdir(parents=True, exist_ok=True)
-        self._setup_signal_handlers()
         
         # Checkpoint configuration
         self.checkpoint_interval = 300  # 5 minutes
@@ -170,17 +170,73 @@ class StateManager:
         # Current state
         self.current_state: Optional[CrawlState] = None
         self._checkpoint_callback: Optional[Callable] = None
-    
-    def _setup_signal_handlers(self):
-        """Set up signal handlers for graceful shutdown."""
-        def signal_handler(signum, frame):
-            logger.info(f"Received signal {signum}, creating checkpoint...")
+        self._previous_signal_handlers: Dict[int, Any] = {}
+        self._signal_checkpoint_saved = False
+
+    def install_signal_handlers(self) -> bool:
+        """Install temporary crawl handlers and retain the prior handlers."""
+        if self._previous_signal_handlers:
+            return False
+
+        previous = {
+            signum: signal.getsignal(signum)
+            for signum in (signal.SIGINT, signal.SIGTERM)
+        }
+        try:
+            for signum in previous:
+                signal.signal(signum, self._handle_signal)
+        except ValueError:
+            logger.warning("Signal handlers can only be installed from the main thread")
+            for signum, handler in previous.items():
+                try:
+                    signal.signal(signum, handler)
+                except ValueError:
+                    pass
+            return False
+
+        self._previous_signal_handlers = previous
+        self._signal_checkpoint_saved = False
+        return True
+
+    def restore_signal_handlers(self) -> None:
+        """Restore every handler replaced by :meth:`install_signal_handlers`."""
+        previous = self._previous_signal_handlers
+        self._previous_signal_handlers = {}
+        for signum, handler in previous.items():
+            signal.signal(signum, handler)
+
+    def _handle_signal(self, signum, frame) -> None:
+        """Checkpoint once, restore prior handlers, then preserve signal semantics."""
+        previous = self._previous_signal_handlers.get(signum, signal.SIG_DFL)
+        if not self._signal_checkpoint_saved:
+            self._signal_checkpoint_saved = True
+            logger.info("Received signal %s, creating checkpoint...", signum)
             if self.current_state:
-                self.save_checkpoint("signal", f"Interrupted by signal {signum}")
-        
-        # Handle common interruption signals
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+                try:
+                    self.save_checkpoint("signal", f"Interrupted by signal {signum}")
+                except Exception:
+                    logger.exception("Failed to save signal checkpoint")
+
+        self.restore_signal_handlers()
+        if previous == signal.SIG_IGN:
+            return
+        if callable(previous):
+            previous(signum, frame)
+            return
+
+        # The prior disposition was the operating-system default. Re-deliver
+        # the signal after restoring it so the process exits conventionally.
+        signal.raise_signal(signum)
+
+    @contextmanager
+    def signal_handling(self):
+        """Temporarily checkpoint and delegate SIGINT/SIGTERM during a crawl."""
+        installed = self.install_signal_handlers()
+        try:
+            yield self
+        finally:
+            if installed and self._previous_signal_handlers:
+                self.restore_signal_handlers()
     
     def create_new_state(self, start_url: str, output_dir: str, 
                         config: Dict[str, Any]) -> CrawlState:

@@ -74,7 +74,7 @@ class TestBatchProcessor(unittest.TestCase):
             "https://example.org/page2": "/output/example.org/page2.md",
         }
 
-        base_output_dir = "/output"
+        source_file = "/output/source.md"
 
         expected_content = """
         # Test Content
@@ -83,7 +83,7 @@ class TestBatchProcessor(unittest.TestCase):
         [Link 2](example.org/page2.md)
         """
 
-        result = rewrite_links(content, url_mapping, base_output_dir)
+        result = rewrite_links(content, url_mapping, source_file)
         self.assertEqual(result, expected_content)
 
 

@@ -1,10 +1,10 @@
 import logging
 import os
-import re
 from urllib.parse import urlparse
 
 from html2md.cookies.session_manager import get_session
 from html2md.markdown.converter import html_to_markdown
+from html2md.markdown.link_rewriter import rewrite_links
 from html2md.utils.parser import generate_safe_filename, get_urls_from_file
 
 # Setup logger
@@ -107,30 +107,6 @@ def create_directory_structure(output_dir, url, flatten_domain=False, flatten_al
     return domain_dir
 
 
-def rewrite_links(content, url_mapping, base_output_dir):
-    """
-    Rewrite links in markdown content to point to local files.
-
-    Args:
-        content (str): Markdown content to process
-        url_mapping (dict): Mapping from URLs to local file paths
-        base_output_dir (str): Base output directory
-
-    Returns:
-        str: Markdown content with rewritten links
-    """
-    for url, local_path in url_mapping.items():
-        # Create relative path from base_output_dir
-        relative_path = os.path.relpath(local_path, base_output_dir)
-
-        # Replace the URL with the relative path in markdown links
-        pattern = rf"\[(.*?)\]\({re.escape(url)}\)"
-        replacement = rf"[\1]({relative_path})"
-        content = re.sub(pattern, replacement, content)
-
-    return content
-
-
 def process_markdown_links(
     source_files, output_dir, trim=True, progress_callback=None, flatten_output=False,
     flatten_all=False, hierarchical_domains=False, download_images=False, images_dir="images",
@@ -220,9 +196,6 @@ def process_markdown_links(
             safe_filename = generate_safe_filename(url)
             output_file = os.path.join(url_dir, safe_filename)
 
-            # Save mapping
-            url_to_file_mapping[url] = output_file
-
             try:
                 # Create session for the URL
                 update_progress(f"Fetching content from {url}", url, "fetching")
@@ -241,6 +214,8 @@ def process_markdown_links(
                     with open(output_file, "w", encoding="utf-8") as f:
                         f.write(markdown_content)
 
+                    # Only durable output files are eligible for local rewriting.
+                    url_to_file_mapping[url] = output_file
                     update_progress(f"Saved markdown to: {output_file}", url, "saved")
                     processed_urls_count += 1
                 else:
@@ -265,7 +240,7 @@ def process_markdown_links(
                 content = f.read()
 
             # Rewrite links
-            updated_content = rewrite_links(content, url_to_file_mapping, output_dir)
+            updated_content = rewrite_links(content, url_to_file_mapping, output_file)
 
             # Save updated content
             with open(output_file, "w", encoding="utf-8") as f:

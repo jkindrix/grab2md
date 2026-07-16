@@ -283,24 +283,10 @@ class TestStateIntegration:
         assert recovered_state.crawl_id == crawl_state.crawl_id
 
     def test_signal_handling(self, temp_dirs):
-        """Test signal handling for graceful interruption."""
+        """Signal lifecycle is explicit rather than a constructor side effect."""
         state_dir, output_dir = temp_dirs
 
-        state_manager = StateManager(state_dir=state_dir)
-        state_manager.create_new_state(
-            start_url="https://example.com",
-            output_dir=str(output_dir),
-            config={}
-        )
+        with patch("html2md.utils.state_manager.signal.signal") as set_handler:
+            StateManager(state_dir=state_dir)
 
-        # Simulate signal handling
-        import signal
-        import os
-
-        # This should trigger the signal handler
-        # (In real usage, this would happen during crawling)
-        os.kill(os.getpid(), signal.SIGTERM)
-
-        # Note: The signal handler should have created a checkpoint
-        # But since we're in a test, the handler might not execute
-        # In a real scenario, this would create a "signal" checkpoint
+        set_handler.assert_not_called()
