@@ -364,16 +364,16 @@
 **Items Delayed**: TBD
 
 #### What Went Well
-- 
+-
 
 #### What Could Be Improved
-- 
+-
 
 #### Key Learnings
-- 
+-
 
 #### Action Items for Next Week
-- 
+-
 
 ---
 
@@ -423,7 +423,7 @@
 ### 2025-01-15: State Storage Format
 **Decision**: Use JSON for state storage
 **Alternatives Considered**: SQLite, MessagePack, Pickle
-**Rationale**: 
+**Rationale**:
 - Human readable for debugging
 - No additional dependencies
 - Easy to implement migrations

@@ -38,7 +38,7 @@ html2md crawl https://example.com --output-dir docs --download-images
    - `<img>` tags with srcset for responsive images
    - CSS background-image properties
 
-2. **Smart File Naming**: 
+2. **Smart File Naming**:
    - Generates safe filenames from URLs
    - Handles naming conflicts automatically
    - Preserves file extensions when possible
