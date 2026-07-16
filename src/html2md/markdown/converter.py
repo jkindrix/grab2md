@@ -8,7 +8,6 @@ from html2md.cookies.session_manager import get_session, disable_ssl_verificatio
 from html2md.markdown.trimmer import trim_markdown, trim_markdown_local
 from html2md.utils.formatter import format_markdown
 from html2md.network.chatgpt_handler import is_chatgpt_url, get_conversation_html
-from html2md.network.openai_api_handler import get_conversation_oauth
 from html2md.network.image_downloader import ImageDownloader
 from html2md.utils.redaction import redact_mapping
 
@@ -19,7 +18,7 @@ logger = logging.getLogger("html2md")
 # This ensures consistent header handling across the application
 
 
-def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=None, oauth_password=None,
+def html_to_markdown(url, session=None, headers=None, trim=False,
                     download_images=False, output_dir=None, images_dir="images", verify_ssl=True):
     """
     Fetch HTML and convert to Markdown.
@@ -29,8 +28,6 @@ def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=No
         session (requests.Session, optional): Session object for HTTP requests.
         headers (dict, optional): Custom headers for the HTTP request.
         trim (bool, optional): Whether to apply trimming rules to the resulting markdown.
-        oauth_email (str, optional): OAuth email for ChatGPT authentication.
-        oauth_password (str, optional): OAuth password for ChatGPT authentication.
         download_images (bool, optional): Whether to download images from the page.
         output_dir (Path, optional): Output directory for saving images.
         images_dir (str, optional): Subdirectory name for images (default: "images").
@@ -48,20 +45,7 @@ def html_to_markdown(url, session=None, headers=None, trim=False, oauth_email=No
     # Special handling for ChatGPT URLs
     if is_chatgpt_url(url):
         logger.info(f"Detected ChatGPT URL: {url}")
-        
-        # Try OAuth API approach first if credentials are provided
-        if oauth_email and oauth_password:
-            logger.info("Attempting to use OAuth authentication for ChatGPT")
-            cookies_dict = session.cookies.get_dict() if session else {}
-            html_content = get_conversation_oauth(url, oauth_email, oauth_password, cookies_dict)
-            if html_content:
-                logger.info(f"Successfully retrieved ChatGPT conversation via OAuth API ({len(html_content)} bytes)")
-            else:
-                logger.warning("OAuth API retrieval failed, falling back to cookie-based methods")
-                html_content = get_conversation_html(url, session, headers)
-        else:
-            # If no OAuth credentials, use traditional cookie-based approach
-            html_content = get_conversation_html(url, session, headers)
+        html_content = get_conversation_html(url, session, headers)
             
         if not html_content:
             logger.error(f"Failed to retrieve ChatGPT conversation content from {url}")
