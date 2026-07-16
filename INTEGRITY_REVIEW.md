@@ -61,13 +61,21 @@ The following baseline was produced from a clean prospective tree based on commi
 - **Black:** **34 files** would be reformatted; 18 would remain unchanged.
 - **Mypy:** **37 errors in 9 files** across 46 checked source files.
 
-Additional suite observations:
+Historical baseline observations at that commit:
 
 - The recovered configuration suite has **58 passing tests**.
 - The recovered state suites have **18 passing and 2 failing tests**. One failure confirms the crawl-resume production defect; the other exposes state import/listing isolation behavior.
 - The broader committed suite is not green.
 - Meaningful CLI and Chrome extension end-to-end coverage is absent.
 - Four legacy core test modules are empty and require replacement or removal.
+
+Current remediation evidence for H2M-030 through H2M-032 supersedes those test-health observations:
+
+- `poetry run pytest src/html2md/tests tests/config` passes with **311 passed, 11 skipped, and 26 warnings**. The skips and all project-owned warnings are isolated to the dead async stack tracked by H2M-047; one dependency deprecation warning remains external.
+- The previously failing state modules pass both alone and in the canonical suite: **22 passed**.
+- Converter, cookie-loader, request-handler, and trimmer modules now contain behavior and error-path tests; no core placeholder test remains empty.
+- Ten real subprocess tests cover local and URL conversion, batch, crawl, state listing/resume, gzip, redirects, HTTP 404/429/500 failures, robots denial, output traversal containment, and failure exit behavior. Signal interruption/resume subprocess coverage is maintained separately in the committed signal suite.
+- Chrome extension runtime coverage remains absent and is tracked by H2M-046.
 
 No coverage percentage is a release claim until it is produced by the documented production-package command in a clean, reproducible environment.
 

@@ -693,11 +693,10 @@ def load_cookies_from_json(json_file, url=None):
                         clean_domain = cookie_domain.lstrip('.')
                         if domain == clean_domain or domain.endswith('.' + clean_domain):
                             include_cookie = True
-                    elif cookie_domain and domain == cookie_domain:
-                        # Exact domain match
-                        include_cookie = True
-                    elif cookie_domain and domain.endswith(cookie_domain):
-                        # Domain ending match
+                    elif cookie_domain and (
+                        domain == cookie_domain or domain.endswith("." + cookie_domain)
+                    ):
+                        # Exact host or a real subdomain boundary
                         include_cookie = True
                     
                     if include_cookie:

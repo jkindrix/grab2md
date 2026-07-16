@@ -1,0 +1,234 @@
+"""Black-box CLI tests across process, HTTP, filesystem, and state boundaries."""
+
+import gzip
+import os
+import subprocess
+import sys
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+from urllib.parse import urlsplit
+
+import pytest
+
+
+class CliContractHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        path = urlsplit(self.path).path
+        if path == "/robots.txt":
+            self._send(200, b"User-agent: *\nDisallow: /blocked\n", "text/plain")
+        elif path == "/redirect":
+            self.send_response(302)
+            self.send_header("Location", "/ok")
+            self.end_headers()
+        elif path == "/gzip":
+            body = gzip.compress(b"<html><h1>Compressed</h1><p>decoded body</p></html>")
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        elif path == "/not-found":
+            self._send(404, b"missing")
+        elif path == "/limited":
+            self.send_response(429)
+            self.send_header("Retry-After", "0")
+            self.end_headers()
+        elif path == "/server-error":
+            self._send(500, b"server error")
+        elif path in {"/ok", "/blocked"} or path.endswith("/escape"):
+            body = (
+                f"<html><h1>Page {path}</h1><p>body</p>"
+                '<a href="/second">second</a></html>'
+            ).encode()
+            self._send(200, body)
+        elif path == "/second":
+            self._send(200, b"<html><h1>Second</h1><p>body</p></html>")
+        else:
+            self._send(404, b"missing")
+
+    def _send(self, status, body, content_type="text/html; charset=utf-8"):
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *_args):
+        return
+
+
+@pytest.fixture(scope="module")
+def cli_server():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), CliContractHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def run_cli(tmp_path: Path, *arguments: str, timeout: int = 30):
+    home = tmp_path / "home"
+    config = home / ".config" / "html2md" / "config.json"
+    env = os.environ.copy()
+    env.update(
+        {
+            "HOME": str(home),
+            "XDG_CONFIG_HOME": str(home / ".config"),
+            "HTML2MD_CONFIG_PATH": str(config),
+            "PYTHONPATH": str(Path(__file__).parents[3] / "src"),
+            "NO_COLOR": "1",
+        }
+    )
+    return subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from html2md.cli.cli import entry_point; entry_point()",
+            *map(str, arguments),
+        ],
+        cwd=tmp_path,
+        env=env,
+        text=True,
+        capture_output=True,
+        timeout=timeout,
+        check=False,
+    )
+
+
+def test_local_conversion_subprocess_writes_markdown(tmp_path):
+    source = tmp_path / "source.html"
+    output = tmp_path / "result.md"
+    source.write_text("<h1>Local page</h1><p>converted body</p>", encoding="utf-8")
+
+    result = run_cli(
+        tmp_path, "convert", source, "--local", "--no-trim", "--output", output
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "# Local page" in output.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("path", "heading"), [("/ok", "Page /ok"), ("/redirect", "Page /ok"), ("/gzip", "Compressed")]
+)
+def test_url_conversion_handles_plain_redirected_and_compressed_responses(
+    tmp_path, cli_server, path, heading
+):
+    output = tmp_path / f"{path.strip('/')}.md"
+
+    result = run_cli(
+        tmp_path,
+        "convert",
+        f"{cli_server}{path}",
+        "--no-trim",
+        "--output",
+        output,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert f"# {heading}" in output.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize("path", ["/not-found", "/limited", "/server-error"])
+def test_url_http_failures_exit_nonzero_without_output(tmp_path, cli_server, path):
+    output = tmp_path / "failure.md"
+
+    result = run_cli(
+        tmp_path,
+        "convert",
+        f"{cli_server}{path}",
+        "--no-trim",
+        "--output",
+        output,
+    )
+
+    assert result.returncode == 1
+    assert not output.exists()
+    assert "Unable to retrieve content" in result.stderr
+
+
+def test_batch_subprocess_fetches_and_writes_url(tmp_path, cli_server):
+    source = tmp_path / "links.md"
+    output_dir = tmp_path / "batch-output"
+    source.write_text(f"- [fixture]({cli_server}/ok)\n", encoding="utf-8")
+
+    result = run_cli(
+        tmp_path,
+        "batch",
+        source,
+        "--output-dir",
+        output_dir,
+        "--no-trim",
+        "--quiet",
+    )
+
+    assert result.returncode == 0, result.stderr
+    markdown_files = list(output_dir.rglob("*.md"))
+    assert markdown_files
+    assert any("# Page /ok" in path.read_text(encoding="utf-8") for path in markdown_files)
+
+
+def test_crawl_state_resume_and_traversal_containment_in_subprocess(tmp_path, cli_server):
+    output_dir = tmp_path / "crawl-output"
+    url = f"{cli_server}/docs/%2e%2e/escape"
+
+    crawl = run_cli(
+        tmp_path,
+        "crawl",
+        url,
+        "--output-dir",
+        output_dir,
+        "--max-depth",
+        "0",
+        "--max-pages",
+        "1",
+        "--ignore-robots",
+        "--no-trim",
+        "--quiet",
+        "--no-progress",
+    )
+
+    assert crawl.returncode == 0, f"stdout:\n{crawl.stdout}\nstderr:\n{crawl.stderr}"
+    assert "Website crawling complete" in crawl.stdout
+    outputs = list(output_dir.rglob("*.md"))
+    assert outputs
+    assert all(path.resolve().is_relative_to(output_dir.resolve()) for path in outputs)
+    assert not (tmp_path / "escape.md").exists()
+
+    state_files = list((tmp_path / "home" / ".html2md" / "states").glob("*.json"))
+    assert len(state_files) == 1
+    crawl_id = state_files[0].stem
+
+    listed = run_cli(tmp_path, "state", "list")
+    assert listed.returncode == 0
+    assert crawl_id[:8] in listed.stdout
+
+    resumed = run_cli(tmp_path, "state", "resume", crawl_id)
+    assert resumed.returncode == 0, resumed.stderr
+    assert "resumed successfully" in resumed.stdout
+
+
+def test_robots_denial_is_a_nonzero_crawl_failure(tmp_path, cli_server):
+    output_dir = tmp_path / "blocked-output"
+
+    result = run_cli(
+        tmp_path,
+        "crawl",
+        f"{cli_server}/blocked",
+        "--output-dir",
+        output_dir,
+        "--max-pages",
+        "1",
+        "--quiet",
+        "--no-progress",
+    )
+
+    assert result.returncode == 1
+    assert "robots.txt" in result.stdout
+    assert "Website crawling complete" not in result.stdout
