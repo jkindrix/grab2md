@@ -69,8 +69,8 @@ test_debug/
 test_debug2/
 
 # Development test files
-test_*.py
-test_*.sh
+/test_*.py
+/test_*.sh
 verify_*.py
 src/test_*.py
 src/test_*.sh
