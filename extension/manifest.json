@@ -21,36 +21,6 @@
     "storage",
     "downloads",
     "scripting",
-    "clipboardWrite",
-    "contextMenus"
-  ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
-  "background": {
-    "service_worker": "background.js",
-    "type": "module"
-  },
-  "web_accessible_resources": [
-    {
-      "resources": ["turndown.js", "chatgpt-turndown.js", "chatgpt-cleaner.js", "transcript-converter.js", "content-viewer.html"],
-      "matches": ["<all_urls>"]
-    }
-  ],
-  "commands": {
-    "_execute_action": {
-      "suggested_key": {
-        "default": "Ctrl+Shift+M",
-        "mac": "Command+Shift+M"
-      },
-      "description": "Convert current page to Markdown"
-    },
-    "convert_selection": {
-      "suggested_key": {
-        "default": "Alt+M",
-        "mac": "Alt+M"
-      },
-      "description": "Convert selected text to Markdown"
-    }
-  }
+    "clipboardWrite"
+  ]
 }

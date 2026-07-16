@@ -139,14 +139,6 @@
           </div>
         </div>
 
-        <div class="setting-group">
-          <h3>Integration</h3>
-          <div class="setting-item">
-            <label for="cli-path">CLI Tool Path (optional):</label>
-            <input type="text" id="cli-path" placeholder="/usr/local/bin/html2md">
-          </div>
-          <p class="help-text">If you have the html2md CLI tool installed, you can integrate with it for enhanced conversion options.</p>
-        </div>
 
         <div class="action-buttons">
           <button id="save-settings" class="primary-btn">Save Settings</button>
@@ -160,88 +152,9 @@
       <div id="spinner" class="spinner" style="display: none;"></div>
     </div>
 
-    <footer>
-      <div class="shortcuts">
-        <span title="Keyboard shortcut">⌨️ Ctrl+Shift+M</span>
-      </div>
-      <a href="#" id="cli-link" title="Download CLI Tool">CLI Tool</a>
-    </footer>
   </div>
 
-  <div id="settings-modal" class="modal">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h2>Advanced Settings</h2>
-        <span class="close">&times;</span>
-      </div>
-      <div class="modal-body">
-        <div class="setting-group">
-          <h3>Markdown Options</h3>
-          <div class="setting-item">
-            <label for="heading-style">Heading Style:</label>
-            <select id="heading-style">
-              <option value="atx"># Heading (ATX)</option>
-              <option value="setext">Heading\n======= (Setext)</option>
-            </select>
-          </div>
-          <div class="setting-item">
-            <label for="link-style">Link Style:</label>
-            <select id="link-style">
-              <option value="inline">[text](url)</option>
-              <option value="reference">[text][id]</option>
-            </select>
-          </div>
-          <div class="setting-item">
-            <label for="bullet-marker">List Marker:</label>
-            <select id="bullet-marker">
-              <option value="-">- (dash)</option>
-              <option value="*">* (asterisk)</option>
-              <option value="+">+ (plus)</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="setting-group">
-          <h3>Content Processing</h3>
-          <div class="setting-item checkbox-item">
-            <input type="checkbox" id="preserve-images" checked>
-            <label for="preserve-images">Include Images</label>
-          </div>
-          <div class="setting-item checkbox-item">
-            <input type="checkbox" id="include-tables" checked>
-            <label for="include-tables">Format Tables</label>
-          </div>
-          <div class="setting-item checkbox-item">
-            <input type="checkbox" id="code-blocks" checked>
-            <label for="code-blocks">Format Code Blocks</label>
-          </div>
-          <div class="setting-item checkbox-item">
-            <input type="checkbox" id="inline-links" checked>
-            <label for="inline-links">Keep Links Inline</label>
-          </div>
-          <div class="setting-item checkbox-item">
-            <input type="checkbox" id="enable-chatgpt-mode" checked>
-            <label for="enable-chatgpt-mode">Enhanced ChatGPT Mode</label>
-            <div class="setting-help">Improved handling for ChatGPT conversations</div>
-          </div>
-        </div>
-
-        <div class="setting-group">
-          <h3>Integration</h3>
-          <div class="setting-item">
-            <label for="cli-path">CLI Tool Path (optional):</label>
-            <input type="text" id="cli-path" placeholder="/usr/local/bin/html2md">
-          </div>
-          <p class="help-text">If you have the html2md CLI tool installed, you can integrate with it for enhanced conversion options.</p>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button id="save-settings" class="primary-btn">Save Settings</button>
-        <button id="reset-defaults" class="secondary-btn">Reset to Defaults</button>
-      </div>
-    </div>
-  </div>
-
+  <script src="logger.js"></script>
   <script src="turndown.js"></script>
   <script src="chatgpt-turndown.js"></script>
   <script src="chatgpt-cleaner.js"></script>

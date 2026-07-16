@@ -4,7 +4,7 @@ A browser extension for quickly converting web content to Markdown.
 
 ## Stabilization status
 
-The supported alpha surface is intentionally limited to converting the active tab as a full page, selection, or main article, with popup preview, clipboard copy, or download output. Direct URL capture, batch URL conversion, and element-selection modes are hidden and reject old messages explicitly until browser-level tests support them. The Node regression suite is not a substitute for the Chromium coverage tracked for the remaining extension work.
+The supported alpha surface is intentionally limited to converting the active tab as a full page, selection, or main article, with popup preview, clipboard copy, or download output. Direct URL capture, batch URL conversion, and element-selection modes and handlers have been removed.
 
 ## Features
 
@@ -13,10 +13,7 @@ The supported alpha surface is intentionally limited to converting the active ta
 - **Customizable Output**: Control how your Markdown is formatted with advanced settings
 - **Smart Content Trimming**: Automatically removes navigation, sidebars, and other non-content elements
 - **Multiple Output Options**: View directly in the extension, copy to clipboard, or download as a file
-- **Keyboard Shortcuts**: Quick access with customizable keyboard shortcuts
-- **Context Menu Integration**: Right-click to convert content
 - **Dark Mode Support**: Beautiful light and dark themes for the extension UI
-- **CLI Integration**: Optional integration with the HTML2MD command-line tool
 
 ## Installation
 
@@ -44,19 +41,6 @@ The supported alpha surface is intentionally limited to converting the active ta
 4. Click "Convert to Markdown"
 5. The result will be shown, copied, or downloaded based on your settings
 
-### Keyboard Shortcuts
-
-- **Ctrl+Shift+M** (macOS: **Command+Shift+M**): Open the HTML2MD popup
-- **Alt+M**: Convert the current selection to Markdown and copy to clipboard
-
-### Context Menu
-
-Right-click anywhere on a page to access the following options:
-
-- **Convert page to Markdown**: Convert the entire page and download as a file
-- **Convert selection to Markdown**: Convert only the selected content and copy to clipboard
-- **Open HTML2MD settings**: Open the settings panel
-
 ## Advanced Settings
 
 ### Markdown Formatting Options
@@ -72,18 +56,17 @@ Right-click anywhere on a page to access the following options:
 - **Format Code Blocks**: Enable fenced code blocks for code sections
 - **Keep Links Inline**: Control how links are formatted
 
-### CLI Integration
+## Permissions
 
-If you have the HTML2MD command-line tool installed, you can provide its path in the settings to enable enhanced conversion features.
+The extension requests no persistent host access and exposes no resources to arbitrary pages.
 
-## Integration with HTML2MD CLI
-
-For advanced users, this extension can integrate with the HTML2MD command-line tool to provide enhanced conversion capabilities. To enable this integration:
-
-1. Install the HTML2MD CLI tool from [GitHub](https://github.com/jkindrix/html2md)
-2. Open the extension settings
-3. Enter the path to the HTML2MD executable in the "CLI Tool Path" field
-4. Save your settings
+| Permission | Purpose |
+|---|---|
+| `activeTab` | Limit conversion access to the tab on which the user invoked the popup |
+| `scripting` | Extract the selected active-tab content |
+| `storage` | Persist local formatting preferences |
+| `downloads` | Save generated Markdown when requested |
+| `clipboardWrite` | Copy generated Markdown when requested |
 
 ## Development
 
@@ -95,7 +78,7 @@ html2md-extension/
 ├── popup.html          # Main extension popup
 ├── popup.js            # Popup functionality
 ├── styles.css          # Styles for the popup
-├── background.js       # Background script
+├── logger.js           # Production-safe diagnostic boundary
 ├── turndown.js         # HTML to Markdown conversion library
 ├── THIRD_PARTY_NOTICES.md # Upstream copyright, license, and provenance
 └── images/             # Extension icons and images
@@ -113,7 +96,10 @@ Run the committed static regression and syntax checks with:
 ```bash
 for file in extension/*.js extension/tests/*.js; do node --check "$file"; done
 node --test extension/tests/*.test.js
+node extension/tests/chromium-smoke.js
 ```
+
+The Chromium smoke test loads the directory as an unpacked extension under Xvfb and verifies popup controls/settings, full-page/article/selection extraction, HTML conversion, user-content preservation, preview, clipboard, download, the declared permission set, and denial without an active-tab host grant.
 
 ## License
 

@@ -17,7 +17,7 @@ class TranscriptConverter {
     if (html.includes('title: "ChatGPT Conversation Transcript"') && 
         html.includes('format: "transcript-v1.0"') &&
         html.includes('# Conversation Transcript')) {
-      console.log('Found existing transcript format, cleaning up...');
+      Html2MdLogger.debug('Found existing transcript format, cleaning up...');
       return this.cleanupExistingTranscript(html);
     }
 
@@ -44,65 +44,65 @@ class TranscriptConverter {
       
       // If no messages were found, try raw text extraction
       if (messages.length === 0) {
-        console.log('No messages found in DOM structure, trying raw text extraction');
+        Html2MdLogger.debug('No messages found in DOM structure, trying raw text extraction');
         
         // Log available elements for debugging
-        console.log('Available elements in DOM:');
+        Html2MdLogger.debug('Available elements in DOM:');
         const articles = tempDiv.querySelectorAll('article');
-        console.log(`- Found ${articles.length} article elements`);
+        Html2MdLogger.debug(`- Found ${articles.length} article elements`);
         
         const dataTest = tempDiv.querySelectorAll('[data-testid]');
-        console.log(`- Found ${dataTest.length} data-testid elements`);
+        Html2MdLogger.debug(`- Found ${dataTest.length} data-testid elements`);
         
         const headings = tempDiv.querySelectorAll('h1, h2, h3, h4, h5, h6');
-        console.log(`- Found ${headings.length} heading elements`);
+        Html2MdLogger.debug(`- Found ${headings.length} heading elements`);
         
         const paragraphs = tempDiv.querySelectorAll('p');
-        console.log(`- Found ${paragraphs.length} paragraph elements`);
+        Html2MdLogger.debug(`- Found ${paragraphs.length} paragraph elements`);
         
         const divs = tempDiv.querySelectorAll('div');
-        console.log(`- Found ${divs.length} div elements`);
+        Html2MdLogger.debug(`- Found ${divs.length} div elements`);
         
         this.extractFromRawText(html, messages);
       }
       
       // If still no messages, try a simple extraction method
       if (messages.length === 0) {
-        console.log('Raw text extraction failed, trying simple content extraction');
+        Html2MdLogger.debug('Raw text extraction failed, trying simple content extraction');
         this.extractSimpleContent(tempDiv, messages);
       }
       
       // If still no messages, show sample HTML and return a placeholder
       if (messages.length === 0) {
-        console.error('All extraction methods failed. HTML preview:', html.substring(0, 500));
+        Html2MdLogger.error('All extraction methods failed. HTML preview:', html.substring(0, 500));
         
         // Log more details to console
-        console.log('HTML Structure Sample:');
+        Html2MdLogger.debug('HTML Structure Sample:');
         if (tempDiv.innerHTML.length > 0) {
           // Print a sample of the DOM structure for debugging
           const sampleNodes = Array.from(tempDiv.children).slice(0, 3);
           sampleNodes.forEach((node, index) => {
-            console.log(`Node ${index + 1} tagName:`, node.tagName);
-            console.log(`Node ${index + 1} classList:`, node.classList?.value || 'none');
-            console.log(`Node ${index + 1} attributes:`, Array.from(node.attributes || []).map(attr => `${attr.name}="${attr.value}"`).join(', '));
-            console.log(`Node ${index + 1} childNodes:`, node.childNodes.length);
+            Html2MdLogger.debug(`Node ${index + 1} tagName:`, node.tagName);
+            Html2MdLogger.debug(`Node ${index + 1} classList:`, node.classList?.value || 'none');
+            Html2MdLogger.debug(`Node ${index + 1} attributes:`, Array.from(node.attributes || []).map(attr => `${attr.name}="${attr.value}"`).join(', '));
+            Html2MdLogger.debug(`Node ${index + 1} childNodes:`, node.childNodes.length);
           });
         }
         
         // Show example of turns - this helps debug the ChatGPT structure
-        console.log('Here are examples of turns:', tempDiv.innerHTML.substring(0, 1000));
+        Html2MdLogger.debug('Here are examples of turns:', tempDiv.innerHTML.substring(0, 1000));
         
         return this.createPlaceholderTranscript();
       }
       
-      console.log('Successfully extracted', messages.length, 'messages');
+      Html2MdLogger.debug('Successfully extracted', messages.length, 'messages');
       
       // Generate the final transcript
       return this.generateTranscript(messages, pageTitle);
       
     } catch (error) {
-      console.error('Error converting HTML to transcript:', error);
-      console.error('HTML preview:', html.substring(0, 500));
+      Html2MdLogger.error('Error converting HTML to transcript:', error);
+      Html2MdLogger.error('HTML preview:', html.substring(0, 500));
       return this.createPlaceholderTranscript();
     }
   }
@@ -142,7 +142,7 @@ class TranscriptConverter {
                            .replace(/\n{3,}/g, '\n\n')
                            .trim();
       
-      console.log('Cleaned plaintext preview:', plainText.substring(0, 200));
+      Html2MdLogger.debug('Cleaned plaintext preview:', plainText.substring(0, 200));
       
       // Look for message exchanges
       const exchangeMatches = plainText.match(/## Message Exchange \d+/g) || [];
@@ -195,7 +195,7 @@ class TranscriptConverter {
         }
       }
       
-      console.log('Extracted', messages.length, 'messages from existing transcript');
+      Html2MdLogger.debug('Extracted', messages.length, 'messages from existing transcript');
       
       // If we found messages, generate a new transcript
       if (messages.length > 0) {
@@ -203,11 +203,11 @@ class TranscriptConverter {
       }
       
       // Fallback: just remove duplicate frontmatter and clean up
-      console.log('Falling back to basic cleanup');
+      Html2MdLogger.debug('Falling back to basic cleanup');
       return this.basicCleanup(plainText);
     
     } catch (error) {
-      console.error('Error in cleanupExistingTranscript:', error);
+      Html2MdLogger.error('Error in cleanupExistingTranscript:', error);
       
       // Just return a cleaned version of the text
       return this.basicCleanup(html);
@@ -493,14 +493,14 @@ format: "transcript-v1.0"
                     try {
                       element.textContent = element.textContent.replace(pattern, '');
                     } catch (textErr) {
-                      console.warn('Failed to clean element text:', textErr);
+                      Html2MdLogger.warn('Failed to clean element text:', textErr);
                     }
                   }
                 }
               }
             }
           } catch (e) {
-            console.warn('Error cleaning UI element:', e.message);
+            Html2MdLogger.warn('Error cleaning UI element:', e.message);
           }
         }
       }
@@ -526,7 +526,7 @@ format: "transcript-v1.0"
         }
       }
     } catch (e) {
-      console.error('Error removing UI text elements:', e);
+      Html2MdLogger.error('Error removing UI text elements:', e);
     }
     
     // Remove any remaining nodes that contain specific UI strings
@@ -545,7 +545,7 @@ format: "transcript-v1.0"
       // Set the updated HTML content
       doc.innerHTML = htmlContent;
     } catch (e) {
-      console.error('Error removing UI strings:', e);
+      Html2MdLogger.error('Error removing UI strings:', e);
     }
     
     // Clean up leftover UI classes that might affect the rendering
@@ -575,7 +575,7 @@ format: "transcript-v1.0"
         }
       });
     } catch (e) {
-      console.error('Error cleaning UI classes:', e);
+      Html2MdLogger.error('Error cleaning UI classes:', e);
     }
   }
   
@@ -618,11 +618,11 @@ format: "transcript-v1.0"
     const turns = doc.querySelectorAll('article[data-testid^="conversation-turn-"]');
     
     if (turns.length === 0) {
-      console.log('No 2025 ChatGPT turns found');
+      Html2MdLogger.debug('No 2025 ChatGPT turns found');
       return false;
     }
     
-    console.log('Found 2025 ChatGPT structure with', turns.length, 'turns');
+    Html2MdLogger.debug('Found 2025 ChatGPT structure with', turns.length, 'turns');
     
     let messageCount = 0;
     
@@ -675,7 +675,7 @@ format: "transcript-v1.0"
           content
         });
         messageCount++;
-        console.log(`Added 2025 ${role} message with ${content.length} chars`);
+        Html2MdLogger.debug(`Added 2025 ${role} message with ${content.length} chars`);
       }
     }
     
@@ -696,7 +696,7 @@ format: "transcript-v1.0"
       return false;
     }
     
-    console.log('Found modern ChatGPT structure with', turns.length, 'turns');
+    Html2MdLogger.debug('Found modern ChatGPT structure with', turns.length, 'turns');
     
     for (const turn of turns) {
       // Determine role
@@ -756,7 +756,7 @@ format: "transcript-v1.0"
           role,
           content
         });
-        console.log(`Added ${role} message with ${content.length} chars`);
+        Html2MdLogger.debug(`Added ${role} message with ${content.length} chars`);
       }
     }
     
@@ -782,7 +782,7 @@ format: "transcript-v1.0"
       return false;
     }
     
-    console.log('Found legacy chat message structure with', chatMessages.length, 'messages');
+    Html2MdLogger.debug('Found legacy chat message structure with', chatMessages.length, 'messages');
     
     for (const msg of chatMessages) {
       // Determine role
@@ -847,7 +847,7 @@ format: "transcript-v1.0"
           role,
           content
         });
-        console.log(`Added legacy ${role} message with ${content.length} chars`);
+        Html2MdLogger.debug(`Added legacy ${role} message with ${content.length} chars`);
       }
     }
     
@@ -961,7 +961,7 @@ format: "transcript-v1.0"
       return;
     }
     
-    console.log('Trying alternating message extraction with', paragraphs.length, 'paragraphs');
+    Html2MdLogger.debug('Trying alternating message extraction with', paragraphs.length, 'paragraphs');
     
     // Assume alternating user/assistant messages
     let role = 'user'; // Start with user
@@ -997,7 +997,7 @@ format: "transcript-v1.0"
       messageCount++;
     }
     
-    console.log('Extracted', messageCount, 'messages using alternating approach');
+    Html2MdLogger.debug('Extracted', messageCount, 'messages using alternating approach');
   }
   
   /**
@@ -1124,7 +1124,7 @@ format: "transcript-v1.0"
       return;
     }
     
-    console.log('Using simple text split extraction with', sections.length, 'sections');
+    Html2MdLogger.debug('Using simple text split extraction with', sections.length, 'sections');
     
     // Assume alternating conversation starting with user
     let role = 'user';
@@ -1163,7 +1163,7 @@ format: "transcript-v1.0"
       .sort((a, b) => b.textContent.length - a.textContent.length);
     
     if (contentDivs.length > 0) {
-      console.log('Found', contentDivs.length, 'content divs');
+      Html2MdLogger.debug('Found', contentDivs.length, 'content divs');
       
       // Get the largest div by content length
       const mainContent = contentDivs[0].textContent.trim();
@@ -1198,7 +1198,7 @@ format: "transcript-v1.0"
       const bodyText = container.textContent.trim();
       
       if (bodyText.length > 0) {
-        console.log('Using body text as fallback');
+        Html2MdLogger.debug('Using body text as fallback');
         
         messages.push({
           role: 'assistant',
@@ -1736,12 +1736,12 @@ format: "transcript-v1.0"
   static cleanupGeneratedTranscript(transcript) {
     // First check if there's actual content
     if (!transcript || transcript.trim().length < 10) {
-      console.error('Empty or near-empty transcript in cleanup');
+      Html2MdLogger.error('Empty or near-empty transcript in cleanup');
       return this.createPlaceholderTranscript();
     }
     
     try {
-      console.log('Cleaning transcript of length', transcript.length);
+      Html2MdLogger.debug('Cleaning transcript of length', transcript.length);
       
       // Fix spacing issues - first pass
       let cleaned = transcript
@@ -2237,7 +2237,7 @@ format: "transcript-v1.0"
       return cleaned.trim();
     
     } catch (error) {
-      console.error('Error in cleanupGeneratedTranscript:', error);
+      Html2MdLogger.error('Error in cleanupGeneratedTranscript:', error);
       return transcript.trim(); // Return original if cleanup fails
     }
   }

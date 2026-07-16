@@ -53,6 +53,7 @@ jobs:
         run: |
           for file in extension/*.js extension/tests/*.js; do node --check "$file"; done
           node --test extension/tests/*.test.js
+          node extension/tests/chromium-smoke.js
       - name: Install and exercise the wheel
         run: |
           python -m venv "$RUNNER_TEMP/wheel-smoke"
