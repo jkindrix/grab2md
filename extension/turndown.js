@@ -1,6 +1,8 @@
 /**
  * HTML2MD TurndownService - Enhanced HTML to Markdown converter
- * Based on Turndown v7.1.1
+ * Derived from Turndown v7.1.1
+ * Copyright (c) 2017 Dom Christie
+ * Licensed under the MIT License; see THIRD_PARTY_NOTICES.md.
  *
  * Enhanced for HTML2MD extension with improved formatting and additional rules
  */

@@ -93,6 +93,7 @@ html2md-extension/
 ├── styles.css          # Styles for the popup
 ├── background.js       # Background script
 ├── turndown.js         # HTML to Markdown conversion library
+├── THIRD_PARTY_NOTICES.md # Upstream copyright, license, and provenance
 └── images/             # Extension icons and images
 ```
 
@@ -111,4 +112,5 @@ Copyright (c) 2025-2026 Justin Kindrix. Distributed under the [MIT License](../L
 
 - Built by Justin Kindrix
 - Uses [Turndown](https://github.com/mixmark-io/turndown) for HTML to Markdown conversion
+- Retains Turndown v7.1.1 copyright, MIT terms, provenance, and modification notes in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)
 - Inspired by the [HTML2MD](https://github.com/jkindrix/html2md) command-line tool

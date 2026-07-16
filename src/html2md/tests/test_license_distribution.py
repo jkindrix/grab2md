@@ -28,3 +28,18 @@ def test_package_metadata_and_readmes_point_to_mit_grant():
     assert metadata["tool"]["poetry"]["license"] == "MIT"
     assert "[MIT License](./LICENSE)" in root_readme
     assert "[MIT License](../LICENSE)" in extension_readme
+
+
+def test_vendored_turndown_notice_preserves_license_and_provenance():
+    extension_root = PROJECT_ROOT / "extension"
+    derivative = (extension_root / "turndown.js").read_text(encoding="utf-8")
+    notice = (extension_root / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+
+    assert "Derived from Turndown v7.1.1" in derivative
+    assert "Copyright (c) 2017 Dom Christie" in derivative
+    assert "see THIRD_PARTY_NOTICES.md" in derivative
+    assert "https://github.com/mixmark-io/turndown/tree/v7.1.1" in notice
+    assert "Copyright (c) 2017 Dom Christie" in notice
+    assert "Permission is hereby granted, free of charge" in notice
+    assert 'THE SOFTWARE IS PROVIDED "AS IS"' in notice
+    assert "Local modifications: HTML2MD-specific" in notice
