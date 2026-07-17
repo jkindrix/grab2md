@@ -13,24 +13,6 @@ logger = setup_logging()
 
 # Default Configuration
 DEFAULT_CONFIG = {
-    "domain_limits": {
-        # Example domain-specific rate limits
-        # "github.com": {
-        #     "max_concurrent": 2,
-        #     "requests_per_minute": 30,
-        #     "backoff_multiplier": 2.0
-        # }
-    },
-    "concurrent": {
-        "connection_timeout": 30,
-        "backoff_strategy": "exponential",  # none, linear, exponential, fibonacci
-        "initial_backoff": 1.0,
-        "max_backoff": 300.0,
-        "backoff_multiplier": 2.0,
-        "error_threshold": 3,
-        "respect_retry_after": True,
-        "polite_delay_multiplier": 2.0,
-    },
     "logging": {"level": "WARNING"},
     "browser": {"preferred": "chrome"},
     "headers": {

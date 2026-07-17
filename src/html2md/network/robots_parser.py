@@ -12,7 +12,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Dict, Optional, Tuple
+from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 
@@ -48,6 +48,7 @@ class RobotsChecker:
         session: Optional[requests.Session] = None,
         network_policy: Optional[DestinationPolicy] = None,
         allow_private_network: bool = False,
+        scheduler: Any = None,
     ):
         """
         Initialize the robots checker.
@@ -62,6 +63,7 @@ class RobotsChecker:
         self.network_policy = network_policy or DestinationPolicy(
             allow_private=allow_private_network
         )
+        self.scheduler = scheduler
         self._cache: Dict[str, Tuple[RobotFileParser, Optional[float], float]] = {}
         self._cache_duration = 3600  # Cache robots.txt for 1 hour
         self._lock = threading.RLock()
@@ -87,6 +89,7 @@ class RobotsChecker:
                 timeout=10,
                 max_body_bytes=1024 * 1024,
                 headers={"User-Agent": self.user_agent},
+                request_scheduler=self.scheduler,
             )
             if 200 <= response.status_code < 300:
                 return RobotsFetchResult(response.text, response.status_code)

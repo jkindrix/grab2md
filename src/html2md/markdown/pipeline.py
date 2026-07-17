@@ -310,6 +310,7 @@ class PagePipeline:
         images_dir: str = "images",
         session: requests.Session | None = None,
         allow_private_network: bool = False,
+        request_scheduler=None,
     ) -> ConvertedDocument:
         prepared = self.converter.prepare(
             page,
@@ -323,6 +324,7 @@ class PagePipeline:
             images_dir=images_dir,
             local_root=page.source_path.parent if page.source_path else None,
             allow_private_network=allow_private_network,
+            scheduler=request_scheduler,
         )
         assets = AssetPipeline(downloader).materialize(
             prepared.selected_html,

@@ -12,14 +12,6 @@ NoneType = type(None)
 
 
 VALUE_TYPES: dict[ConfigPath, tuple[type, ...]] = {
-    ("concurrent", "connection_timeout"): (int,),
-    ("concurrent", "backoff_strategy"): (str,),
-    ("concurrent", "initial_backoff"): (float,),
-    ("concurrent", "max_backoff"): (float,),
-    ("concurrent", "backoff_multiplier"): (float,),
-    ("concurrent", "error_threshold"): (int,),
-    ("concurrent", "respect_retry_after"): (bool,),
-    ("concurrent", "polite_delay_multiplier"): (float,),
     ("logging", "level"): (str,),
     ("browser", "preferred"): (str,),
     ("headers", "enhanced_user_agent"): (bool,),
@@ -84,9 +76,6 @@ VALUE_TYPES: dict[ConfigPath, tuple[type, ...]] = {
 }
 
 ENUM_VALUES: dict[ConfigPath, frozenset[Any]] = {
-    ("concurrent", "backoff_strategy"): frozenset(
-        {"none", "linear", "exponential", "fibonacci"}
-    ),
     ("logging", "level"): frozenset({"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}),
     ("browser", "preferred"): frozenset({"chrome", "firefox"}),
     ("headers", "browser_type"): frozenset({"chrome", "firefox", "edge", "safari"}),

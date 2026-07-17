@@ -1,29 +1,29 @@
 import logging
 import os
-import time
-import random
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Dict, Optional
 
 from html2md.cookies.session_manager import get_session
+from html2md.markdown.archive import (
+    ArtifactManifest,
+    ArtifactRecord,
+    ArtifactStore,
+    OutputPlanner,
+)
 from html2md.markdown.content_extractor import ContentMode, validate_content_request
-from html2md.markdown.converter import html_content_to_markdown
 from html2md.markdown.link_rewriter import rewrite_archived_files
-from html2md.markdown.batch_processor import create_directory_structure
+from html2md.markdown.pipeline import AcquiredPage, PagePipeline
 from html2md.network.request_handler import fetch_html
 from html2md.network.robots_parser import RobotsChecker
-from html2md.network.rate_limiter import GlobalRateLimiter, RateLimitConfig
 from html2md.network.header_manager import HeaderManager, HeaderConfig
+from html2md.network.request_scheduler import SequentialRequestScheduler
 from html2md.network.safe_http import DestinationPolicy, UnsafeNetworkTarget
-from html2md.network.concurrent_limiter import ConcurrentLimiter, ConcurrentConfig
 from html2md.utils.state_manager import StateManager
 from html2md.utils.parser import (
     extract_links_from_html,
-    generate_safe_filename,
     should_follow_link,
 )
-from html2md.utils.path_safety import contained_output_file
 
 # Setup logger
 logger = logging.getLogger("html2md")
@@ -52,7 +52,6 @@ def crawl_website(
     respect_robots=True,
     rate_limit=None,
     header_config=None,
-    concurrent_config=None,
     polite_mode=False,
     show_progress=True,
     content_mode=ContentMode.FULL,
@@ -214,40 +213,32 @@ def crawl_website(
     # Create session for requests (shared by robots checks, page fetches, and image downloads)
     session = get_session(verify_ssl=verify_ssl)
     network_policy = DestinationPolicy(allow_private=allow_private_network)
+    scheduler = SequentialRequestScheduler(
+        requests_per_minute=rate_limit,
+        minimum_delay=delay,
+        polite=polite_mode,
+    )
+    manifest = ArtifactManifest.from_mapping(url_to_file_mapping)
+    output_planner = OutputPlanner(
+        output_dir,
+        flatten_domain=flatten_output,
+        hierarchical_domains=hierarchical_domains,
+    )
+    page_pipeline = PagePipeline()
 
     # Initialize header manager
     header_manager = HeaderManager(header_config or HeaderConfig())
 
-    # Initialize rate limiter if enabled
-    rate_limiter = None
     if rate_limit and rate_limit > 0:
-        config = RateLimitConfig(requests_per_minute=rate_limit)
-        rate_limiter = GlobalRateLimiter(config)
         update_progress(
             f"Rate limiting enabled: {rate_limit} requests/minute", start_url, "info"
         )
-
-    # Initialize concurrent limiter
-    concurrent_limiter = None
-    if concurrent_config or polite_mode:
-        # Build concurrent config
-        if not concurrent_config:
-            concurrent_config = ConcurrentConfig()
-
-        # Apply polite mode
-        if polite_mode:
-            concurrent_config.polite_mode = True
-            concurrent_config.polite_delay_multiplier = 2.0
-            update_progress(
-                "Polite mode enabled: slower sequential request policy",
-                start_url,
-                "info",
-            )
-
-        concurrent_limiter = ConcurrentLimiter(concurrent_config)
-    else:
-        # Default concurrent limiter
-        concurrent_limiter = ConcurrentLimiter()
+    if polite_mode:
+        update_progress(
+            "Polite mode enabled: slower sequential request policy",
+            start_url,
+            "info",
+        )
 
     # Initialize robots.txt checker if enabled
     robots_checker = None
@@ -258,6 +249,7 @@ def crawl_website(
             user_agent=initial_headers["User-Agent"],
             session=session,
             network_policy=network_policy,
+            scheduler=scheduler,
         )
 
         # Check if start URL is allowed
@@ -267,6 +259,7 @@ def crawl_website(
                 start_url,
                 "blocked",
             )
+            session.close()
             return CrawlResult(
                 crawl_id=crawl_state.crawl_id if crawl_state else None,
                 success=False,
@@ -282,6 +275,7 @@ def crawl_website(
             # Use the larger of user-specified delay or robots.txt delay
             if robots_delay > delay:
                 delay = robots_delay
+                scheduler.minimum_delay = max(scheduler.minimum_delay, robots_delay)
                 update_progress(
                     f"Using robots.txt crawl-delay: {delay}s", start_url, "info"
                 )
@@ -315,67 +309,8 @@ def crawl_website(
             "processing",
         )
 
-        slot_acquired = False
-        request_start_time = None
-        request_recorded = False
         try:
-            # Check concurrent limits and backoff
-            if not concurrent_limiter.acquire_slot(url):
-                # Check if we need to wait for backoff
-                wait_time = concurrent_limiter.should_wait(url)
-                if wait_time:
-                    update_progress(
-                        f"Domain backoff, waiting {wait_time:.1f}s for {url}",
-                        url,
-                        "backoff",
-                    )
-                    # Skip this URL and continue with others
-                    enqueue_url(url, depth)
-                    continue
-                else:
-                    update_progress(
-                        f"Concurrent limit reached, queueing {url}", url, "queued"
-                    )
-                    enqueue_url(url, depth)
-                    continue
-            slot_acquired = True
             in_flight_urls.add(url)
-
-            # Check rate limit before making request
-            if rate_limiter:
-                can_proceed, suggested_delay = rate_limiter.can_make_request(url)
-                if not can_proceed:
-                    update_progress(
-                        f"Rate limited, waiting {suggested_delay:.1f}s for {url}",
-                        url,
-                        "rate_limited",
-                    )
-                    time.sleep(suggested_delay)
-                    # Re-check after waiting
-                    can_proceed, _ = rate_limiter.can_make_request(url)
-                    if not can_proceed:
-                        update_progress(
-                            f"Rate limit still exceeded; queueing {url}", url, "queued"
-                        )
-                        concurrent_limiter.release_slot(url)
-                        slot_acquired = False
-                        in_flight_urls.discard(url)
-                        enqueue_url(url, depth)
-                        continue
-                elif suggested_delay > 0:
-                    update_progress(
-                        f"Adaptive rate limit delay: {suggested_delay:.1f}s for {url}",
-                        url,
-                        "rate_limited",
-                    )
-                    time.sleep(suggested_delay)
-
-            # Record request start for rate limiting
-            request_start_time = time.time()
-            if rate_limiter:
-                rate_limiter.record_request_start(url)
-
-            # Fetch HTML content
             update_progress(f"Fetching content from {url}", url, "fetching")
             headers = header_manager.get_headers(url)
             starting_navigation = url == start_url and depth == 0
@@ -398,27 +333,8 @@ def crawl_website(
                 headers,
                 network_policy=network_policy,
                 redirect_validator=validate_redirect,
+                request_scheduler=scheduler,
             )
-
-            # Record request completion
-            request_success = fetch_result.success
-            if rate_limiter:
-                rate_limiter.record_request_end(
-                    url,
-                    request_start_time,
-                    request_success,
-                    response_time=fetch_result.elapsed,
-                )
-                request_recorded = True
-
-            # Release concurrent slot
-            concurrent_limiter.release_slot(
-                url,
-                success=request_success,
-                status_code=fetch_result.status_code,
-                retry_after=fetch_result.retry_after,
-            )
-            slot_acquired = False
 
             if (
                 fetch_result.status_code == 429
@@ -461,115 +377,97 @@ def crawl_website(
                 crawl_scope_url = fetch_result.final_url
                 crawl_state.config["scope_url"] = crawl_scope_url
 
-            # Create directory structure for the URL
-            url_dir = create_directory_structure(
-                output_dir,
-                url,
-                flatten_domain=flatten_output,
-                hierarchical_domains=hierarchical_domains,
-            )
-
-            # Generate a safe filename for the URL
-            safe_filename = generate_safe_filename(url)
-            output_file = str(contained_output_file(output_dir, url_dir, safe_filename))
-
-            # Convert HTML to markdown
-            markdown_content = html_content_to_markdown(
-                html_content,
-                fetch_result.final_url,
-                session=session,
-                content_mode=content_mode,
-                selector=selector,
-                download_images=download_images,
-                output_dir=url_dir,
-                images_dir=images_dir,
-                include_metadata=include_metadata,
-                allow_private_network=allow_private_network,
-            )
-
-            if markdown_content:
-                # Save to file
-                update_progress(f"Saving markdown to {output_file}", url, "saving")
-                with open(output_file, "w", encoding="utf-8") as f:
-                    f.write(markdown_content)
-
-                # Only durable output files are eligible for local rewriting.
+            existing = manifest.resolve(fetch_result.final_url)
+            if existing is not None:
+                manifest.register_alias(url, existing)
+                output_file = str(existing.output_path)
                 url_to_file_mapping[url] = output_file
-                update_progress(f"Saved markdown to: {output_file}", url, "saved")
                 processed_urls_count += 1
-
-                # Update state manager with successful processing
                 if enable_checkpoints:
                     state_manager.current_state.urls_queued = list(queue)
                     state_manager.update_progress(url, True, output_file)
+                continue
 
-                # Apply delay with jitter if configured
-                if delay > 0 and processed_urls_count < max_pages:
-                    # Calculate jitter: ±30% of the base delay
-                    jitter = delay * 0.3
-                    actual_delay = delay + random.uniform(-jitter, jitter)
-                    actual_delay = max(0.1, actual_delay)  # Ensure minimum 0.1s delay
-
-                    update_progress(
-                        f"Waiting {actual_delay:.1f}s before next request...",
-                        url,
-                        "delaying",
-                    )
-                    time.sleep(actual_delay)
-
-                # Extract links if we haven't reached max depth
-                if depth < max_depth:
-                    links = extract_links_from_html(
-                        html_content, fetch_result.final_url
-                    )
-                    update_progress(
-                        f"Found {len(links)} links on {url}", url, "extracting_links"
-                    )
-
-                    # Filter links according to follow_option and robots.txt
-                    allowed_links = [
-                        link
-                        for link in links
-                        if should_follow_link(link, crawl_scope_url, follow_option)
-                    ]
-                    if robots_checker:
-                        scoped_count = len(allowed_links)
-                        allowed_links = robots_checker.filter_urls(allowed_links)
-                        if len(allowed_links) < scoped_count:
-                            update_progress(
-                                f"Filtered {scoped_count - len(allowed_links)} links due to robots.txt",
-                                url,
-                                "filtered",
-                            )
-
-                    for link in allowed_links:
-                        if link not in visited_urls:
-                            if enqueue_url(link, depth + 1):
-                                update_progress(
-                                    f"Queued link (depth {depth+1}): {link}",
-                                    link,
-                                    "queued",
-                                )
-
+            output_path = output_planner.plan(fetch_result.final_url)
+            page = AcquiredPage(
+                requested_url=url,
+                final_url=fetch_result.final_url,
+                html=html_content,
+                status_code=fetch_result.status_code,
+                headers=fetch_result.headers,
+                media_type="text/html",
+                charset="utf-8",
+            )
+            document = page_pipeline.convert(
+                page,
+                content_mode=content_mode,
+                selector=selector,
+                download_images=download_images,
+                output_dir=output_path.parent,
+                images_dir=images_dir,
+                include_metadata=include_metadata,
+                session=session,
+                allow_private_network=allow_private_network,
+                request_scheduler=scheduler,
+            )
+            canonical_url = document.metadata.canonical_url
+            canonical_record = (
+                manifest.resolve(canonical_url) if canonical_url else None
+            )
+            if canonical_record is not None:
+                manifest.register_alias(url, canonical_record)
+                manifest.register_alias(fetch_result.final_url, canonical_record)
+                output_path = canonical_record.output_path
             else:
-                update_progress(f"Failed to convert HTML from {url}", url, "failed")
-                failed_urls_count += 1
-                if enable_checkpoints:
-                    state_manager.current_state.urls_queued = list(queue)
-                    state_manager.update_progress(
-                        url, False, error_message="Failed to convert HTML"
+                ArtifactStore.write_text(output_path, document.markdown)
+                manifest.register(
+                    ArtifactRecord(
+                        url, fetch_result.final_url, canonical_url, output_path
                     )
+                )
+            output_file = str(output_path)
+
+            url_to_file_mapping[url] = output_file
+            update_progress(f"Saved markdown to: {output_file}", url, "saved")
+            processed_urls_count += 1
+
+            if enable_checkpoints:
+                state_manager.current_state.urls_queued = list(queue)
+                state_manager.update_progress(url, True, output_file)
+
+            if depth < max_depth:
+                links = extract_links_from_html(html_content, fetch_result.final_url)
+                update_progress(
+                    f"Found {len(links)} links on {url}", url, "extracting_links"
+                )
+
+                allowed_links = [
+                    link
+                    for link in links
+                    if should_follow_link(link, crawl_scope_url, follow_option)
+                ]
+                if robots_checker:
+                    scoped_count = len(allowed_links)
+                    allowed_links = robots_checker.filter_urls(allowed_links)
+                    if len(allowed_links) < scoped_count:
+                        update_progress(
+                            f"Filtered {scoped_count - len(allowed_links)} links due to robots.txt",
+                            url,
+                            "filtered",
+                        )
+
+                for link in allowed_links:
+                    if link not in visited_urls and enqueue_url(link, depth + 1):
+                        update_progress(
+                            f"Queued link (depth {depth+1}): {link}",
+                            link,
+                            "queued",
+                        )
 
         except Exception as e:
             in_flight_urls.discard(url)
             visited_urls.add(url)
             failed_urls_count += 1
-            # Record failed request for rate limiting
-            if rate_limiter and request_start_time is not None and not request_recorded:
-                rate_limiter.record_request_end(url, request_start_time, False)
-            # Release concurrent slot on error
-            if slot_acquired:
-                concurrent_limiter.release_slot(url, success=False)
             update_progress(f"Error processing URL {url}: {str(e)}", url, "error")
 
             # Update state manager with failed processing
@@ -579,43 +477,17 @@ def crawl_website(
 
     # Rewrite links in all files to point to local files
     if processed_urls_count > 0:
-        rewrite_archived_files(url_to_file_mapping, update_progress)
+        rewrite_archived_files(manifest, update_progress)
 
-    # Report statistics
-    if rate_limiter:
-        stats = rate_limiter.get_all_stats()
-        for domain, domain_stats in stats.items():
-            if domain_stats.total_requests > 0:
-                update_progress(
-                    f"Rate limit stats for {domain}: {domain_stats.total_requests} requests, "
-                    f"{domain_stats.successful_requests} successful, {domain_stats.failed_requests} failed, "
-                    f"{domain_stats.blocked_requests} rate-limited, circuit: {domain_stats.circuit_state.value}",
-                    start_url,
-                    "stats",
-                )
-
-    # Report concurrent limiter statistics
-    concurrent_stats = concurrent_limiter.get_progress()
-    if concurrent_stats["total_completed"] > 0:
-        update_progress(
-            f"Concurrent stats: {concurrent_stats['total_completed']} completed, "
-            f"{concurrent_stats['total_errors']} errors, "
-            f"{concurrent_stats['requests_per_second']:.2f} req/s",
-            start_url,
-            "stats",
-        )
-
-        # Report per-domain concurrent stats
-        domain_stats = concurrent_limiter.get_all_domain_stats()
-        for domain, stats in domain_stats.items():
-            if stats["total_requests"] > 0:
-                update_progress(
-                    f"Domain {domain}: {stats['total_requests']} requests, "
-                    f"{stats['total_errors']} errors ({stats['error_rate']:.1f}%), "
-                    f"backoff: {'yes' if stats['in_backoff'] else 'no'}",
-                    start_url,
-                    "stats",
-                )
+    for domain, domain_stats in scheduler.get_all_stats().items():
+        if domain_stats.total_requests > 0:
+            update_progress(
+                f"Request stats for {domain}: {domain_stats.total_requests} requests, "
+                f"{domain_stats.successful_requests} successful, "
+                f"{domain_stats.failed_requests} failed",
+                start_url,
+                "stats",
+            )
 
     update_progress(
         f"Completed crawling. Processed {processed_urls_count} pages, visited {len(visited_urls)} URLs."
@@ -632,6 +504,8 @@ def crawl_website(
         error = "Crawl completed without producing any pages"
     else:
         error = None
+
+    session.close()
 
     return CrawlResult(
         processed_count=processed_urls_count,

@@ -1,9 +1,11 @@
-import threading
+from unittest.mock import MagicMock, patch
+
+import requests
 
 from typer.testing import CliRunner
 
 from html2md.cli.cli import app
-from html2md.network.concurrent_limiter import ConcurrentConfig, ConcurrentLimiter
+from html2md.network.request_scheduler import SequentialRequestScheduler
 
 
 def test_crawl_help_exposes_sequential_policy_not_concurrency_controls():
@@ -14,43 +16,36 @@ def test_crawl_help_exposes_sequential_policy_not_concurrency_controls():
     assert "sequential" in result.stdout
 
 
-def test_only_one_request_slot_can_be_active_across_threads():
-    limiter = ConcurrentLimiter(ConcurrentConfig())
-    acquired = threading.Event()
-    release = threading.Event()
-    outcomes = []
+def test_adaptive_rate_delay_is_applied_before_request():
+    limiter = MagicMock()
+    limiter.can_make_request.return_value = (True, 2.5)
+    limiter.record_request_start.return_value = 0.0
+    sleep = MagicMock()
+    with patch(
+        "html2md.network.request_scheduler.GlobalRateLimiter", return_value=limiter
+    ):
+        scheduler = SequentialRequestScheduler(
+            requests_per_minute=30, sleep=sleep, clock=lambda: 0.0
+        )
 
-    def first_request():
-        outcomes.append(limiter.acquire_slot("https://example.com/first"))
-        acquired.set()
-        release.wait(timeout=2)
-        limiter.release_slot("https://example.com/first")
+    request = scheduler.before_request("https://example.com/page")
+    scheduler.after_request(request, success=True, response_time=0.25)
 
-    def competing_request():
-        assert acquired.wait(timeout=2)
-        outcomes.append(limiter.acquire_slot("https://other.example/second"))
-        release.set()
-
-    threads = [
-        threading.Thread(target=first_request),
-        threading.Thread(target=competing_request),
-    ]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=3)
-
-    assert all(not thread.is_alive() for thread in threads)
-    assert outcomes == [True, False]
-    assert limiter.get_progress()["currently_active"] == 0
+    sleep.assert_called_once_with(2.5)
+    limiter.record_request_start.assert_called_once_with("https://example.com/page")
+    assert limiter.record_request_end.call_args.args[2] is True
+    assert limiter.record_request_end.call_args.kwargs["response_time"] == 0.25
 
 
-def test_request_state_methods_share_one_reentrant_lock_without_deadlock():
-    limiter = ConcurrentLimiter()
-    url = "https://example.com/page"
+def test_retry_after_defers_the_next_request_to_the_same_origin():
+    sleep = MagicMock()
+    scheduler = SequentialRequestScheduler(sleep=sleep, clock=lambda: 0.0)
+    response = requests.Response()
+    response.status_code = 429
+    response.headers["Retry-After"] = "7"
 
-    assert limiter.acquire_slot(url)
-    limiter.release_slot(url, success=False, status_code=500)
-    limiter.reset_domain("example.com")
+    first = scheduler.before_request("https://example.com/one")
+    scheduler.after_response(first, response)
+    scheduler.before_request("https://example.com/two")
 
-    assert limiter.get_domain_stats("example.com")["active_connections"] == 0
+    sleep.assert_called_once_with(7.0)

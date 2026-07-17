@@ -50,22 +50,17 @@ def test_optional_values_round_trip_without_default_type_inference():
 
 def test_numeric_coercion_is_narrow_and_deterministic():
     supplied = {
-        "concurrent": {"error_threshold": 12.0, "initial_backoff": 2},
         "cli_defaults": {"crawl": {"delay": 3}},
     }
 
     merged, _ = validate_and_merge(supplied, DEFAULT_CONFIG, strict=True)
 
-    assert merged["concurrent"]["error_threshold"] == 12
-    assert type(merged["concurrent"]["error_threshold"]) is int
-    assert merged["concurrent"]["initial_backoff"] == 2.0
     assert merged["cli_defaults"]["crawl"]["delay"] == 3.0
 
 
 @pytest.mark.parametrize(
     "supplied, path",
     [
-        ({"concurrent": {"error_threshold": 1.5}}, "concurrent.error_threshold"),
         (
             {"cli_defaults": {"crawl": {"rate_limit": "30"}}},
             "cli_defaults.crawl.rate_limit",

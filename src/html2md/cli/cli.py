@@ -982,42 +982,6 @@ def crawl_command(
                     simulate_browser=simulate_browser,
                 )
 
-                # Build concurrent configuration from CLI options and config
-                from html2md.network.concurrent_limiter import (
-                    ConcurrentConfig,
-                    BackoffStrategy,
-                )
-
-                concurrent_settings = config.get("concurrent", {})
-
-                # Parse backoff strategy
-                backoff_str = concurrent_settings.get("backoff_strategy", "exponential")
-                backoff_strategy = BackoffStrategy.EXPONENTIAL
-                if backoff_str == "none":
-                    backoff_strategy = BackoffStrategy.NONE
-                elif backoff_str == "linear":
-                    backoff_strategy = BackoffStrategy.LINEAR
-                elif backoff_str == "fibonacci":
-                    backoff_strategy = BackoffStrategy.FIBONACCI
-
-                concurrent_config = ConcurrentConfig(
-                    backoff_strategy=backoff_strategy,
-                    initial_backoff=concurrent_settings.get("initial_backoff", 1.0),
-                    max_backoff=concurrent_settings.get("max_backoff", 300.0),
-                    backoff_multiplier=concurrent_settings.get(
-                        "backoff_multiplier", 2.0
-                    ),
-                    error_threshold_for_backoff=concurrent_settings.get(
-                        "error_threshold", 3
-                    ),
-                    retry_after_respect=concurrent_settings.get(
-                        "respect_retry_after", True
-                    ),
-                    polite_delay_multiplier=concurrent_settings.get(
-                        "polite_delay_multiplier", 2.0
-                    ),
-                )
-
                 # Signal handling is explicit and scoped to active crawl work.
                 state_manager = StateManager()
                 with state_manager.signal_handling():
@@ -1031,7 +995,6 @@ def crawl_command(
                         respect_robots=respect_robots,
                         rate_limit=rate_limit,
                         header_config=header_config,
-                        concurrent_config=concurrent_config,
                         polite_mode=polite,
                         show_progress=show_progress,
                         content_mode=content_mode,

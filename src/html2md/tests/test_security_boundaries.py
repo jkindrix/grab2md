@@ -55,12 +55,7 @@ def test_crawler_traversal_url_cannot_write_outside_root(tmp_path):
     response = FetchResult(url, url, status_code=200, body="<h1>Safe</h1>")
     output = tmp_path / "output"
     manager = StateManager(state_dir=tmp_path / "states")
-    with (
-        patch("html2md.markdown.crawler.fetch_html", return_value=response),
-        patch(
-            "html2md.markdown.crawler.html_content_to_markdown", return_value="# Safe"
-        ),
-    ):
+    with patch("html2md.markdown.crawler.fetch_html", return_value=response):
         result = crawl_website(
             url,
             output,

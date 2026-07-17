@@ -131,6 +131,39 @@ def test_redirect_callback_runs_before_the_second_request():
     client.session.request.assert_called_once()
 
 
+def test_scheduler_accounts_for_each_redirect_hop():
+    redirect = requests.Response()
+    redirect.status_code = 302
+    redirect.url = "https://one.example/start"
+    redirect.headers["Location"] = "https://two.example/final"
+    redirect.raw = MagicMock()
+    final = requests.Response()
+    final.status_code = 200
+    final.url = "https://two.example/final"
+    final.raw = MagicMock()
+    scheduler = MagicMock()
+    scheduler.before_request.side_effect = ["first", "second"]
+
+    with patch("html2md.network.safe_http.socket.getaddrinfo", return_value=PUBLIC_DNS):
+        with PinnedHttpClient(requests.Session(), DestinationPolicy()) as client:
+            client.session.request = MagicMock(side_effect=[redirect, final])
+            result = client.request(
+                "GET",
+                "https://one.example/start",
+                request_scheduler=scheduler,
+            )
+
+    assert result is final
+    assert [call.args[0] for call in scheduler.before_request.call_args_list] == [
+        "https://one.example/start",
+        "https://two.example/final",
+    ]
+    assert [call.args[:2] for call in scheduler.after_response.call_args_list] == [
+        ("first", redirect),
+        ("second", final),
+    ]
+
+
 def test_cross_origin_redirect_strips_explicit_credentials():
     redirect = requests.Response()
     redirect.status_code = 302

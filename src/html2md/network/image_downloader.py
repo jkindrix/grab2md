@@ -9,7 +9,7 @@ import re
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from urllib.parse import unquote, urljoin, urlparse
 
 import requests
@@ -68,6 +68,7 @@ class ImageDownloader:
         max_redirects: int = 5,
         timeout: int = 30,
         allow_private_network: bool = False,
+        scheduler: Any = None,
     ):
         """Initialize with explicit local and remote acquisition limits."""
         if max_file_bytes <= 0 or max_total_bytes <= 0:
@@ -83,6 +84,7 @@ class ImageDownloader:
         self.max_redirects = max_redirects
         self.timeout = timeout
         self.allow_private_network = allow_private_network
+        self.scheduler = scheduler
         self.total_downloaded_bytes = 0
         self.downloaded_images: Dict[str, str] = {}
 
@@ -196,6 +198,11 @@ class ImageDownloader:
             exchange: Optional[_PinnedExchange] = None
             last_connection_error: Optional[requests.RequestException] = None
             for address in addresses:
+                scheduled = (
+                    self.scheduler.before_request(current_url)
+                    if self.scheduler
+                    else None
+                )
                 try:
                     if previous_url is not None and DestinationPolicy._origin(
                         previous_url
@@ -206,9 +213,20 @@ class ImageDownloader:
                         address,
                         retain_credentials=retain_credentials,
                     )
+                    if scheduled is not None:
+                        self.scheduler.after_response(
+                            scheduled,
+                            exchange.response,
+                        )
                     break
                 except (requests.ConnectionError, requests.Timeout) as error:
+                    if scheduled is not None:
+                        self.scheduler.after_request(scheduled, success=False)
                     last_connection_error = error
+                except BaseException:
+                    if scheduled is not None:
+                        self.scheduler.after_request(scheduled, success=False)
+                    raise
             if exchange is None:
                 if last_connection_error is not None:
                     raise last_connection_error

@@ -90,13 +90,7 @@ def test_signal_saves_one_valid_resumable_checkpoint_and_terminates(tmp_path, si
     fetched = FetchResult(
         queued_url, queued_url, status_code=200, body="<h1>Resumed</h1>"
     )
-    with (
-        patch("html2md.markdown.crawler.fetch_html", return_value=fetched),
-        patch(
-            "html2md.markdown.crawler.html_content_to_markdown",
-            return_value="# Resumed",
-        ),
-    ):
+    with patch("html2md.markdown.crawler.fetch_html", return_value=fetched):
         result = crawl_website(
             queued_url,
             output_dir,

@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import re
 import socket
+import time
 from dataclasses import dataclass, field
 from typing import Any, Callable, Dict, Mapping, MutableMapping, Optional, cast
 from urllib.parse import urljoin, urlsplit
@@ -211,6 +212,7 @@ class PinnedHttpClient:
         stream: bool = False,
         max_redirects: int = DEFAULT_MAX_REDIRECTS,
         redirect_validator: Optional[Callable[[str, str], None]] = None,
+        request_scheduler: Any = None,
     ) -> Response:
         """Request a URL, manually validating and pinning each redirect hop."""
         if max_redirects < 0:
@@ -228,6 +230,12 @@ class PinnedHttpClient:
             last_error: Optional[requests.RequestException] = None
             for address in addresses:
                 self._mount(address)
+                scheduled = (
+                    request_scheduler.before_request(current_url)
+                    if request_scheduler is not None
+                    else None
+                )
+                attempt_started = time.monotonic()
                 try:
                     response = self.session.request(
                         current_method,
@@ -238,9 +246,29 @@ class PinnedHttpClient:
                         stream=stream,
                         allow_redirects=False,
                     )
+                    if scheduled is not None:
+                        request_scheduler.after_response(
+                            scheduled,
+                            response,
+                            response_time=time.monotonic() - attempt_started,
+                        )
                     break
                 except (requests.ConnectionError, requests.Timeout) as error:
+                    if scheduled is not None:
+                        request_scheduler.after_request(
+                            scheduled,
+                            success=False,
+                            response_time=time.monotonic() - attempt_started,
+                        )
                     last_error = error
+                except requests.RequestException:
+                    if scheduled is not None:
+                        request_scheduler.after_request(
+                            scheduled,
+                            success=False,
+                            response_time=time.monotonic() - attempt_started,
+                        )
+                    raise
             if response is None:
                 if last_error is not None:
                     raise last_error
@@ -321,6 +349,7 @@ def guarded_request(
     max_redirects: int = DEFAULT_MAX_REDIRECTS,
     max_body_bytes: int = DEFAULT_MAX_BODY_BYTES,
     redirect_validator: Optional[Callable[[str, str], None]] = None,
+    request_scheduler: Any = None,
 ) -> Response:
     """Return a fully buffered response obtained through the guarded transport."""
     if max_body_bytes <= 0:
@@ -336,6 +365,7 @@ def guarded_request(
             stream=True,
             max_redirects=max_redirects,
             redirect_validator=redirect_validator,
+            request_scheduler=request_scheduler,
         )
         try:
             declared_length = response.headers.get("Content-Length")

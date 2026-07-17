@@ -68,9 +68,7 @@ class AssetPipeline:
         return list(dict.fromkeys(urls))
 
     @staticmethod
-    def _rewrite(
-        soup: BeautifulSoup, base_url: str, mapping: dict[str, str]
-    ) -> None:
+    def _rewrite(soup: BeautifulSoup, base_url: str, mapping: dict[str, str]) -> None:
         for tag in soup.find_all(["img", "source"]):
             if not isinstance(tag, Tag):
                 continue

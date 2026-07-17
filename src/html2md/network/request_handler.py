@@ -71,6 +71,7 @@ def fetch_html(
     allow_private_network=False,
     max_body_bytes=DEFAULT_MAX_BODY_BYTES,
     redirect_validator=None,
+    request_scheduler=None,
 ):
     """Fetch a URL and preserve status, headers, redirects, and failure details.
 
@@ -100,6 +101,7 @@ def fetch_html(
                 timeout=10,
                 max_body_bytes=max_body_bytes,
                 redirect_validator=redirect_validator,
+                request_scheduler=request_scheduler,
             )
             result = FetchResult(
                 requested_url=url,

@@ -147,20 +147,13 @@ def test_crawl_mapping_and_rewrites_exclude_failed_outputs(tmp_path):
     start = "https://example.com/start"
     failed = "https://example.com/failed"
     first_html = f'<html><body><a href="{failed}">Failed</a></body></html>'
-    second_html = "<html><body>conversion fails</body></html>"
     responses = [
         FetchResult(start, start, status_code=200, body=first_html),
-        FetchResult(failed, failed, status_code=200, body=second_html),
+        FetchResult(failed, failed, status_code=500, error="HTTP 500"),
     ]
     manager = StateManager(state_dir=tmp_path / "states")
 
-    with (
-        patch("html2md.markdown.crawler.fetch_html", side_effect=responses),
-        patch(
-            "html2md.markdown.crawler.html_content_to_markdown",
-            side_effect=[f"[Failed]({failed})", None],
-        ),
-    ):
+    with patch("html2md.markdown.crawler.fetch_html", side_effect=responses):
         result = crawl_website(
             start,
             tmp_path / "output",
