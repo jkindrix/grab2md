@@ -17,7 +17,6 @@ from html2md.network.safe_http import (
     _PinnedAddressAdapter,
     guarded_request,
 )
-from html2md.network.chatgpt_handler import extract_conversation_id, is_chatgpt_url
 
 
 PUBLIC_DNS = [(2, 1, 6, "", ("93.184.216.34", 443))]
@@ -231,29 +230,3 @@ def test_https_adapter_preserves_host_sni_and_certificate_identity():
     assert call.kwargs["pool_kwargs"]["server_hostname"] == "assets.example.test"
     assert call.kwargs["pool_kwargs"]["assert_hostname"] == "assets.example.test"
     assert request.headers["Host"] == "assets.example.test:8443"
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://evil.example/?next=chatgpt.com/c/secret",
-        "https://chatgpt.com.evil.example/c/secret",
-        "https://chatgpt.com@evil.example/c/secret",
-        "http://chatgpt.com/c/secret",
-    ],
-)
-def test_chatgpt_special_handling_requires_exact_https_origin(url):
-    assert is_chatgpt_url(url) is False
-    assert extract_conversation_id(url) is None
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "https://chatgpt.com/c/conversation-id",
-        "https://chat.openai.com/share/conversation-id",
-    ],
-)
-def test_chatgpt_special_handling_accepts_supported_exact_origins(url):
-    assert is_chatgpt_url(url) is True
-    assert extract_conversation_id(url) == "conversation-id"

@@ -1,6 +1,5 @@
 """Regression evidence that account-password authentication is not shipped."""
 
-import importlib.util
 import inspect
 from pathlib import Path
 
@@ -23,10 +22,6 @@ def test_converter_api_has_no_account_credential_parameters():
         html_to_markdown("https://example.com", oauth_password="must-not-be-accepted")
 
 
-def test_private_password_handler_is_not_importable():
-    assert importlib.util.find_spec("html2md.network.openai_api_handler") is None
-
-
 def test_convert_cli_exposes_no_account_credential_options():
     result = runner.invoke(app, ["convert", "--help"])
 
@@ -44,5 +39,4 @@ def test_production_tree_contains_no_private_password_flow():
     ).lower()
 
     assert "oauth_password" not in production_text
-    assert "auth0.openai.com" not in production_text
     assert "/api/auth/signin/email" not in production_text

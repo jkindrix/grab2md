@@ -26,8 +26,7 @@ const defaultSettings = {
     preserveImages: true,
     includeTables: true,
     codeBlocks: true,
-    inlineLinks: true,
-    enableChatGPTMode: true
+    inlineLinks: true
   }
 };
 
@@ -36,9 +35,6 @@ let settings = {...defaultSettings};
 
 // Initialize TurndownService for HTML to Markdown conversion
 let turndownService;
-
-// Initialize ChatGPT specialized converter
-let chatGPTTurndown;
 
 // Initialize the extension
 document.addEventListener('DOMContentLoaded', () => {
@@ -93,7 +89,6 @@ function applySettings() {
   document.getElementById('include-tables').checked = settings.contentOptions.includeTables;
   document.getElementById('code-blocks').checked = settings.contentOptions.codeBlocks;
   document.getElementById('inline-links').checked = settings.contentOptions.inlineLinks;
-  document.getElementById('enable-chatgpt-mode').checked = settings.contentOptions.enableChatGPTMode;
 
   // Initialize Turndown with current settings
   initializeTurndown();
@@ -112,11 +107,6 @@ function initializeTurndown() {
   // Create the standard TurndownService
   turndownService = new TurndownService(turndownOptions);
   
-  // Initialize ChatGPT specialized converter if available
-  if (typeof ChatGPTTurndownService !== 'undefined') {
-    chatGPTTurndown = new ChatGPTTurndownService(turndownOptions);
-  }
-
   // Configure Turndown based on settings
   if (!settings.contentOptions.preserveImages) {
     turndownService.remove('img');
@@ -126,7 +116,7 @@ function initializeTurndown() {
     turndownService.keep(['table', 'tr', 'td', 'th', 'thead', 'tbody']);
   }
   
-  // Add ChatGPT-specific rules to handle code blocks better
+  // Add a generic rule for structured code blocks.
   turndownService.addRule('codeBlock', {
     filter: function(node) {
       // Detect code blocks by structure or class
@@ -297,8 +287,7 @@ function updateSettingsFromForm() {
     preserveImages: document.getElementById('preserve-images').checked,
     includeTables: document.getElementById('include-tables').checked,
     codeBlocks: document.getElementById('code-blocks').checked,
-    inlineLinks: document.getElementById('inline-links').checked,
-    enableChatGPTMode: document.getElementById('enable-chatgpt-mode').checked
+    inlineLinks: document.getElementById('inline-links').checked
   };
 
   // Reinitialize Turndown with new settings
@@ -427,181 +416,7 @@ function convertToMarkdown(html, trim) {
   }
 
   // Convert to markdown using the standard converter
-  let markdown = turndownService.turndown(html);
-  
-  // Check if this is content that's already been converted to our transcript format
-  if (html.includes('title: "ChatGPT Conversation Transcript"') && 
-      html.includes('format: "transcript-v1.0"') &&
-      html.includes('# Conversation Transcript')) {
-    
-    Html2MdLogger.debug('Already in transcript format, skipping conversion');
-    
-    // Just clean up any extra/duplicate metadata
-    if (html.match(/---\s*title.*?---/g)?.length > 1) {
-      // If there are multiple frontmatter blocks, keep only the first one
-      html = html.replace(/(---\s*title.*?---)([\s\S]*?)(---\s*title.*?---)/s, '$1$2');
-    }
-    
-    // Make sure we only have one main title
-    if (html.match(/# Conversation Transcript/g)?.length > 1) {
-      html = html.replace(/# Conversation Transcript/, '').trim();
-      html = html.replace(/---\s*title.*?---\s*/s, match => match + '\n# Conversation Transcript\n\n');
-    }
-    
-    return html;
-  }
-  
-  // Check if this is a ChatGPT conversation and we should use the transcript converter
-  if (settings.contentOptions.enableChatGPTMode && 
-      (TranscriptConverter.isChatGPT(html) || 
-       (typeof window !== 'undefined' && 
-        (window.location.href.includes('chatgpt.com') || 
-         window.location.href.includes('chat.openai.com'))))) {
-    
-    Html2MdLogger.debug('ChatGPT conversation detected, using transcript converter');
-    
-    try {
-      // We need to do some pre-cleaning before handing off to the transcript converter
-      // This helps with issues where UI text gets mixed in at the HTML level
-      const tempDiv = document.createElement('div');
-      
-      // Handle incomplete HTML by wrapping it in a proper structure if needed
-      let processedHtml = html;
-      
-      // Check if the HTML is a partial fragment
-      if (!html.trim().startsWith('<!DOCTYPE html>') && !html.trim().startsWith('<html')) {
-        Html2MdLogger.debug('Detected HTML fragment, wrapping in proper HTML structure');
-        processedHtml = `<!DOCTYPE html><html><head><meta charset="UTF-8"></head><body>${html}</body></html>`;
-      }
-      
-      tempDiv.innerHTML = processedHtml;
-
-      // Remove specific ChatGPT UI elements that commonly cause problems
-      const removeSelectors = [
-        // Page UI elements
-        'title', 'header', 'footer', 'nav', 'aside', 
-        // Common ChatGPT UI elements 
-        '[role="banner"]', '[role="navigation"]', '[role="complementary"]',
-        '.flex-shrink-0', '.self-end', '.text-gray-400', '.text-gray-600',
-        '.text-gray-500', '.text-xs', '.text-sm', '.py-2', '.px-3',
-        '[data-testid="search-box"]', '[data-testid="send-button"]',
-        '[data-testid="model-switcher"]', '[data-testid="chat-sidebar"]',
-        '[aria-label="Menu"]', '[data-testid="copy-button"]',
-        // Model indicator, buttons, etc.
-        'button', '.toast', '.modal', '.cookie-banner', '.alert',
-        '.buttons', '.actionbar', '.input-panel', '.toolbar', '.navigation',
-        '.pagination', '.search-results', '.menu-dropdown', '.settings',
-        '.skip-link', '.chat-history', '.main-header', '.main-footer',
-        // More specific ChatGPT UI elements
-        '.sticky', '.pointer-events-auto', '.chat-message-actions',
-        '.chat-message-edit-buttons'
-      ];
-      
-      removeSelectors.forEach(selector => {
-        try {
-          const elements = tempDiv.querySelectorAll(selector);
-          elements.forEach(el => el.remove());
-        } catch (e) { /* Ignore invalid selectors */ }
-      });
-
-      // Handle code blocks better at HTML level
-      const codeElements = tempDiv.querySelectorAll('pre, code, .code-block, [class*="bg-black"], [class*="whitespace-pre"]');
-      codeElements.forEach(codeEl => {
-        // Remove any "Copy" or "Edit" buttons inside or near code blocks
-        const nearbyButtons = codeEl.querySelectorAll('button');
-        nearbyButtons.forEach(btn => btn.remove());
-        
-        // Make sure code content is preserved properly
-        if (codeEl.innerHTML) {
-          // Preserve line breaks and spaces in code
-          codeEl.innerHTML = codeEl.innerHTML.replace(/<br\s*\/?>/gi, '\n');
-        }
-      });
-
-      // DOM selectors remove UI without rewriting user-authored text.
-      const cleanedHtml = tempDiv.innerHTML.replace(/\n{3,}/g, '\n\n');
-      
-      // First check if this content is already in our transcript format
-      if (cleanedHtml.includes('title: "ChatGPT Conversation Transcript"') && 
-          cleanedHtml.includes('format: "transcript-v1.0"') &&
-          cleanedHtml.includes('# Conversation Transcript')) {
-        
-        Html2MdLogger.debug('Content is already in transcript format, cleaning up');
-        return TranscriptConverter.cleanupExistingTranscript(cleanedHtml);
-      }
-      
-      // Use the specialized transcript converter with pre-cleaned HTML
-      // Check if we have the ChatGPT turndown service available
-      let chatGPTMarkdown = '';
-      if (typeof chatGPTTurndown !== 'undefined' && chatGPTTurndown) {
-        try {
-          Html2MdLogger.debug('Using ChatGPT specialized converter first');
-          chatGPTMarkdown = chatGPTTurndown.turndown(cleanedHtml);
-          Html2MdLogger.debug('ChatGPT converter preview:', chatGPTMarkdown.substring(0, 200) + '...');
-        } catch (chatGPTError) {
-          Html2MdLogger.error('Error using chatGPT converter:', chatGPTError);
-        }
-      }
-      
-      // Then use the transcript converter to create the final structured output
-      const result = TranscriptConverter.convert(chatGPTMarkdown || cleanedHtml);
-      
-      // Log the first 200 characters of the result for debugging
-      Html2MdLogger.debug('Conversion result preview:', result.substring(0, 200) + '...');
-      
-      if (result && result.includes('# Conversation Transcript')) {
-        // Make sure conversation structure is correct with additional clean up
-        const finalResult = result
-          .replace(/^(.*?)(---\s*title)/s, '$2');
-        
-        return finalResult;
-      } else {
-        Html2MdLogger.error('Transcript converter returned invalid output');
-        // Try to use the regular turndown service to convert the HTML
-        try {
-          return turndownService.turndown(cleanedHtml);
-        } catch (turndownError) {
-          Html2MdLogger.error('Regular turndown also failed:', turndownError);
-          
-          // If that fails too, return a simple fallback
-          return `# ChatGPT Conversation
-
-Unable to fully convert the content. Try using the "Convert Selection" option if you're seeing this message.`;
-        }
-      }
-    } catch (error) {
-      Html2MdLogger.error('Error using transcript converter:', error);
-      Html2MdLogger.error('Error details:', error.message);
-      Html2MdLogger.error('Error stack:', error.stack);
-      
-      // Try to use the simpler ChatGPTCleaner as a fallback
-      try {
-        Html2MdLogger.debug('Attempting to use ChatGPTCleaner as fallback');
-        // Convert with regular turndown first
-        const simpleTurndown = turndownService.turndown(html);
-        // Then clean it up with the specialized cleaner
-        const cleanedResult = ChatGPTCleaner.clean(simpleTurndown);
-        
-        // Add a subtle note about using fallback
-        return `> ℹ️ *Note: Used fallback converter due to an issue with the primary converter.*
-
-${cleanedResult}`;
-      } catch (cleanerError) {
-        Html2MdLogger.error('Fallback cleaner also failed:', cleanerError);
-        
-        // Last resort - just use regular turndown
-        const fallbackResult = turndownService.turndown(html);
-        
-        // Add warning about fallback conversion
-        return `> ⚠️ **Note**: The ChatGPT specialized converter encountered an error and fell back to standard conversion.
-> This may result in less optimal formatting. Please report this issue.
-
-${fallbackResult}`;
-      }
-    }
-  }
-
-  return markdown;
+  return turndownService.turndown(html);
 }
 
 // Handle the output based on selected action

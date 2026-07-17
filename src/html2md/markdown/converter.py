@@ -8,7 +8,6 @@ from html2md.cookies.session_manager import get_session, disable_ssl_verificatio
 from html2md.markdown.trimmer import trim_markdown, trim_markdown_local
 from html2md.markdown.document import prepare_document
 from html2md.utils.formatter import format_markdown
-from html2md.network.chatgpt_handler import is_chatgpt_url, get_conversation_html
 from html2md.network.image_downloader import ImageDownloader
 from html2md.network.browser_renderer import render_html
 from html2md.network.safe_http import (
@@ -76,20 +75,8 @@ def html_to_markdown(
         if not verify_ssl:
             disable_ssl_verification(session)
 
-    # Special handling for ChatGPT URLs on the static path.
-    if not render_js and is_chatgpt_url(url):
-        logger.info(f"Detected ChatGPT URL: {url}")
-        html_content = get_conversation_html(url, session, headers)
-
-        if not html_content:
-            logger.error(f"Failed to retrieve ChatGPT conversation content from {url}")
-            return None
-
-        logger.info(
-            f"Successfully retrieved ChatGPT conversation content ({len(html_content)} bytes)"
-        )
-    elif not render_js:
-        # Standard HTML retrieval for non-ChatGPT URLs
+    if not render_js:
+        # Retrieve HTML through the shared guarded transport.
         try:
             logger.info(f"Fetching URL: {url}")
             # Send GET request to fetch the HTML content

@@ -12,7 +12,6 @@ from html2md.config.writer import atomic_write_json
 from html2md.cookies import session_manager
 from html2md.markdown.batch_processor import create_directory_structure
 from html2md.markdown.crawler import crawl_website
-from html2md.network.chatgpt_handler import get_conversation_html
 from html2md.network.request_handler import FetchResult
 from html2md.utils.redaction import (
     REDACTED,
@@ -116,38 +115,6 @@ def test_redacting_logger_sanitizes_every_log_level(caplog):
     rendered = "\n".join(record.getMessage() for record in caplog.records)
     assert secret not in rendered
     assert rendered.count(REDACTED) >= 5
-
-
-def test_chatgpt_diagnostics_never_log_cookies_headers_or_response_body(caplog):
-    secret = "conversation-secret"
-    response = Mock(
-        status_code=401, text=f"body contains {secret}", headers={"Set-Cookie": secret}
-    )
-    response.json.side_effect = ValueError("invalid")
-    session = Mock()
-    session.cookies.get_dict.return_value = {"session": secret}
-    session.cookies.keys.return_value = []
-    session.get.return_value = response
-
-    def fixture_get(source_session, _method, url, **kwargs):
-        return source_session.get(
-            url,
-            headers=kwargs.get("headers"),
-            timeout=kwargs.get("timeout"),
-        )
-
-    with (
-        caplog.at_level(logging.DEBUG),
-        patch("html2md.network.chatgpt_handler.guarded_request", fixture_get),
-    ):
-        get_conversation_html(
-            "https://chatgpt.com/c/00000000-0000-0000-0000-000000000000",
-            session,
-            {"Authorization": f"Bearer {secret}"},
-        )
-
-    rendered = "\n".join(record.getMessage() for record in caplog.records)
-    assert secret not in rendered
 
 
 def test_private_cookie_copy_is_unique_owner_only_and_cleanup_is_explicit(tmp_path):

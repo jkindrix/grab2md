@@ -7,8 +7,8 @@ fetch, or independently resolving proxy is not an accepted acquisition path.
 
 ## Default policy
 
-The static converter, batch processor, crawler, robots parser, specialized
-conversation handler, and image downloader:
+The static converter, batch processor, crawler, robots parser, and image
+downloader:
 
 - accept only HTTP(S) URLs without embedded credentials;
 - resolve an origin once and reject the entire result if any address is not

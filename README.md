@@ -200,7 +200,7 @@ See [`extension/README.md`](./extension/README.md) for installation and testing.
   `0600` files in `0700` directories on POSIX systems.
 - Diagnostic logs redact credential-bearing headers, cookie values, and
   token-like data.
-- Remote pages, crawl targets, robots files, conversation endpoints, and images
+- Remote pages, crawl targets, robots files, and images
   allow only HTTP(S), resolve each origin once, connect only to validated
   numeric addresses, and manually revalidate redirects. Private, loopback,
   link-local, and metadata destinations are blocked by default. Guarded traffic

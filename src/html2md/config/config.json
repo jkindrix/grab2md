@@ -1,13 +1,5 @@
 {
   "domains": {
-    "chatgpt.com": {
-      "path_rules": {
-        "": {
-          "h1_occurrence": 1,
-          "footer_marker": ""
-        }
-      }
-    },
     "docs.datadoghq.com": {
       "path_rules": {
         "": {

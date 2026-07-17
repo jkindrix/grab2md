@@ -219,10 +219,11 @@ async function main() {
 
     const markdown = await evaluate(
       popupClient,
-      `convertToMarkdown('<h1>Fixture</h1><p>Search OpenAI model content</p>', false)`
+      `convertToMarkdown('<h1>Fixture</h1><p>Search indexing uses a model.</p><pre><code class="language-text">model Search API</code></pre>', false)`
     );
     assert.match(markdown, /^# Fixture/m);
-    assert.match(markdown, /Search OpenAI model content/);
+    assert.match(markdown, /Search indexing uses a model\./);
+    assert.match(markdown, /```text\nmodel Search API\n```/);
 
     const fixtureTarget = await createTarget(
       port,
@@ -257,16 +258,6 @@ async function main() {
       `new TurndownService().turndown(${JSON.stringify(article)})`
     );
     assert.match(injectedMarkdown, /Injected/);
-
-    const conversationFixture = JSON.stringify(
-      'Search OpenAI model 4o\n\n```text\nChat GPT OpenAI model\n```'
-    );
-    const protectedConversation = await evaluate(
-      popupClient,
-      `ChatGPTCleaner.clean(${conversationFixture})`
-    );
-    assert.match(protectedConversation, /Search OpenAI model 4o/);
-    assert.match(protectedConversation, /```text\nChat GPT OpenAI model\n```/);
 
     await evaluate(popupClient, `handleOutput('# Preview result', 'show', 'Fixture')`);
     assert.deepEqual(

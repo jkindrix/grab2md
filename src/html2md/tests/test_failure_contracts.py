@@ -7,7 +7,6 @@ from typer.testing import CliRunner
 
 from html2md.cli.cli import app
 from html2md.markdown.crawler import CrawlResult, crawl_website
-from html2md.network.chatgpt_handler import get_conversation_html
 from html2md.network.request_handler import FetchResult
 from html2md.utils.state_manager import StateManager
 
@@ -25,24 +24,6 @@ class FailingSession:
 
     def get(self, *args, **kwargs):
         raise requests.ConnectionError("offline")
-
-
-def test_chatgpt_retrieval_failure_is_not_convertible_html():
-    def fixture_get(session, _method, url, **kwargs):
-        return session.get(
-            url,
-            headers=kwargs.get("headers"),
-            timeout=kwargs.get("timeout"),
-        )
-
-    with patch("html2md.network.chatgpt_handler.guarded_request", fixture_get):
-        result = get_conversation_html(
-            "https://chatgpt.com/c/00000000-0000-0000-0000-000000000000",
-            FailingSession(),
-            {},
-        )
-
-    assert result is None
 
 
 def test_convert_failure_exits_nonzero():

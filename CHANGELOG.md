@@ -19,14 +19,12 @@ direct fetch path before public package publication.
 ### Security
 
 - Extended destination validation and numeric-address pinning from image
-  downloads to static conversion, batch, crawl, robots, conversation, and test
-  OAuth requests; every redirect is handled manually and revalidated.
+  downloads to static conversion, batch, crawl, robots, and test OAuth
+  requests; every redirect is handled manually and revalidated.
 - Pinned Chromium's source hostname through its resolver, failed all other DNS,
   and blocked cross-origin browser redirects rather than permitting a separate
   resolution race.
 - Added 10 MiB static page/crawl and 1 MiB robots response limits.
-- Restricted specialized ChatGPT handling to exact supported HTTPS origins
-  instead of substring matches.
 - Corrected crawl hostname/subdomain boundaries, established discovery scope
   from the final starting URL, applied scope before robots lookups, and checked
   redirect destinations against scope and robots before fetching them.

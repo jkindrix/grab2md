@@ -5,7 +5,6 @@ const test = require('node:test');
 
 const extensionRoot = path.resolve(__dirname, '..');
 const { normalizeExtractedHtml } = require('../conversion-utils.js');
-const ChatGPTCleaner = require('../chatgpt-cleaner.js');
 
 test('normalizes short and malformed extracted HTML without reassigning inputs', () => {
   const complete = '<html><body>' + 'content '.repeat(20) + '</body></html>';
@@ -22,25 +21,17 @@ test('normalizes short and malformed extracted HTML without reassigning inputs',
   }
 });
 
-test('ChatGPT cleanup preserves ordinary product words and fenced code', () => {
-  const code = '```text\nSearch Chat GPT OpenAI model 4o\nCopy code\n```';
-  const input = [
-    'Search is part of my model design.',
-    'Chat, GPT, OpenAI, and 4o are user-authored words.',
-    'Open sidebar',
-    code
-  ].join('\n\n');
+test('popup loads only the generic conversion stack', () => {
+  const popup = fs.readFileSync(path.join(extensionRoot, 'popup.html'), 'utf8');
+  const scripts = [...popup.matchAll(/<script src="([^"]+)"><\/script>/g)]
+    .map(match => match[1]);
 
-  const cleaned = ChatGPTCleaner.clean(input);
-  assert.ok(cleaned.includes('Search is part of my model design.'));
-  assert.ok(cleaned.includes('Chat, GPT, OpenAI, and 4o are user-authored words.'));
-  assert.ok(!cleaned.includes('\nOpen sidebar\n'));
-  assert.ok(cleaned.includes(code));
-
-  for (const filename of ['popup.js', 'turndown.js', 'chatgpt-turndown.js', 'transcript-converter.js']) {
-    const source = fs.readFileSync(path.join(extensionRoot, filename), 'utf8');
-    assert.doesNotMatch(source, /(?:replace|match)\(\/OpenAI\|ChatGPT/);
-  }
+  assert.deepEqual(scripts, [
+    'logger.js',
+    'turndown.js',
+    'conversion-utils.js',
+    'popup.js'
+  ]);
 });
 
 test('unsupported URL and element modes are not exposed', () => {

@@ -6,7 +6,7 @@ function normalizeExtractedHtml(html) {
   }
 
   if (html.length < 100 || (!html.includes('<html') && !html.includes('<body'))) {
-    return `<!DOCTYPE html><html><head><title>Conversation</title></head><body><div class="content">${html}</div></body></html>`;
+    return `<!DOCTYPE html><html><head><title>Document</title></head><body><div class="content">${html}</div></body></html>`;
   }
 
   return html;

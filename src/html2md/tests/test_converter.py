@@ -46,6 +46,22 @@ def test_html_content_conversion_preserves_core_markdown_structures():
     assert "| one | 1 |" in markdown
 
 
+def test_html_content_conversion_preserves_ordinary_words_and_code():
+    html = """
+    <article>
+      <h1>Model Notes</h1>
+      <p>Search, model, API, and assistant are ordinary authored words.</p>
+      <pre><code class="language-text">model Search API</code></pre>
+    </article>
+    """
+
+    markdown = html_content_to_markdown(html, "https://example.com/notes")
+
+    assert markdown is not None
+    assert "Search, model, API, and assistant are ordinary authored words." in markdown
+    assert "model Search API" in markdown
+
+
 def test_empty_html_is_a_conversion_failure():
     assert html_content_to_markdown("  ", "https://example.com") is None
 
