@@ -66,7 +66,6 @@ jobs:
         run: |
           for file in extension/*.js extension/tests/*.js; do node --check "$file"; done
           node --test extension/tests/*.test.js
-          node extension/tests/chromium-smoke.js
       - name: Install and exercise the wheel
         run: |
           python -m venv "$RUNNER_TEMP/wheel-smoke"
@@ -94,7 +93,7 @@ jobs:
         run: poetry run mypy src/html2md tests/config
 
   browser-render:
-    name: Optional Chromium rendering
+    name: Chromium runtime checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -106,7 +105,7 @@ jobs:
       - name: Install render extra and Chromium
         run: |
           poetry install --with dev --extras render --sync
-          poetry run playwright install --with-deps --only-shell chromium
+          poetry run playwright install --with-deps chromium
       - name: Audit render dependencies
         run: |
           poetry export --only main --extras render --without-hashes \
@@ -116,4 +115,7 @@ jobs:
       - name: Exercise static and rendered fixtures
         env:
           HTML2MD_RUN_RENDER_E2E: "1"
-        run: poetry run pytest -q src/html2md/tests/test_browser_renderer_e2e.py
+        run: |
+          poetry run pytest -q src/html2md/tests/test_browser_renderer_e2e.py
+          export CHROME_BIN="$(poetry run python -c 'from playwright.sync_api import sync_playwright; p = sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
+          node extension/tests/chromium-smoke.js

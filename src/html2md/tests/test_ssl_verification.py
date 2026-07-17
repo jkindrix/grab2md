@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 
 import pytest
 import requests
+from click.utils import strip_ansi
 from typer.testing import CliRunner
 
 import html2md.cookies.session_manager as session_manager
@@ -168,10 +169,7 @@ class TestCliInsecureFlag:
         # Rich wraps and truncates long option names in the help panel
         # (e.g. "--insecure,--no-…"), so only assert on the primary name
         # and cover the alias via parsing tests below.
-        normalized = "".join(
-            char for char in result.output if char.isalnum() or char == "-"
-        )
-        assert "--insecure" in normalized
+        assert "--insecure" in strip_ansi(result.output)
 
     @pytest.mark.parametrize("flag", ["--insecure", "--no-verify-ssl"])
     def test_convert_accepts_flag(self, flag, monkeypatch):
