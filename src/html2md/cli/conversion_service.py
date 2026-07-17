@@ -54,6 +54,7 @@ def convert_source(
     user_agent_contact: Optional[str] = None,
     simulate_browser: bool = False,
     insecure: bool = False,
+    include_metadata: bool = False,
     on_status: StatusCallback = _ignore_status,
 ) -> ConversionResult:
     """Fetch and convert one URL or local file without rendering CLI output."""
@@ -74,6 +75,7 @@ def convert_source(
             user_agent_contact=user_agent_contact,
             simulate_browser=simulate_browser,
             insecure=insecure,
+            include_metadata=include_metadata,
             on_status=on_status,
         )
 
@@ -84,6 +86,7 @@ def convert_source(
         download_images=download_images,
         images_dir=images_dir,
         insecure=insecure,
+        include_metadata=include_metadata,
         on_status=on_status,
     )
 
@@ -103,6 +106,7 @@ def _convert_url(
     user_agent_contact: Optional[str],
     simulate_browser: bool,
     insecure: bool,
+    include_metadata: bool,
     on_status: StatusCallback,
 ) -> ConversionResult:
     logger.info("Processing URL: %s", source)
@@ -145,6 +149,7 @@ def _convert_url(
             output_dir=output_dir,
             images_dir=images_dir,
             verify_ssl=not insecure,
+            include_metadata=include_metadata,
         )
         on_status(f"Converting {source} to markdown")
         return ConversionResult(source, source, markdown, True)
@@ -161,6 +166,7 @@ def _convert_file(
     download_images: bool,
     images_dir: str,
     insecure: bool,
+    include_metadata: bool,
     on_status: StatusCallback,
 ) -> ConversionResult:
     file_path = Path(source).expanduser().resolve()
@@ -178,6 +184,7 @@ def _convert_file(
             output_dir=output_dir,
             images_dir=images_dir,
             verify_ssl=not insecure,
+            include_metadata=include_metadata,
         )
         on_status(f"Converting {file_path} to markdown")
         return ConversionResult(source, str(file_path), markdown, False)

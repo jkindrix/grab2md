@@ -196,6 +196,14 @@ See [`extension/README.md`](./extension/README.md) for installation and testing.
 Windows relies on the current account's directory ACLs because POSIX mode bits
 are unavailable there.
 
+## Output contract
+
+Remote relative links and image references are resolved against the final URL
+and the document's valid `<base>` element. `--metadata` adds deterministic YAML
+front matter for available title, author/date, canonical URL, description, and
+language fields. Local references remain relative. See
+[`docs/output-contract.md`](./docs/output-contract.md) for the exact contract.
+
 ## Known limitations
 
 - Conversion uses `markdownify` and optional per-domain trimming; it does not
@@ -203,7 +211,8 @@ are unavailable there.
   extractor decision is documented in
   [`docs/main-content-benchmark.md`](./docs/main-content-benchmark.md).
 - JavaScript-rendered pages are not rendered by the CLI.
-- Metadata extraction and relative-URL canonicalization are limited.
+- Metadata extraction intentionally uses declared HTML/meta fields rather than
+  text inference or executable structured data.
 - Crawling is sequential; removed concurrency options are not advertised.
 - Browser cookie decryption varies across browser and operating-system versions.
 - The extension must be installed unpacked; no Web Store release exists.

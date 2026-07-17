@@ -40,6 +40,7 @@ def test_url_conversion_builds_one_session_and_threads_security_options(
         cookie_json=tmp_path / "cookies.json",
         download_images=True,
         insecure=True,
+        include_metadata=True,
         on_status=statuses.append,
     )
 
@@ -55,6 +56,7 @@ def test_url_conversion_builds_one_session_and_threads_security_options(
     assert convert.call_args.kwargs["headers"] == {"User-Agent": "html2md-test"}
     assert convert.call_args.kwargs["output_dir"] == output.parent.resolve()
     assert convert.call_args.kwargs["verify_ssl"] is False
+    assert convert.call_args.kwargs["include_metadata"] is True
     assert statuses[-1] == "Converting https://example.com/page to markdown"
 
 

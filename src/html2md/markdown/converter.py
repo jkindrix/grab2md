@@ -6,6 +6,7 @@ from markdownify import markdownify as md
 
 from html2md.cookies.session_manager import get_session, disable_ssl_verification
 from html2md.markdown.trimmer import trim_markdown, trim_markdown_local
+from html2md.markdown.document import prepare_document
 from html2md.utils.formatter import format_markdown
 from html2md.network.chatgpt_handler import is_chatgpt_url, get_conversation_html
 from html2md.network.image_downloader import ImageDownloader
@@ -27,6 +28,7 @@ def html_to_markdown(
     output_dir=None,
     images_dir="images",
     verify_ssl=True,
+    include_metadata=False,
 ):
     """
     Fetch HTML and convert to Markdown.
@@ -41,6 +43,7 @@ def html_to_markdown(
         images_dir (str, optional): Subdirectory name for images (default: "images").
         verify_ssl (bool, optional): Whether to verify SSL certificates. Defaults to True.
             Applies to the provided session as well as newly created ones.
+        include_metadata (bool, optional): Prepend deterministic YAML front matter.
 
     Returns:
         str or None: Markdown content if successful, None otherwise.
@@ -128,14 +131,21 @@ def html_to_markdown(
             logger.error(f"Failed to retrieve {url}: {e}")
             return None
 
+    document_url = url
+    if not is_chatgpt_url(url):
+        response_url = getattr(response, "url", None)
+        if isinstance(response_url, str) and response_url:
+            document_url = response_url
+
     return html_content_to_markdown(
         html_content,
-        url,
+        document_url,
         session=session,
         trim=trim,
         download_images=download_images,
         output_dir=output_dir,
         images_dir=images_dir,
+        include_metadata=include_metadata,
     )
 
 
@@ -147,6 +157,7 @@ def html_content_to_markdown(
     download_images=False,
     output_dir=None,
     images_dir="images",
+    include_metadata=False,
 ):
     """Convert an already-fetched HTML document to Markdown."""
     if not html_content or not html_content.strip():
@@ -160,8 +171,10 @@ def html_content_to_markdown(
         )
         # We'll still try to convert it, but log a warning
 
+    prepared_html, metadata = prepare_document(html_content, base_url)
+
     # Convert HTML to Markdown using markdownify
-    markdown_content = md(html_content, heading_style="ATX")
+    markdown_content = md(prepared_html, heading_style="ATX")
 
     # Apply formatting rules to clean up the generated markdown
     formatted_markdown = format_markdown(markdown_content)
@@ -170,12 +183,15 @@ def html_content_to_markdown(
     if trim:
         formatted_markdown = trim_markdown(formatted_markdown, base_url)
 
+    if include_metadata:
+        formatted_markdown = metadata.front_matter() + formatted_markdown
+
     # Download images if requested
     if download_images and output_dir:
         logger.info(f"Downloading images from {base_url}")
         image_downloader = ImageDownloader(session=session, images_dir=images_dir)
         formatted_markdown = image_downloader.process_markdown_with_images(
-            formatted_markdown, html_content, base_url, Path(output_dir)
+            formatted_markdown, prepared_html, base_url, Path(output_dir)
         )
 
     logger.info(f"Successfully converted HTML from {base_url} to Markdown.")
@@ -189,6 +205,7 @@ def local_html_to_markdown(
     output_dir=None,
     images_dir="images",
     verify_ssl=True,
+    include_metadata=False,
 ):
     """
     Convert HTML from a local file to Markdown.
@@ -224,8 +241,12 @@ def local_html_to_markdown(
             logger.warning(f"Empty HTML file: {file_path}")
             return None
 
+        prepared_html, metadata = prepare_document(
+            html_content, Path(file_path).resolve().as_uri()
+        )
+
         # Convert HTML to Markdown using markdownify
-        markdown_content = md(html_content, heading_style="ATX")
+        markdown_content = md(prepared_html, heading_style="ATX")
 
         # Apply formatting rules to clean up the generated markdown
         formatted_markdown = format_markdown(markdown_content)
@@ -234,6 +255,9 @@ def local_html_to_markdown(
         if trim:
             file_name = os.path.basename(file_path)
             formatted_markdown = trim_markdown_local(formatted_markdown, file_name)
+
+        if include_metadata:
+            formatted_markdown = metadata.front_matter() + formatted_markdown
 
         # Download images if requested
         if download_images and output_dir:
@@ -246,7 +270,7 @@ def local_html_to_markdown(
                 local_root=source_path.parent,
             )
             formatted_markdown = image_downloader.process_markdown_with_images(
-                formatted_markdown, html_content, base_url, Path(output_dir)
+                formatted_markdown, prepared_html, base_url, Path(output_dir)
             )
 
         logger.info(f"Successfully converted HTML from {file_path} to Markdown.")

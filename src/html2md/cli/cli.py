@@ -126,6 +126,7 @@ def _convert_one(
     user_agent_contact: Optional[str],
     simulate_browser: bool,
     insecure: bool,
+    include_metadata: bool,
     on_status: Optional[Callable[[str], None]] = None,
 ) -> ConversionResult:
     """Translate CLI option types into one presentation-neutral conversion."""
@@ -145,6 +146,7 @@ def _convert_one(
         user_agent_contact=user_agent_contact,
         simulate_browser=simulate_browser,
         insecure=insecure,
+        include_metadata=include_metadata,
         on_status=status_callback,
     )
 
@@ -165,6 +167,7 @@ def process_single_with_progress(
     user_agent_contact: Optional[str] = None,
     simulate_browser: bool = False,
     insecure: bool = False,
+    include_metadata: bool = False,
     progress: Optional[Progress] = None,
     task_id: Optional[TaskID] = None,
 ) -> bool:
@@ -188,6 +191,7 @@ def process_single_with_progress(
         user_agent_contact,
         simulate_browser,
         insecure,
+        include_metadata,
         lambda message: progress.update(task_id, description=message),
     )
 
@@ -253,6 +257,7 @@ def process_single_quiet(
     user_agent_contact: Optional[str] = None,
     simulate_browser: bool = False,
     insecure: bool = False,
+    include_metadata: bool = False,
 ) -> bool:
     """Render a shared conversion result without decoration."""
     del cookie_path  # The command persists this preference before conversion.
@@ -271,6 +276,7 @@ def process_single_quiet(
         user_agent_contact,
         simulate_browser,
         insecure,
+        include_metadata,
     )
     if not result.succeeded:
         if result.error:
@@ -364,6 +370,11 @@ def convert_command(
         "--images-dir",
         help="Directory name for storing downloaded images.",
     ),
+    include_metadata: bool = typer.Option(
+        get_cli_default("convert", "metadata", False),
+        "--metadata/--no-metadata",
+        help="Prepend title, author/date, canonical URL, and page metadata as YAML front matter.",
+    ),
     log_level: LogLevel = typer.Option(
         LogLevel.WARNING, "--log-level", help="Set logging level."
     ),
@@ -434,6 +445,7 @@ def convert_command(
                     user_agent_contact=user_agent_contact,
                     simulate_browser=simulate_browser,
                     insecure=insecure,
+                    include_metadata=include_metadata,
                     progress=progress,
                     task_id=task_id,
                 ):
@@ -468,6 +480,7 @@ def convert_command(
                 user_agent_contact=user_agent_contact,
                 simulate_browser=simulate_browser,
                 insecure=insecure,
+                include_metadata=include_metadata,
             ):
                 successes += 1
 
@@ -490,6 +503,11 @@ def batch_command(
         get_cli_default("batch", "trim", True),
         "--trim/--no-trim",
         help="Enable/disable trimming based on domain-specific rules.",
+    ),
+    include_metadata: bool = typer.Option(
+        get_cli_default("batch", "metadata", False),
+        "--metadata/--no-metadata",
+        help="Prepend title, author/date, canonical URL, and page metadata as YAML front matter.",
     ),
     flatten_output: bool = typer.Option(
         get_cli_default("batch", "flatten", False),
@@ -649,6 +667,7 @@ def batch_command(
                 flatten_all=flatten_all,
                 hierarchical_domains=hierarchical,
                 verify_ssl=not insecure,
+                include_metadata=include_metadata,
             )
 
             # Set completed state
@@ -895,6 +914,11 @@ def crawl_command(
         "--trim/--no-trim",
         help="Enable/disable trimming based on domain-specific rules.",
     ),
+    include_metadata: bool = typer.Option(
+        get_cli_default("crawl", "metadata", False),
+        "--metadata/--no-metadata",
+        help="Prepend title, author/date, canonical URL, and page metadata as YAML front matter.",
+    ),
     flatten_output: bool = typer.Option(
         get_cli_default("crawl", "flatten", False),
         "--flatten/--preserve-paths",
@@ -1089,6 +1113,7 @@ def crawl_command(
                         polite_mode=polite,
                         show_progress=show_progress,
                         trim=trim,
+                        include_metadata=include_metadata,
                         progress_callback=progress_callback,
                         flatten_output=flatten_output,
                         hierarchical_domains=hierarchical,

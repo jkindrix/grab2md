@@ -41,6 +41,7 @@ VALUE_TYPES: dict[ConfigPath, tuple[type, ...]] = {
     ("cli_defaults", "batch", "flatten"): (bool,),
     ("cli_defaults", "batch", "flatten_all"): (bool,),
     ("cli_defaults", "batch", "trim"): (bool,),
+    ("cli_defaults", "batch", "metadata"): (bool,),
     ("cli_defaults", "batch", "visualize"): (bool,),
     ("cli_defaults", "batch", "quiet"): (bool,),
     ("cli_defaults", "crawl", "hierarchical"): (bool,),
@@ -57,6 +58,7 @@ VALUE_TYPES: dict[ConfigPath, tuple[type, ...]] = {
     ("cli_defaults", "crawl", "polite"): (bool,),
     ("cli_defaults", "crawl", "show_progress"): (bool,),
     ("cli_defaults", "crawl", "trim"): (bool,),
+    ("cli_defaults", "crawl", "metadata"): (bool,),
     ("cli_defaults", "crawl", "visualize"): (bool,),
     ("cli_defaults", "crawl", "quiet"): (bool,),
     ("cli_defaults", "convert", "browser_cookies"): (bool,),
@@ -68,6 +70,7 @@ VALUE_TYPES: dict[ConfigPath, tuple[type, ...]] = {
     ("cli_defaults", "convert", "trim"): (bool,),
     ("cli_defaults", "convert", "download_images"): (bool,),
     ("cli_defaults", "convert", "images_dir"): (str,),
+    ("cli_defaults", "convert", "metadata"): (bool,),
     ("cli_defaults", "convert", "fancy"): (bool,),
     ("cli_defaults", "convert", "local"): (bool,),
 }

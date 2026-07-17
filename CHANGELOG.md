@@ -6,6 +6,15 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+### Added
+
+- Optional `--metadata` YAML front matter for convert, batch, and crawl output.
+
+### Changed
+
+- Remote relative links and images now resolve against the final response URL
+  and valid HTML base element while local-file references remain relative.
+
 ## [0.1.0] - 2026-07-16
 
 First alpha release after the stabilization and integrity remediation cycle.

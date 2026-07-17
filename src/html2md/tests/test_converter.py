@@ -22,7 +22,7 @@ def test_html_content_conversion_preserves_core_markdown_structures():
     assert markdown is not None
     assert "# Guide" in markdown
     assert "**important**" in markdown
-    assert "[topic](/topic)" in markdown
+    assert "[topic](https://example.com/topic)" in markdown
     assert "| Name | Value |" in markdown
     assert "| one | 1 |" in markdown
 
@@ -65,6 +65,24 @@ def test_url_conversion_passes_headers_without_mutating_session():
         "https://example.com/page", headers=headers, timeout=30
     )
     assert headers == {"Referer": "https://example.com/source"}
+
+
+def test_url_conversion_uses_final_response_url_for_relative_references():
+    response = Mock(
+        text='<a href="next">Next</a>',
+        encoding="utf-8",
+        status_code=200,
+        headers={"Content-Type": "text/html"},
+        url="https://example.com/redirected/page",
+    )
+    response.raise_for_status.return_value = None
+    session = Mock()
+    session.get.return_value = response
+
+    result = html_to_markdown("https://example.com/start", session=session, trim=False)
+
+    assert result is not None
+    assert "[Next](https://example.com/redirected/next)" in result
 
 
 def test_url_timeout_returns_failure():

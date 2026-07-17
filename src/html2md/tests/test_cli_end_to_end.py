@@ -136,6 +136,26 @@ def test_url_conversion_handles_plain_redirected_and_compressed_responses(
     assert f"# {heading}" in output.read_text(encoding="utf-8")
 
 
+def test_url_metadata_uses_final_redirect_url(tmp_path, cli_server):
+    output = tmp_path / "metadata.md"
+
+    result = run_cli(
+        tmp_path,
+        "convert",
+        f"{cli_server}/redirect",
+        "--no-trim",
+        "--metadata",
+        "--output",
+        output,
+    )
+
+    assert result.returncode == 0, result.stderr
+    content = output.read_text(encoding="utf-8")
+    assert content.startswith("---\n")
+    assert f'canonical_url: "{cli_server}/ok"' in content
+    assert "# Page /ok" in content
+
+
 @pytest.mark.parametrize("path", ["/not-found", "/limited", "/server-error"])
 def test_url_http_failures_exit_nonzero_without_output(tmp_path, cli_server, path):
     output = tmp_path / "failure.md"

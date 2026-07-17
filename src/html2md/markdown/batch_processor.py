@@ -126,6 +126,7 @@ def process_markdown_links(
     download_images=False,
     images_dir="images",
     verify_ssl=True,
+    include_metadata=False,
 ):
     """
     Process markdown files, extract URLs, and convert each URL to markdown.
@@ -145,6 +146,7 @@ def process_markdown_links(
         images_dir (str, optional): Directory name for images (default: "images").
         verify_ssl (bool, optional): Whether to verify SSL certificates. Defaults to True.
             Set to False only for trusted hosts with invalid/self-signed certificates.
+        include_metadata (bool, optional): Prepend YAML front matter to each output.
 
     Returns:
         int: Number of processed URLs
@@ -229,6 +231,7 @@ def process_markdown_links(
                     download_images=download_images,
                     output_dir=url_dir,
                     images_dir=images_dir,
+                    include_metadata=include_metadata,
                 )
 
                 if markdown_content:
