@@ -35,6 +35,17 @@ poetry install --with dev --sync
 poetry run html2md --help
 ```
 
+JavaScript rendering is an isolated optional installation:
+
+```bash
+python -m pip install "html2md-cli[render]"
+python -m playwright install chromium
+html2md convert https://example.com/app --render-js
+```
+
+See [`docs/browser-rendering.md`](./docs/browser-rendering.md) for its resource,
+network, and authentication boundaries.
+
 For an isolated non-development installation from a local checkout:
 
 ```bash
@@ -210,7 +221,7 @@ language fields. Local references remain relative. See
   provide general main-content extraction or boilerplate removal. The measured
   extractor decision is documented in
   [`docs/main-content-benchmark.md`](./docs/main-content-benchmark.md).
-- JavaScript-rendered pages are not rendered by the CLI.
+- JavaScript rendering is opt-in for `convert`; batch and crawl remain static.
 - Metadata extraction intentionally uses declared HTML/meta fields rather than
   text inference or executable structured data.
 - Crawling is sequential; removed concurrency options are not advertised.

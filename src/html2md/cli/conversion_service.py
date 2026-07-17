@@ -55,6 +55,7 @@ def convert_source(
     simulate_browser: bool = False,
     insecure: bool = False,
     include_metadata: bool = False,
+    render_js: bool = False,
     on_status: StatusCallback = _ignore_status,
 ) -> ConversionResult:
     """Fetch and convert one URL or local file without rendering CLI output."""
@@ -76,7 +77,17 @@ def convert_source(
             simulate_browser=simulate_browser,
             insecure=insecure,
             include_metadata=include_metadata,
+            render_js=render_js,
             on_status=on_status,
+        )
+
+    if render_js:
+        return ConversionResult(
+            source,
+            str(Path(source).expanduser().resolve()),
+            None,
+            False,
+            "JavaScript rendering is available only for HTTP(S) URLs.",
         )
 
     return _convert_file(
@@ -107,10 +118,16 @@ def _convert_url(
     simulate_browser: bool,
     insecure: bool,
     include_metadata: bool,
+    render_js: bool,
     on_status: StatusCallback,
 ) -> ConversionResult:
     logger.info("Processing URL: %s", source)
     try:
+        if render_js and (browser_cookies or cookie_json):
+            raise ValueError(
+                "JavaScript rendering does not import browser or JSON cookies; "
+                "use the static authenticated path."
+            )
         config = load_config()
         header_config = build_header_config(
             config,
@@ -122,7 +139,7 @@ def _convert_url(
 
         on_status(f"Fetching content from {source}")
         session = None
-        if not no_cookies:
+        if not no_cookies and not render_js:
             session = get_session(verify_ssl=not insecure)
             if browser_cookies and session:
                 if cookie_json:
@@ -150,6 +167,7 @@ def _convert_url(
             images_dir=images_dir,
             verify_ssl=not insecure,
             include_metadata=include_metadata,
+            render_js=render_js,
         )
         on_status(f"Converting {source} to markdown")
         return ConversionResult(source, source, markdown, True)

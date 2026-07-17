@@ -9,6 +9,8 @@ All notable changes are documented here. This project follows
 ### Added
 
 - Optional `--metadata` YAML front matter for convert, batch, and crawl output.
+- An isolated `render` extra and `convert --render-js` mode for pages whose DOM
+  requires JavaScript, with required Chromium end-to-end CI coverage.
 
 ### Changed
 

@@ -91,6 +91,7 @@ DEFAULT_CONFIG = {
             "download_images": False,
             "images_dir": "images",
             "metadata": False,
+            "render_js": False,
             "fancy": False,
             "local": False,
         },

@@ -126,3 +126,33 @@ def test_empty_conversion_is_not_success(monkeypatch, tmp_path):
 
     assert result.succeeded is False
     assert result.error is None
+
+
+def test_browser_rendering_rejects_local_files_and_cookie_import(tmp_path):
+    source = tmp_path / "page.html"
+    source.write_text("<h1>Local</h1>", encoding="utf-8")
+
+    local = conversion_service.convert_source(
+        str(source),
+        trim=False,
+        output=None,
+        no_cookies=True,
+        browser_cookies=False,
+        browser=None,
+        local=True,
+        render_js=True,
+    )
+    authenticated = conversion_service.convert_source(
+        "https://example.com",
+        trim=False,
+        output=None,
+        no_cookies=False,
+        browser_cookies=True,
+        browser="chrome",
+        render_js=True,
+    )
+
+    assert local.succeeded is False
+    assert "only for HTTP(S)" in (local.error or "")
+    assert authenticated.succeeded is False
+    assert "does not import" in (authenticated.error or "")

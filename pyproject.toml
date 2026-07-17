@@ -22,7 +22,11 @@ google-auth-oauthlib = "^1.2.1"
 google-auth = "^2.38.0"
 typer = "^0.27.0"
 rich = "^13.7.0"
+playwright = {version = "^1.61.0", optional = true}
 pywin32 = {version = "^306", markers = "sys_platform == 'win32'"}
+
+[tool.poetry.extras]
+render = ["playwright"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3.5"
@@ -51,7 +55,7 @@ skip_covered = true
 omit = ["*/html2md/tests/*"]
 
 [[tool.mypy.overrides]]
-module = ["brotli", "google_auth_oauthlib.*", "markdownify"]
+module = ["brotli", "google_auth_oauthlib.*", "markdownify", "playwright.*"]
 ignore_missing_imports = true
 
 [build-system]

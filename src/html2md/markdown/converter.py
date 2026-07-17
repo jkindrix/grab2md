@@ -10,6 +10,7 @@ from html2md.markdown.document import prepare_document
 from html2md.utils.formatter import format_markdown
 from html2md.network.chatgpt_handler import is_chatgpt_url, get_conversation_html
 from html2md.network.image_downloader import ImageDownloader
+from html2md.network.browser_renderer import render_html
 from html2md.utils.redaction import redact_mapping
 
 # Setup logger
@@ -29,6 +30,7 @@ def html_to_markdown(
     images_dir="images",
     verify_ssl=True,
     include_metadata=False,
+    render_js=False,
 ):
     """
     Fetch HTML and convert to Markdown.
@@ -44,17 +46,25 @@ def html_to_markdown(
         verify_ssl (bool, optional): Whether to verify SSL certificates. Defaults to True.
             Applies to the provided session as well as newly created ones.
         include_metadata (bool, optional): Prepend deterministic YAML front matter.
+        render_js (bool, optional): Execute the page in the optional browser renderer.
 
     Returns:
         str or None: Markdown content if successful, None otherwise.
     """
-    # Use provided session or initialize a new one
-    session = session or get_session()
-    if not verify_ssl:
-        disable_ssl_verification(session)
+    document_url = url
+    if render_js:
+        logger.info("Rendering URL with isolated Chromium: %s", url)
+        rendered = render_html(url, headers=headers, verify_ssl=verify_ssl)
+        html_content = rendered.html
+        document_url = rendered.final_url
+    else:
+        # Use provided session or initialize a new one
+        session = session or get_session()
+        if not verify_ssl:
+            disable_ssl_verification(session)
 
-    # Special handling for ChatGPT URLs
-    if is_chatgpt_url(url):
+    # Special handling for ChatGPT URLs on the static path.
+    if not render_js and is_chatgpt_url(url):
         logger.info(f"Detected ChatGPT URL: {url}")
         html_content = get_conversation_html(url, session, headers)
 
@@ -65,7 +75,7 @@ def html_to_markdown(
         logger.info(
             f"Successfully retrieved ChatGPT conversation content ({len(html_content)} bytes)"
         )
-    else:
+    elif not render_js:
         # Standard HTML retrieval for non-ChatGPT URLs
         try:
             logger.info(f"Fetching URL: {url}")
@@ -105,6 +115,10 @@ def html_to_markdown(
             logger.info(f"Response encoding: {response.encoding}")
             logger.debug(f"Response headers: {redact_mapping(response.headers)}")
 
+            response_url = getattr(response, "url", None)
+            if isinstance(response_url, str) and response_url:
+                document_url = response_url
+
         except requests.exceptions.Timeout:
             logger.error(f"Timeout while fetching {url}")
             return None
@@ -130,12 +144,6 @@ def html_to_markdown(
         except requests.RequestException as e:
             logger.error(f"Failed to retrieve {url}: {e}")
             return None
-
-    document_url = url
-    if not is_chatgpt_url(url):
-        response_url = getattr(response, "url", None)
-        if isinstance(response_url, str) and response_url:
-            document_url = response_url
 
     return html_content_to_markdown(
         html_content,

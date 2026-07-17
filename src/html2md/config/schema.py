@@ -71,6 +71,7 @@ VALUE_TYPES: dict[ConfigPath, tuple[type, ...]] = {
     ("cli_defaults", "convert", "download_images"): (bool,),
     ("cli_defaults", "convert", "images_dir"): (str,),
     ("cli_defaults", "convert", "metadata"): (bool,),
+    ("cli_defaults", "convert", "render_js"): (bool,),
     ("cli_defaults", "convert", "fancy"): (bool,),
     ("cli_defaults", "convert", "local"): (bool,),
 }

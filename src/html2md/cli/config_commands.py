@@ -472,6 +472,7 @@ def show_config_options():
             "download_images": ("bool", "Download images from pages"),
             "images_dir": ("str", "Directory name for downloaded images"),
             "metadata": ("bool", "Prepend YAML document metadata"),
+            "render_js": ("bool", "Render JavaScript with optional Chromium"),
             "fancy": ("bool", "Enable fancy output with progress bars"),
             "local": ("bool", "Treat sources as local files by default"),
         },

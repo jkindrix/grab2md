@@ -127,6 +127,7 @@ def _convert_one(
     simulate_browser: bool,
     insecure: bool,
     include_metadata: bool,
+    render_js: bool,
     on_status: Optional[Callable[[str], None]] = None,
 ) -> ConversionResult:
     """Translate CLI option types into one presentation-neutral conversion."""
@@ -147,6 +148,7 @@ def _convert_one(
         simulate_browser=simulate_browser,
         insecure=insecure,
         include_metadata=include_metadata,
+        render_js=render_js,
         on_status=status_callback,
     )
 
@@ -168,6 +170,7 @@ def process_single_with_progress(
     simulate_browser: bool = False,
     insecure: bool = False,
     include_metadata: bool = False,
+    render_js: bool = False,
     progress: Optional[Progress] = None,
     task_id: Optional[TaskID] = None,
 ) -> bool:
@@ -192,6 +195,7 @@ def process_single_with_progress(
         simulate_browser,
         insecure,
         include_metadata,
+        render_js,
         lambda message: progress.update(task_id, description=message),
     )
 
@@ -258,6 +262,7 @@ def process_single_quiet(
     simulate_browser: bool = False,
     insecure: bool = False,
     include_metadata: bool = False,
+    render_js: bool = False,
 ) -> bool:
     """Render a shared conversion result without decoration."""
     del cookie_path  # The command persists this preference before conversion.
@@ -277,6 +282,7 @@ def process_single_quiet(
         simulate_browser,
         insecure,
         include_metadata,
+        render_js,
     )
     if not result.succeeded:
         if result.error:
@@ -375,6 +381,11 @@ def convert_command(
         "--metadata/--no-metadata",
         help="Prepend title, author/date, canonical URL, and page metadata as YAML front matter.",
     ),
+    render_js: bool = typer.Option(
+        get_cli_default("convert", "render_js", False),
+        "--render-js/--static",
+        help="Render JavaScript in an isolated optional Chromium context.",
+    ),
     log_level: LogLevel = typer.Option(
         LogLevel.WARNING, "--log-level", help="Set logging level."
     ),
@@ -446,6 +457,7 @@ def convert_command(
                     simulate_browser=simulate_browser,
                     insecure=insecure,
                     include_metadata=include_metadata,
+                    render_js=render_js,
                     progress=progress,
                     task_id=task_id,
                 ):
@@ -481,6 +493,7 @@ def convert_command(
                 simulate_browser=simulate_browser,
                 insecure=insecure,
                 include_metadata=include_metadata,
+                render_js=render_js,
             ):
                 successes += 1
 
