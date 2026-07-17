@@ -6,6 +6,11 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+### Changed
+
+- Refreshed the production coverage baseline to 67.18%, raised the enforced
+  floor from 59% to 65%, and clarified that 75% is a post-alpha target.
+
 ## [0.1.0] - 2026-07-16
 
 First alpha release after the stabilization and integrity remediation cycle.
