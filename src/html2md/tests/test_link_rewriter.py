@@ -1,11 +1,13 @@
 """Regression tests for local link rewriting and success-only mappings."""
 
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from html2md.markdown.batch_processor import process_markdown_links
 from html2md.markdown.crawler import crawl_website
+from html2md.markdown.document import DocumentMetadata
 from html2md.markdown.link_rewriter import rewrite_archived_files, rewrite_links
+from html2md.markdown.pipeline import AcquiredPage, ConvertedDocument, ConversionFailure
 from html2md.network.request_handler import FetchResult
 from html2md.utils.state_manager import StateManager
 
@@ -88,6 +90,34 @@ def test_batch_mapping_and_rewrites_exclude_failed_outputs(tmp_path):
     source.write_text("fixture", encoding="utf-8")
     good = "https://example.com/good"
     failed = "https://example.com/failed"
+    good_page = AcquiredPage(
+        good,
+        good,
+        "<h1>Good</h1>",
+        200,
+        {},
+        "text/html",
+        "utf-8",
+    )
+    failed_page = AcquiredPage(
+        failed,
+        failed,
+        "<h1>Failed</h1>",
+        200,
+        {},
+        "text/html",
+        "utf-8",
+    )
+    pipeline = Mock()
+    pipeline.convert.side_effect = [
+        ConvertedDocument(
+            good_page,
+            f"[Failed]({failed})",
+            good_page.html,
+            DocumentMetadata(),
+        ),
+        ConversionFailure("conversion failed"),
+    ]
 
     with (
         patch(
@@ -95,16 +125,18 @@ def test_batch_mapping_and_rewrites_exclude_failed_outputs(tmp_path):
             return_value=[good, failed],
         ),
         patch(
-            "html2md.markdown.batch_processor.html_to_markdown",
-            side_effect=[f"[Failed]({failed})", None],
+            "html2md.markdown.batch_processor.acquire_http_page",
+            side_effect=[good_page, failed_page],
         ),
     ):
-        result = process_markdown_links([source], tmp_path / "output")
+        result = process_markdown_links(
+            [source], tmp_path / "output", page_pipeline=pipeline
+        )
 
     assert result.processed_count == 1
     assert result.failed_count == 1
     assert result.success is False
-    assert result.items[1].error == "Conversion returned no Markdown content"
+    assert result.items[1].error == "conversion failed"
     assert set(result.url_mapping) == {good}
     archived_file = next(iter(result.url_mapping.values()))
     assert failed in Path(archived_file).read_text(encoding="utf-8")

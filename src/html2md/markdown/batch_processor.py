@@ -6,8 +6,8 @@ from urllib.parse import urlparse
 
 from html2md.cookies.session_manager import get_session
 from html2md.markdown.content_extractor import ContentMode, validate_content_request
-from html2md.markdown.converter import html_to_markdown
 from html2md.markdown.link_rewriter import rewrite_archived_files
+from html2md.markdown.pipeline import PagePipeline, acquire_http_page
 from html2md.network.header_manager import HeaderManager
 from html2md.utils.parser import generate_safe_filename, get_urls_from_file
 from html2md.utils.path_safety import (
@@ -128,6 +128,7 @@ def process_markdown_links(
     include_metadata=False,
     allow_private_network=False,
     header_manager=None,
+    page_pipeline=None,
 ):
     """
     Process markdown files, extract URLs, and convert each URL to markdown.
@@ -162,6 +163,7 @@ def process_markdown_links(
     url_to_file_mapping = {}
     item_results = []
     header_manager = header_manager or HeaderManager()
+    page_pipeline = page_pipeline or PagePipeline()
 
     # Helper function to update progress
     def update_progress(message, url=None, status=None):
@@ -228,18 +230,24 @@ def process_markdown_links(
                 headers = header_manager.get_headers(url)
 
                 try:
-                    markdown_content = html_to_markdown(
+                    page = acquire_http_page(
                         url,
                         session=session,
                         headers=headers,
+                        allow_private_network=allow_private_network,
+                    )
+                    document = page_pipeline.convert(
+                        page,
                         content_mode=content_mode,
                         selector=selector,
                         download_images=download_images,
-                        output_dir=url_dir,
+                        output_dir=Path(url_dir),
                         images_dir=images_dir,
                         include_metadata=include_metadata,
+                        session=session,
                         allow_private_network=allow_private_network,
                     )
+                    markdown_content = document.markdown
                 finally:
                     session.close()
 

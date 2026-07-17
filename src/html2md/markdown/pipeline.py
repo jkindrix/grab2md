@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Mapping, Optional
+from typing import Mapping
 
 import requests
 from markdownify import markdownify
@@ -240,9 +240,7 @@ class PageConverter:
             selected_html = extract_content_html(
                 prepared_html, mode=content_mode, selector=selector
             )
-            markdown = format_markdown(
-                markdownify(selected_html, heading_style="ATX")
-            )
+            markdown = format_markdown(markdownify(selected_html, heading_style="ATX"))
         except ContentExtractionError as error:
             raise ConversionFailure(str(error)) from error
         except Exception as error:
