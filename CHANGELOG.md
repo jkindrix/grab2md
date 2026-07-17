@@ -6,6 +6,11 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-16
+
+Second alpha release, closing the remote-image DNS-rebinding residual found
+during independent post-remediation verification.
+
 ### Changed
 
 - Refreshed the production coverage baseline to 67.18%, raised the enforced
@@ -56,5 +61,6 @@ First alpha release after the stabilization and integrity remediation cycle.
   formats, oversized files, and output-root escapes.
 - The extension uses least-privilege permissions and exposes only tested modes.
 
-[Unreleased]: https://github.com/jkindrix/html2md/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/jkindrix/html2md/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/jkindrix/html2md/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jkindrix/html2md/releases/tag/v0.1.0
