@@ -199,7 +199,9 @@ are unavailable there.
 ## Known limitations
 
 - Conversion uses `markdownify` and optional per-domain trimming; it does not
-  provide general main-content extraction or boilerplate removal.
+  provide general main-content extraction or boilerplate removal. The measured
+  extractor decision is documented in
+  [`docs/main-content-benchmark.md`](./docs/main-content-benchmark.md).
 - JavaScript-rendered pages are not rendered by the CLI.
 - Metadata extraction and relative-URL canonicalization are limited.
 - Crawling is sequential; removed concurrency options are not advertised.
