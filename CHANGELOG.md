@@ -13,6 +13,13 @@ All notable changes are documented here. This project follows
 - Made hosted checks portable across colored terminals and ensured extension
   runtime tests use the explicitly provisioned Chromium build.
 
+### Security
+
+- Closed the remote-image DNS-rebinding window by connecting each request and
+  redirect only to its validated public address while preserving HTTP and TLS
+  hostname identity; guarded image requests now bypass proxies that could
+  independently re-resolve the destination.
+
 ## [0.1.0] - 2026-07-16
 
 First alpha release after the stabilization and integrity remediation cycle.

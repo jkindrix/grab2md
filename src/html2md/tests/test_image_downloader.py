@@ -1,10 +1,15 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
 from html2md.markdown.converter import local_html_to_markdown
-from html2md.network.image_downloader import ImageDownloader, UnsafeImageSource
+from html2md.network.image_downloader import (
+    ImageDownloader,
+    UnsafeImageSource,
+    _PinnedAddressAdapter,
+    _PinnedExchange,
+)
 
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"safe-image-data"
@@ -39,6 +44,25 @@ class FakeSession:
     def get(self, url, **kwargs):
         self.calls.append((url, kwargs))
         return self.responses.pop(0)
+
+
+@pytest.fixture(autouse=True)
+def route_fake_sessions_through_the_pinned_boundary(monkeypatch):
+    original = ImageDownloader._send_to_address
+
+    def send(downloader, url, address):
+        if isinstance(downloader.session, FakeSession):
+            response = downloader.session.get(
+                url,
+                timeout=downloader.timeout,
+                stream=True,
+                allow_redirects=False,
+                pinned_address=address,
+            )
+            return _PinnedExchange(response=response, session=None)
+        return original(downloader, url, address)
+
+    monkeypatch.setattr(ImageDownloader, "_send_to_address", send)
 
 
 def public_dns(*args, **kwargs):
@@ -130,7 +154,72 @@ def test_safe_redirect_is_followed_without_requests_automatic_redirects(tmp_path
         "https://cdn.example.com/final",
     ]
     assert all(call[1]["allow_redirects"] is False for call in session.calls)
+    assert all(call[1]["pinned_address"] == "93.184.216.34" for call in session.calls)
     assert redirect.closed and image.closed
+
+
+def test_transport_connects_to_validated_address_without_second_dns(
+    tmp_path, monkeypatch
+):
+    dns = MagicMock(return_value=PUBLIC_DNS)
+    connect = MagicMock(side_effect=OSError("connection stopped for inspection"))
+    monkeypatch.setattr("socket.getaddrinfo", dns)
+    monkeypatch.setattr("urllib3.util.connection.create_connection", connect)
+
+    session = requests.Session()
+    session.proxies = {"http": "http://proxy.invalid:8080"}
+    monkeypatch.setenv("HTTP_PROXY", "http://environment-proxy.invalid:8080")
+    downloader = ImageDownloader(session=session)
+
+    assert (
+        downloader.download_image("http://images.example.test/image.png", tmp_path)
+        is None
+    )
+
+    assert dns.call_count == 1
+    assert connect.call_count == 1
+    assert connect.call_args.args[0] == ("93.184.216.34", 80)
+
+
+def test_transport_attempts_only_validated_public_addresses(tmp_path, monkeypatch):
+    public_addresses = [
+        (2, 1, 6, "", ("93.184.216.34", 80)),
+        (2, 1, 6, "", ("93.184.216.35", 80)),
+    ]
+    connect = MagicMock(side_effect=OSError("connection stopped for inspection"))
+    monkeypatch.setattr("socket.getaddrinfo", MagicMock(return_value=public_addresses))
+    monkeypatch.setattr("urllib3.util.connection.create_connection", connect)
+
+    assert (
+        ImageDownloader(session=requests.Session()).download_image(
+            "http://images.example.test/image.png", tmp_path
+        )
+        is None
+    )
+
+    assert [call.args[0][0] for call in connect.call_args_list] == [
+        "93.184.216.34",
+        "93.184.216.35",
+    ]
+
+
+def test_https_pin_preserves_host_header_sni_and_certificate_hostname():
+    adapter = _PinnedAddressAdapter("93.184.216.34")
+    adapter.poolmanager = MagicMock()
+    request = requests.Request(
+        "GET", "https://assets.example.test:8443/image.png"
+    ).prepare()
+
+    adapter.get_connection_with_tls_context(request, verify=True)
+    adapter.add_headers(request)
+
+    call = adapter.poolmanager.connection_from_host.call_args
+    assert call.kwargs["host"] == "93.184.216.34"
+    assert call.kwargs["port"] == 8443
+    assert call.kwargs["scheme"] == "https"
+    assert call.kwargs["pool_kwargs"]["server_hostname"] == "assets.example.test"
+    assert call.kwargs["pool_kwargs"]["assert_hostname"] == "assets.example.test"
+    assert request.headers["Host"] == "assets.example.test:8443"
 
 
 @pytest.mark.parametrize(

@@ -196,9 +196,12 @@ See [`extension/README.md`](./extension/README.md) for installation and testing.
   `0600` files in `0700` directories on POSIX systems.
 - Diagnostic logs redact credential-bearing headers, cookie values, and
   token-like data.
-- Remote image downloads allow only HTTP(S), reject private-network and unsafe
-  redirect targets, verify MIME type and file signature, reject active SVG, and
-  enforce 10 MiB per-image and 50 MiB per-conversion limits.
+- Remote image downloads allow only HTTP(S), resolve and pin each redirect hop
+  to a validated public address, preserve TLS hostname verification, reject
+  private-network targets, verify MIME type and file signature, reject active
+  SVG, and enforce 10 MiB per-image and 50 MiB per-conversion limits. Image
+  requests intentionally bypass configured and environment proxies because a
+  proxy-controlled DNS lookup would defeat address pinning.
 - Local image copying is restricted to regular files beneath the source HTML
   directory; parent traversal and symlink escapes are rejected.
 - `--insecure` disables TLS verification and should be used only for hosts you

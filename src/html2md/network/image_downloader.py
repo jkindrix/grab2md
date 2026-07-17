@@ -9,13 +9,15 @@ import os
 import re
 import socket
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional, cast
 from urllib.parse import unquote, urljoin, urlparse
 
 import requests
 from bs4 import BeautifulSoup, Tag
 from requests import Response, Session
+from requests.adapters import HTTPAdapter
 from rich.progress import Progress, TaskID
 
 from html2md.utils.path_safety import contained_output_file, contained_path
@@ -25,6 +27,45 @@ logger = logging.getLogger("html2md")
 
 class UnsafeImageSource(ValueError):
     """Raised when an image source violates the acquisition policy."""
+
+
+class _PinnedAddressAdapter(HTTPAdapter):
+    """Connect to one validated address while preserving HTTP/TLS identity."""
+
+    def __init__(self, address: str):
+        self.address = address
+        super().__init__(pool_connections=1, pool_maxsize=1, max_retries=0)
+
+    def get_connection_with_tls_context(
+        self,
+        request: Any,
+        verify: Any,
+        proxies: Optional[Mapping[str, str]] = None,
+        cert: Any = None,
+    ) -> Any:
+        host_params, typed_pool_kwargs = self.build_connection_pool_key_attributes(
+            request, verify, cert
+        )
+        pool_kwargs: Dict[str, Any] = dict(typed_pool_kwargs)
+        expected_hostname = str(host_params["host"])
+        host_params["host"] = self.address
+        if host_params["scheme"] == "https":
+            pool_kwargs["assert_hostname"] = expected_hostname
+            pool_kwargs["server_hostname"] = expected_hostname
+        return self.poolmanager.connection_from_host(
+            **host_params, pool_kwargs=pool_kwargs
+        )
+
+    def add_headers(self, request: Any, **kwargs: Any) -> None:
+        super().add_headers(request, **kwargs)
+        parsed = urlparse(request.url)
+        request.headers["Host"] = parsed.netloc
+
+
+@dataclass
+class _PinnedExchange:
+    response: Response
+    session: Optional[Session]
 
 
 class ImageDownloader:
@@ -152,7 +193,7 @@ class ImageDownloader:
         return detected
 
     @staticmethod
-    def _validate_public_host(hostname: Optional[str], port: Optional[int]) -> None:
+    def _resolve_public_addresses(hostname: Optional[str], port: int) -> List[str]:
         if not hostname:
             raise UnsafeImageSource("Remote image URL has no host")
         try:
@@ -164,6 +205,7 @@ class ImageDownloader:
         if not addresses:
             raise UnsafeImageSource(f"Image host has no addresses: {hostname}")
 
+        validated = []
         for address in addresses:
             raw_address = str(address[4][0]).split("%", 1)[0]
             try:
@@ -176,9 +218,13 @@ class ImageDownloader:
                 raise UnsafeImageSource(
                     f"Image host resolves to a non-public address: {raw_address}"
                 )
+            normalized = str(parsed_address)
+            if normalized not in validated:
+                validated.append(normalized)
+        return validated
 
     @classmethod
-    def _validate_remote_url(cls, url: str) -> None:
+    def _validate_remote_url(cls, url: str) -> List[str]:
         parsed = urlparse(url)
         if parsed.scheme.lower() not in cls.ALLOWED_REMOTE_SCHEMES:
             raise UnsafeImageSource(
@@ -190,28 +236,78 @@ class ImageDownloader:
             port = parsed.port
         except ValueError as error:
             raise UnsafeImageSource("Image URL contains an invalid port") from error
-        cls._validate_public_host(parsed.hostname, port)
+        resolved_port = port or (443 if parsed.scheme.lower() == "https" else 80)
+        return cls._resolve_public_addresses(parsed.hostname, resolved_port)
 
-    def _request_remote(self, url: str) -> tuple[Response, str]:
-        current_url = url
-        for redirect_count in range(self.max_redirects + 1):
-            self._validate_remote_url(current_url)
-            response = self.session.get(
-                current_url,
+    def _direct_session(self, address: str) -> Session:
+        """Clone request identity into a direct, address-pinned session."""
+        direct = requests.Session()
+        source_headers = getattr(self.session, "headers", {})
+        direct.headers.clear()
+        direct.headers.update(source_headers)
+        source_cookies = getattr(self.session, "cookies", None)
+        if source_cookies is not None:
+            direct.cookies.update(source_cookies)
+        direct.auth = getattr(self.session, "auth", None)
+        direct.verify = getattr(self.session, "verify", True)
+        direct.cert = getattr(self.session, "cert", None)
+        source_params = cast(Mapping[str, Any], getattr(self.session, "params", {}))
+        direct.params = dict(source_params)
+
+        # A proxy would perform its own DNS lookup and defeat address pinning.
+        direct.trust_env = False
+        direct.proxies.clear()
+        adapter = _PinnedAddressAdapter(address)
+        direct.mount("http://", adapter)
+        direct.mount("https://", adapter)
+        return direct
+
+    def _send_to_address(self, url: str, address: str) -> _PinnedExchange:
+        direct = self._direct_session(address)
+        try:
+            response = direct.get(
+                url,
                 timeout=self.timeout,
                 stream=True,
                 allow_redirects=False,
             )
+            return _PinnedExchange(response=response, session=direct)
+        except BaseException:
+            direct.close()
+            raise
+
+    def _request_remote(self, url: str) -> tuple[Response, str, Optional[Session]]:
+        current_url = url
+        for redirect_count in range(self.max_redirects + 1):
+            addresses = self._validate_remote_url(current_url)
+            exchange: Optional[_PinnedExchange] = None
+            last_connection_error: Optional[requests.RequestException] = None
+            for address in addresses:
+                try:
+                    exchange = self._send_to_address(current_url, address)
+                    break
+                except (requests.ConnectionError, requests.Timeout) as error:
+                    last_connection_error = error
+            if exchange is None:
+                if last_connection_error is not None:
+                    raise last_connection_error
+                raise UnsafeImageSource("Image host has no usable public address")
+
+            response = exchange.response
             if response.status_code not in self.REDIRECT_STATUSES:
                 try:
                     response.raise_for_status()
                 except BaseException:
                     response.close()
+                    if exchange.session is not None:
+                        exchange.session.close()
                     raise
-                return response, current_url
+                return response, current_url, exchange.session
 
             location = response.headers.get("Location")
             response.close()
+            if exchange.session is not None:
+                exchange.session.close()
             if not location:
                 raise UnsafeImageSource("Image redirect has no Location header")
             if redirect_count == self.max_redirects:
@@ -276,7 +372,7 @@ class ImageDownloader:
             raise
 
     def _acquire_remote(self, url: str, output_dir: Path) -> Path:
-        response, final_url = self._request_remote(url)
+        response, final_url, direct_session = self._request_remote(url)
         staged_path: Optional[Path] = None
         try:
             declared_type = response.headers.get("Content-Type", "")
@@ -306,6 +402,8 @@ class ImageDownloader:
             return destination
         finally:
             response.close()
+            if direct_session is not None:
+                direct_session.close()
             if staged_path is not None:
                 staged_path.unlink(missing_ok=True)
 
