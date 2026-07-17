@@ -9,7 +9,6 @@ from typing import Any, Callable, Iterable, MutableMapping, Optional
 from html2md.markdown.archive import (
     ArtifactManifest,
     ArtifactRecord,
-    ArtifactStore,
     OutputPlanner,
 )
 from html2md.markdown.content_extractor import ContentMode
@@ -103,7 +102,9 @@ class CrawlCheckpointStore:
         self.state_manager = state_manager
         self.enabled = enabled
 
-    def sync(self, frontier: CrawlFrontier, active: Optional[FrontierItem] = None) -> None:
+    def sync(
+        self, frontier: CrawlFrontier, active: Optional[FrontierItem] = None
+    ) -> None:
         if self.enabled:
             self.state_manager.current_state.urls_queued = frontier.snapshot(active)
 
@@ -281,9 +282,7 @@ class SequentialCrawlEngine:
 
     def _process(self, item: FrontierItem) -> None:
         if self.robots and not self.robots.can_fetch(item.url):
-            self.emit(
-                f"URL disallowed by robots.txt: {item.url}", item.url, "blocked"
-            )
+            self.emit(f"URL disallowed by robots.txt: {item.url}", item.url, "blocked")
             self.frontier.finish(item.url)
             self.checkpoints.sync(self.frontier)
             return
@@ -353,4 +352,3 @@ class SequentialCrawlEngine:
             self.failed_count,
             self.frontier.terminal_count,
         )
-
