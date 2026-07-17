@@ -56,11 +56,16 @@ def test_all_network_commands_share_one_header_config_factory():
         .with_name("conversion_service.py")
         .read_text(encoding="utf-8")
     )
+    presenter_source = (
+        Path(cli.__file__)
+        .with_name("conversion_presenter.py")
+        .read_text(encoding="utf-8")
+    )
 
     assert source.count("build_header_config(") == 1
     assert conversion_source.count("build_header_config(") == 1
-    assert source.count("def process_single_") == 2
-    assert source.count("convert_source(") == 1
+    assert presenter_source.count("def process_single_") == 2
+    assert presenter_source.count("convert_source(") == 1
     assert "HeaderConfig(" not in source
 
 
