@@ -6,6 +6,11 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-07-16
+
+Third alpha release, extending the guarded outbound-network boundary to every
+direct fetch path before public package publication.
+
 ### Added
 
 - Added `--allow-private-network` as an explicit opt-in for trusted internal and
@@ -83,6 +88,7 @@ First alpha release after the stabilization and integrity remediation cycle.
   formats, oversized files, and output-root escapes.
 - The extension uses least-privilege permissions and exposes only tested modes.
 
-[Unreleased]: https://github.com/jkindrix/html2md/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/jkindrix/html2md/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/jkindrix/html2md/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jkindrix/html2md/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jkindrix/html2md/releases/tag/v0.1.0
