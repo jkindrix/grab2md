@@ -1,10 +1,11 @@
 """Behavior tests for exported and browser-derived cookie loading."""
 
 import json
+import importlib
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import requests
 import pytest
@@ -110,10 +111,10 @@ def test_apply_cookie_export_preserves_domain_and_path(tmp_path):
 
 def test_browser_cookie_mapping_is_applied_to_target_host():
     session = requests.Session()
-    with patch(
-        "html2md.cookies.session_manager.get_domain_cookies",
-        return_value={"session": "value"},
-    ):
+    source = Mock(name="chrome_source")
+    source.name = "chrome"
+    source.load.return_value = {"session": "value"}
+    with patch("html2md.cookies.sources.browser_cookie_source", return_value=source):
         session = apply_browser_cookies(session, "https://example.com/page")
 
     cookie = next(iter(session.cookies))
@@ -131,27 +132,27 @@ def test_browser_cookie_mapping_is_applied_to_target_host():
 
 def test_scoped_cookie_session_enforces_domain_path_secure_and_expiry():
     session = requests.Session()
-    with patch(
-        "html2md.cookies.session_manager.get_domain_cookies",
-        return_value=[
-            CookieRecord("parent", "yes", ".example.com", host_only=False),
-            CookieRecord(
-                "secure",
-                "yes",
-                ".example.com",
-                path="/private",
-                secure=True,
-                host_only=False,
-            ),
-            CookieRecord(
-                "expired",
-                "no",
-                ".example.com",
-                expires=1,
-                host_only=False,
-            ),
-        ],
-    ):
+    source = Mock(name="chrome_source")
+    source.name = "chrome"
+    source.load.return_value = [
+        CookieRecord("parent", "yes", ".example.com", host_only=False),
+        CookieRecord(
+            "secure",
+            "yes",
+            ".example.com",
+            path="/private",
+            secure=True,
+            host_only=False,
+        ),
+        CookieRecord(
+            "expired",
+            "no",
+            ".example.com",
+            expires=1,
+            host_only=False,
+        ),
+    ]
+    with patch("html2md.cookies.sources.browser_cookie_source", return_value=source):
         session = apply_browser_cookies(session, "https://docs.example.com/private")
 
     https_request = session.prepare_request(
@@ -172,23 +173,25 @@ def test_scoped_cookie_session_enforces_domain_path_secure_and_expiry():
 
 def test_browser_cookie_mapping_honors_explicit_browser():
     session = requests.Session()
+    source = Mock(name="firefox_source")
+    source.name = "firefox"
+    source.load.return_value = {"session": "value"}
     with patch(
-        "html2md.cookies.session_manager.get_domain_cookies",
-        return_value={"session": "value"},
-    ) as extract:
+        "html2md.cookies.sources.browser_cookie_source", return_value=source
+    ) as select:
         session = apply_browser_cookies(
             session, "https://example.com/page", browser="firefox"
         )
 
-    extract.assert_called_once_with("https://example.com/page", browser="firefox")
+    select.assert_called_once_with("firefox")
+    source.load.assert_called_once_with("https://example.com/page")
 
 
 def test_domain_cookie_loader_routes_to_configured_browser():
     with (
-        patch.dict(
-            "html2md.cookies.session_manager.config",
-            {"browser": {"preferred": "firefox"}},
-            clear=True,
+        patch(
+            "html2md.cookies.sources.load_config",
+            return_value={"browser": {"preferred": "firefox"}},
         ),
         patch(
             "html2md.cookies.session_manager.get_firefox_cookies",
@@ -203,6 +206,43 @@ def test_domain_cookie_loader_routes_to_configured_browser():
         CookieRecord("firefox", "cookie", "www.example.com", host_only=True)
     ]
     firefox.assert_called_once_with("www.example.com")
+
+
+def test_browser_source_selection_reads_configuration_at_call_time():
+    from html2md.cookies.sources import ChromeCookieSource, FirefoxCookieSource
+
+    with patch(
+        "html2md.cookies.sources.load_config",
+        side_effect=[
+            {"browser": {"preferred": "chrome"}},
+            {"browser": {"preferred": "firefox"}},
+        ],
+    ):
+        from html2md.cookies.sources import browser_cookie_source
+
+        assert isinstance(browser_cookie_source(), ChromeCookieSource)
+        assert isinstance(browser_cookie_source(), FirefoxCookieSource)
+
+
+def test_cookie_module_does_not_load_configuration_during_import():
+    import html2md.config.loader as config_loader
+    import html2md.cookies.session_manager as module
+
+    with patch.object(config_loader, "load_config") as load:
+        importlib.reload(module)
+
+    load.assert_not_called()
+
+
+def test_exported_cookie_source_reports_capability_without_loading(tmp_path):
+    from html2md.cookies.sources import ExportedCookieSource
+
+    source = ExportedCookieSource(tmp_path / "cookies.json")
+    assert source.capability().available is False
+    source.path.write_text("[]", encoding="utf-8")
+    capability = source.capability()
+    assert capability.available is True
+    assert capability.name == "exported JSON"
 
 
 class _CopiedDatabase:

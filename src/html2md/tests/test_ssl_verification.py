@@ -10,7 +10,7 @@ import requests
 from click.utils import strip_ansi
 from typer.testing import CliRunner
 
-import html2md.cookies.session_manager as session_manager
+import html2md.cookies.http_session as http_session
 from html2md.cookies.session_manager import (
     disable_ssl_verification,
     get_session,
@@ -22,7 +22,7 @@ from html2md.markdown.converter import html_to_markdown
 @pytest.fixture(autouse=True)
 def reset_warning_state(monkeypatch):
     """Reset the once-per-process warning flag so each test observes it fresh."""
-    monkeypatch.setattr(session_manager, "_insecure_warning_emitted", False)
+    monkeypatch.setattr(http_session, "_insecure_warning_emitted", False)
 
 
 class TestGetSession:

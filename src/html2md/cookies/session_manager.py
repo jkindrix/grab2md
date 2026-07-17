@@ -5,14 +5,9 @@ import sqlite3
 import sys
 import shutil
 import tempfile
-from dataclasses import dataclass
 from datetime import datetime, timezone
-from http.cookiejar import DefaultCookiePolicy
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Optional, cast
-from urllib.parse import urlparse
 
-import requests
 
 # Optional dependencies for browser cookie extraction
 try:
@@ -24,163 +19,38 @@ except ImportError:
     HAS_CRYPTO = False
 
 from html2md.config.loader import load_config
+from html2md.cookies.errors import CookieSourceError
+from html2md.cookies.export import load_cookies_from_json
+from html2md.cookies.http_session import (
+    disable_ssl_verification,
+    get_session,
+    reset_session,
+)
+from html2md.cookies.replay import (
+    CookieRecord,
+    apply_cookie_records,
+    cookie_domain_matches as _cookie_domain_matches,
+    normalize_hostname as _normalize_hostname,
+    target_hostname as _target_hostname,
+)
 from html2md.utils.redaction import get_redacting_logger
 
 logger = get_redacting_logger("session_manager")
 
+__all__ = [
+    "CookieRecord",
+    "CookieSourceError",
+    "apply_browser_cookies",
+    "disable_ssl_verification",
+    "get_browser_cookie_path",
+    "get_chrome_cookies",
+    "get_domain_cookies",
+    "get_firefox_cookies",
+    "get_session",
+    "load_cookies_from_json",
+    "reset_session",
+]
 
-class CookieSourceError(RuntimeError):
-    """A requested cookie source could not be read or applied safely."""
-
-
-def _normalize_hostname(value: str) -> str:
-    """Return a comparison-safe ASCII hostname without a cookie-domain dot."""
-    hostname = value.strip().lstrip(".").rstrip(".")
-    if not hostname:
-        return ""
-    try:
-        return hostname.encode("idna").decode("ascii").casefold()
-    except UnicodeError:
-        return ""
-
-
-def _target_hostname(url: str) -> str:
-    parsed = urlparse(url)
-    return _normalize_hostname(parsed.hostname or "")
-
-
-def _cookie_domain_matches(hostname: str, domain: str, *, host_only: bool) -> bool:
-    normalized_host = _normalize_hostname(hostname)
-    normalized_domain = _normalize_hostname(domain)
-    if not normalized_host or not normalized_domain:
-        return False
-    if host_only:
-        return normalized_host == normalized_domain
-    return normalized_host == normalized_domain or normalized_host.endswith(
-        "." + normalized_domain
-    )
-
-
-@dataclass(frozen=True)
-class CookieRecord:
-    """One browser cookie with the scope needed for safe replay."""
-
-    name: str
-    value: str
-    domain: str
-    path: str = "/"
-    expires: Optional[int] = None
-    secure: bool = False
-    http_only: bool = False
-    same_site: Optional[str] = None
-    host_only: bool = False
-
-    def applies_to(self, hostname: str) -> bool:
-        return _cookie_domain_matches(hostname, self.domain, host_only=self.host_only)
-
-
-class _ScopedCookiePolicy(DefaultCookiePolicy):
-    """Teach requests' legacy cookie jar about RFC 6265 host-only cookies."""
-
-    def return_ok(self, cookie, request):
-        if cookie.get_nonstandard_attr("HostOnly"):
-            hostname = _target_hostname(request.get_full_url())
-            if hostname != _normalize_hostname(cookie.domain):
-                return False
-        return super().return_ok(cookie, request)
-
-
-def _path_matches(request_path: str, cookie_path: str) -> bool:
-    normalized_cookie_path = cookie_path if cookie_path.startswith("/") else "/"
-    if request_path == normalized_cookie_path:
-        return True
-    if not request_path.startswith(normalized_cookie_path):
-        return False
-    return normalized_cookie_path.endswith("/") or request_path[
-        len(normalized_cookie_path) :
-    ].startswith("/")
-
-
-class ScopedCookieSession(requests.Session):
-    """A requests session that enforces host-only and path cookie semantics."""
-
-    def prepare_request(self, request):
-        prepared = super().prepare_request(request)
-        prepared.headers.pop("Cookie", None)
-        hostname = _target_hostname(prepared.url or "")
-        parsed = urlparse(prepared.url or "")
-        request_path = parsed.path or "/"
-        now = int(datetime.now(timezone.utc).timestamp())
-        applicable = []
-        for cookie in prepared._cookies:
-            host_only = bool(cookie.get_nonstandard_attr("HostOnly")) or not bool(
-                cookie.domain_specified
-            )
-            if not _cookie_domain_matches(hostname, cookie.domain, host_only=host_only):
-                continue
-            if cookie.secure and parsed.scheme.casefold() != "https":
-                continue
-            if cookie.expires is not None and cookie.expires <= now:
-                continue
-            if not _path_matches(request_path, cookie.path):
-                continue
-            applicable.append(cookie)
-        applicable.sort(key=lambda item: len(item.path or "/"), reverse=True)
-        if applicable:
-            prepared.headers["Cookie"] = "; ".join(
-                f"{cookie.name}={cookie.value}" for cookie in applicable
-            )
-        return prepared
-
-
-def _as_scoped_session(session: requests.Session) -> ScopedCookieSession:
-    if isinstance(session, ScopedCookieSession):
-        return session
-    scoped = ScopedCookieSession()
-    scoped.headers.clear()
-    scoped.headers.update(session.headers)
-    scoped.cookies.update(session.cookies)
-    scoped.auth = session.auth
-    scoped.verify = session.verify
-    scoped.cert = session.cert
-    scoped.params = dict(cast(Mapping[str, Any], session.params))
-    scoped.trust_env = session.trust_env
-    return scoped
-
-
-def _coerce_cookie_records(
-    cookies: Iterable[CookieRecord] | dict[str, str], hostname: str
-) -> list[CookieRecord]:
-    """Accept the structured contract and legacy test/client mappings."""
-    if isinstance(cookies, dict):
-        return [
-            CookieRecord(name, value, hostname, host_only=True)
-            for name, value in cookies.items()
-        ]
-    return list(cookies)
-
-
-def _set_cookie_record(session: requests.Session, cookie: CookieRecord) -> None:
-    rest: dict[str, Any] = {"HostOnly": cookie.host_only}
-    if cookie.http_only:
-        rest["HttpOnly"] = True
-    if cookie.same_site:
-        rest["SameSite"] = cookie.same_site
-    normalized_domain = _normalize_hostname(cookie.domain)
-    stored_domain = normalized_domain if cookie.host_only else "." + normalized_domain
-    session.cookies.set(
-        cookie.name,
-        cookie.value,
-        domain=stored_domain,
-        path=cookie.path or "/",
-        expires=cookie.expires,
-        secure=cookie.secure,
-        rest=rest,
-    )
-
-
-# Load configuration
-config = load_config()
 
 # -------------------------------
 # Browser Cookie Management
@@ -191,6 +61,7 @@ def get_browser_cookie_path(browser=None):
     """Return the path to browser cookie files based on platform and browser."""
 
     # Define browser and profile configurations
+    config = load_config()
     browser_config = config.get("browser", {})
     preferred_browser = browser or browser_config.get("preferred", "chrome")
 
@@ -703,220 +574,38 @@ def get_firefox_cookies(domain):
 
 
 def get_domain_cookies(url, browser=None):
-    """Get cookies for a specific domain from the preferred browser"""
-    # Parse domain from URL
-    domain = _target_hostname(url)
-    if not domain:
+    """Load records through the selected browser-source adapter."""
+    if not _target_hostname(url):
         logger.warning("Cannot extract cookies for a URL without a valid hostname")
         return []
+    from html2md.cookies.sources import browser_cookie_source
 
-    browser_config = config.get("browser", {})
-    preferred_browser = browser or browser_config.get("preferred", "chrome")
-
-    if preferred_browser == "chrome":
-        return get_chrome_cookies(domain)
-    elif preferred_browser == "firefox":
-        return get_firefox_cookies(domain)
-    else:
-        raise CookieSourceError(
-            f"Cookie extraction is supported only for chrome and firefox, not "
-            f"{preferred_browser!r}"
-        )
-
-
-# -------------------------------
-# HTTP Session Management
-# -------------------------------
-
-# Tracks whether the insecure-mode warning has been shown, so multi-URL runs
-# (batch, crawl) warn once instead of once per request/session.
-_insecure_warning_emitted = False
-
-
-def disable_ssl_verification(session):
-    """
-    Disable SSL certificate verification on a session (opt-in via --insecure).
-
-    Emits a single prominent warning per process and suppresses urllib3's
-    per-request InsecureRequestWarning, since the user has explicitly
-    acknowledged the risk by passing the flag.
-
-    Args:
-        session (requests.Session): Session to modify in place.
-
-    Returns:
-        requests.Session: The same session, with verification disabled.
-    """
-    global _insecure_warning_emitted
-    session.verify = False
-
-    import urllib3
-
-    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-    if not _insecure_warning_emitted:
-        logger.warning(
-            "SSL certificate verification is DISABLED (--insecure). "
-            "Connections can be intercepted; only use this with hosts you trust "
-            "(e.g. internal servers with self-signed certificates)."
-        )
-        _insecure_warning_emitted = True
-
-    return session
-
-
-def get_session(verify_ssl=True):
-    """
-    Return a new configured requests session.
-
-    Args:
-        verify_ssl (bool, optional): Whether to verify SSL certificates.
-            Defaults to True. Set to False only for trusted hosts with
-            invalid/self-signed certificates (CLI: --insecure).
-    """
-    session = ScopedCookieSession()
-    session.cookies.set_policy(_ScopedCookiePolicy())
-    session.headers.update(
-        {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:91.0) Gecko/20100101 Firefox/91.0",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Connection": "keep-alive",
-            "Cache-Control": "no-cache",
-            # Let requests handle Accept-Encoding automatically
-            # This allows proper decompression of gzip, deflate, and br (brotli) content
-        }
-    )
-    if not verify_ssl:
-        disable_ssl_verification(session)
-    logger.info("New session initialized with default headers.")
-    return session
-
-
-def reset_session(session):
-    """Reset the session by closing and creating a new session."""
-    # Preserve the verification setting (bool or CA bundle path) across the reset
-    verify = getattr(session, "verify", True)
-
-    try:
-        session.close()
-        logger.info("Session closed successfully.")
-    except Exception as e:
-        logger.warning(f"Error while closing session: {e}")
-
-    # Return a new session
-    new_session = get_session(verify_ssl=verify is not False)
-    new_session.verify = verify
-    logger.info("New session initialized after reset.")
-    return new_session
-
-
-def load_cookies_from_json(json_file, url=None):
-    """Load scoped cookie records from a browser developer-tools export."""
-    cookies = []
-    try:
-        with open(json_file, "r", encoding="utf-8") as f:
-            cookie_data = json.load(f)
-
-        hostname = ""
-        if url:
-            hostname = _target_hostname(url)
-            logger.debug(f"URL domain for cookie matching: {hostname}")
-
-        # Handle different JSON cookie formats
-        if isinstance(cookie_data, list):
-            # Format: Array of cookie objects with name, value, domain
-            logger.debug(f"JSON cookie format: Array with {len(cookie_data)} items")
-            for cookie in cookie_data:
-                if isinstance(cookie, dict) and "name" in cookie and "value" in cookie:
-                    cookie_domain = str(cookie.get("domain", hostname))
-                    host_only = bool(
-                        cookie.get("hostOnly", not cookie_domain.startswith("."))
-                    )
-                    record = CookieRecord(
-                        name=str(cookie["name"]),
-                        value=str(cookie["value"]),
-                        domain=cookie_domain,
-                        path=str(cookie.get("path", "/") or "/"),
-                        expires=(
-                            int(cookie["expirationDate"])
-                            if cookie.get("expirationDate") is not None
-                            else None
-                        ),
-                        secure=bool(cookie.get("secure", False)),
-                        http_only=bool(cookie.get("httpOnly", False)),
-                        same_site=(
-                            str(cookie["sameSite"])
-                            if cookie.get("sameSite") is not None
-                            else None
-                        ),
-                        host_only=host_only,
-                    )
-                    if not hostname or record.applies_to(hostname):
-                        cookies.append(record)
-                        logger.debug(
-                            "Included cookie %s for domain %s",
-                            record.name,
-                            hostname,
-                        )
-                    else:
-                        logger.debug(
-                            "Excluded cookie %s (domain mismatch)", record.name
-                        )
-        elif isinstance(cookie_data, dict):
-            if not hostname:
-                raise ValueError(
-                    "A target URL is required for an unscoped cookie mapping"
-                )
-            logger.debug(
-                f"JSON cookie format: Dictionary with {len(cookie_data)} items"
-            )
-            for name, value in cookie_data.items():
-                cookies.append(
-                    CookieRecord(str(name), str(value), hostname, host_only=True)
-                )
-                logger.debug(f"Added host-only cookie: {name}")
-
-        logger.info(f"Loaded {len(cookies)} cookies from JSON file: {json_file}")
-    except Exception as e:
-        logger.error(f"Error loading cookies from JSON file: {e}")
-        if isinstance(e, CookieSourceError):
-            raise
-        raise CookieSourceError(f"Could not load cookie export: {e}") from e
-
-    return cookies
+    return browser_cookie_source(browser).load(url)
 
 
 def apply_browser_cookies(session, url, cookie_json=None, browser=None):
-    """Apply cookies from browser to a requests session"""
-    session = _as_scoped_session(session)
+    """Load one explicit cookie source and replay applicable records safely."""
     url_domain = _target_hostname(url)
     if not url_domain:
         raise ValueError("Cannot apply cookies to a URL without a valid hostname")
     logger.debug(f"Setting cookies for domain: {url_domain}")
-    session.cookies.set_policy(_ScopedCookiePolicy())
-
-    # Clear existing cookies for this domain to avoid conflicts
-    for existing in list(session.cookies):
-        host_only = bool(existing.get_nonstandard_attr("HostOnly"))
-        if _cookie_domain_matches(url_domain, existing.domain, host_only=host_only):
-            logger.debug(f"Removing existing cookie: {existing.name}")
-            session.cookies.clear(existing.domain, existing.path, existing.name)
 
     if cookie_json:
-        cookies = load_cookies_from_json(cookie_json, url)
+        from html2md.cookies.sources import ExportedCookieSource
+
+        source = ExportedCookieSource(Path(cookie_json))
     else:
-        cookies = get_domain_cookies(url, browser=browser)
+        from html2md.cookies.sources import browser_cookie_source
+
+        source = browser_cookie_source(browser)
+    cookies = source.load(url)
 
     if not cookies:
-        source = str(cookie_json) if cookie_json else (browser or "configured browser")
         raise CookieSourceError(
-            f"No applicable cookies were found for {url_domain} in {source}"
+            f"No applicable cookies were found for {url_domain} in {source.name}"
         )
 
-    for cookie in _coerce_cookie_records(cookies, url_domain):
-        if cookie.applies_to(url_domain):
-            logger.debug("Setting scoped browser cookie: %s", cookie.name)
-            _set_cookie_record(session, cookie)
+    session = apply_cookie_records(session, url, cookies)
 
     logger.debug("Applied %s cookies to session", len(session.cookies.get_dict()))
     logger.info(f"Applied cookies to session for {url}")
