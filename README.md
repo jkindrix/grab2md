@@ -148,7 +148,7 @@ Crawls are intentionally sequential. Available controls include:
 - `--respect-robots/--ignore-robots`;
 - requests-per-minute `--rate-limit` with adaptive delay and a circuit breaker;
 - `--polite` for a more conservative delay policy;
-- progress, trimming, output layout, visualization, and quiet-mode switches.
+- content selection, progress, output layout, visualization, and quiet-mode switches.
 
 `Ctrl+C` or termination checkpoints the active crawl and then preserves normal
 signal behavior. Deferred URLs remain queued instead of being silently lost.
@@ -162,7 +162,7 @@ directory. Writes are validated, atomic, backed up, and recoverable. Run:
 html2md config show
 html2md config path
 html2md config show-options
-html2md config add-domain --domain example.com
+html2md config set-cli-default convert content_mode main
 html2md config set-cli-default crawl max_pages 250
 html2md config backup
 html2md config list-backups
@@ -172,6 +172,10 @@ CLI defaults are typed and loaded at invocation time. Optional values accept
 `null`; invalid updates fail without replacing the existing file. Concurrent
 configuration changes from separate processes use last-write-wins semantics,
 so serialize configuration commands in automation.
+
+CSS selectors are caller-owned generic inputs; html2md does not ship or
+silently apply per-site extraction profiles. A selector can be supplied for one
+run or configured as a CLI default together with `content_mode=selector`.
 
 Crawl state supports `list`, `resume`, `clean`, `export`, `import`, and `info`.
 State and token files use restrictive permissions on POSIX systems.

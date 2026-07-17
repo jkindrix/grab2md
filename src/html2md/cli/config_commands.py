@@ -8,7 +8,7 @@ from typing import Optional
 import typer
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
+from rich.prompt import Confirm
 from rich.syntax import Syntax
 from rich.table import Table
 
@@ -58,7 +58,7 @@ def show_config_path():
 @config_app.command(name="set")
 def set_config_value(
     path: str = typer.Argument(
-        ..., help="Config path (e.g., 'domains.example.com.footer_marker')"
+        ..., help="Config path (e.g., 'cli_defaults.convert.content_mode')"
     ),
     value: str = typer.Argument(..., help="Value to set"),
 ):
@@ -100,19 +100,11 @@ def set_config_value(
 
     console.print(f"[bold green]Updated:[/bold green] {path} = {value}")
 
-    if components[0] == "domains":
-        console.print(
-            "\n[bold blue]Tip:[/bold blue] You've updated domain-specific trimming rules."
-        )
-        console.print(
-            "These rules determine how HTML content is trimmed when converted to markdown."
-        )
-
 
 @config_app.command(name="get")
 def get_config_value(
     path: str = typer.Argument(
-        ..., help="Config path (e.g., 'domains.example.com.footer_marker')"
+        ..., help="Config path (e.g., 'cli_defaults.convert.content_mode')"
     ),
 ):
     """Get a configuration value at the specified path."""
@@ -147,7 +139,7 @@ def get_config_value(
 @config_app.command(name="delete")
 def delete_config_value(
     path: str = typer.Argument(
-        ..., help="Config path to delete (e.g., 'domains.example.com')"
+        ..., help="Config path to delete (e.g., 'headers.custom_headers')"
     ),
 ):
     """Delete a configuration value at the specified path."""
@@ -191,140 +183,6 @@ def delete_config_value(
         json_str = json.dumps(deleted_value, indent=2)
         syntax = Syntax(json_str, "json", theme="monokai")
         console.print(syntax)
-
-
-@config_app.command(name="add-domain")
-def add_domain_config(
-    domain: Optional[str] = typer.Option(
-        None,
-        "--domain",
-        "-d",
-        help="Domain name (e.g., example.com). If not provided, runs in interactive mode.",
-    ),
-    quick: bool = typer.Option(
-        False,
-        "--quick",
-        "-q",
-        help="Quick mode: add domain with default settings without prompts",
-    ),
-):
-    """Add domain-specific configuration. Use --domain to specify domain directly, or run interactively."""
-    config = load_config()
-
-    # Domain name
-    if domain is None:
-        domain = Prompt.ask(
-            "[bold blue]Enter domain name[/bold blue] (e.g., example.com)"
-        )
-
-    # Check if domain already exists
-    if domain in config.get("domains", {}):
-        if quick:
-            console.print(
-                f"[yellow]Domain '{domain}' already exists. Use interactive mode to update it.[/yellow]"
-            )
-            return
-        elif not Confirm.ask(
-            f"Domain '{domain}' already exists. Do you want to update it?"
-        ):
-            return
-
-    # Initialize domain config if it doesn't exist
-    if "domains" not in config:
-        config["domains"] = {}
-    if domain not in config["domains"]:
-        config["domains"][domain] = {}
-
-    # In quick mode, just add the domain with empty config
-    if quick:
-        # Save the config
-        save_config(config)
-        console.print(
-            f"[bold green]✓[/bold green] Domain '{domain}' added with default settings"
-        )
-        return
-
-    # Ask for footer marker
-    if Confirm.ask(
-        "Do you want to set a footer marker? (text that indicates where to trim content)"
-    ):
-        footer_marker = Prompt.ask("[bold blue]Enter footer marker text[/bold blue]")
-        config["domains"][domain]["footer_marker"] = footer_marker
-
-    # Ask for path-specific rules
-    if Confirm.ask("Do you want to add path-specific rules?"):
-        while True:
-            path = Prompt.ask("[bold blue]Enter URL path[/bold blue] (e.g., /docs)")
-
-            h1_occurrence = Prompt.ask(
-                "[bold blue]Enter h1 occurrence to keep[/bold blue] (e.g., 2 means keep the 2nd h1 heading)",
-                default="1",
-            )
-
-            path_footer = Prompt.ask(
-                "[bold blue]Enter path-specific footer marker[/bold blue]", default=""
-            )
-
-            # Initialize path rules if they don't exist
-            if "path_rules" not in config["domains"][domain]:
-                config["domains"][domain]["path_rules"] = {}
-
-            # Add path rule
-            config["domains"][domain]["path_rules"][path] = {
-                "h1_occurrence": int(h1_occurrence)
-            }
-
-            if path_footer:
-                config["domains"][domain]["path_rules"][path][
-                    "footer_marker"
-                ] = path_footer
-
-            if not Confirm.ask("Add another path rule?"):
-                break
-
-    # Save the config
-    save_config(config)
-
-    # Show the updated domain config
-    domain_config = config["domains"][domain]
-    json_str = json.dumps({domain: domain_config}, indent=2)
-    syntax = Syntax(json_str, "json", theme="monokai")
-
-    console.print("\n[bold green]Domain configuration added:[/bold green]")
-    console.print(syntax)
-    console.print(
-        "\n[bold blue]Tip:[/bold blue] This configuration will be used when converting HTML from this domain."
-    )
-
-
-@config_app.command(name="list-domains")
-def list_domains():
-    """List all configured domains with their settings."""
-    config = load_config()
-
-    if "domains" not in config or not config["domains"]:
-        console.print("[yellow]No domains configured yet.[/yellow]")
-        console.print(
-            "Use [bold]html2md config add-domain[/bold] to add domain configurations."
-        )
-        return
-
-    # Create a table
-    table = Table(title="Configured Domains")
-    table.add_column("Domain", style="cyan")
-    table.add_column("Footer Marker", style="green")
-    table.add_column("Path Rules", style="magenta")
-
-    # Add rows for each domain
-    for domain, settings in config["domains"].items():
-        footer = settings.get("footer_marker", "")
-
-        path_rules_count = len(settings.get("path_rules", {}))
-        path_rules = f"{path_rules_count} path rule(s)" if path_rules_count > 0 else ""
-
-        table.add_row(domain, footer, path_rules)
-
-    console.print(table)
 
 
 @config_app.command(name="reset")
@@ -524,24 +382,6 @@ def show_config_options():
         console.print(table)
         console.print()
 
-    # Domain Configuration Section
-    console.print("[bold yellow]Domain-Specific Trimming[/bold yellow]")
-    console.print("Configure content trimming rules per domain\n")
-
-    domain_table = Table(title="Domain Configuration Options")
-    domain_table.add_column("Setting", style="cyan")
-    domain_table.add_column("Description", style="white")
-
-    domain_table.add_row("footer_marker", "Text that marks where to trim content")
-    domain_table.add_row("path_rules", "Path-specific trimming rules")
-    domain_table.add_row(
-        "path_rules.*.h1_occurrence", "Which h1 heading to keep (e.g., 2 = second h1)"
-    )
-    domain_table.add_row("path_rules.*.footer_marker", "Path-specific footer marker")
-
-    console.print(domain_table)
-    console.print()
-
     # Browser Configuration Section
     console.print("[bold yellow]Browser Configuration[/bold yellow]")
     console.print("Configure browser cookie extraction settings\n")
@@ -571,7 +411,11 @@ def show_config_options():
             "html2md config set-cli-default batch hierarchical true",
         ),
         ("Set max crawl pages", "html2md config set-cli-default crawl max_pages 500"),
-        ("Add domain trimming rule", "html2md config add-domain --domain example.com"),
+        (
+            "Use a generic selector",
+            "html2md config set-cli-default convert content_mode selector && "
+            "html2md config set-cli-default convert selector 'main article'",
+        ),
         ("Set config value directly", "html2md config set browser.preferred firefox"),
         ("View current config", "html2md config show"),
     ]

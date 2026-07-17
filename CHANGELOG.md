@@ -28,6 +28,9 @@ All notable changes are documented here. This project follows
   converter.
 - Removed domain/footer/heading-based Markdown truncation from all Python
   conversion paths.
+- Removed the bundled site-rule map, domain-rule configuration commands, and
+  obsolete encoding analysis. Content customization is now a caller-owned CSS
+  selector with no packaged per-site behavior.
 
 ## [0.1.2] - 2026-07-16
 

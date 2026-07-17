@@ -60,14 +60,14 @@ class TestLoaderIntegration:
         from html2md.config.loader import save_config, load_config
 
         original_data = {
-            "domains": {"example.com": {"footer_marker": "test"}},
+            "custom": {"selector_profiles": {"docs": "main article"}},
             "logging": {"level": "DEBUG"},
         }
 
         save_config(original_data)
         loaded_data = load_config(force_reload=True)
 
-        assert loaded_data["domains"] == original_data["domains"]
+        assert loaded_data["custom"] == original_data["custom"]
         assert loaded_data["logging"] == original_data["logging"]
 
     def test_load_config_creates_default_if_missing(self, tmp_path):
@@ -78,7 +78,7 @@ class TestLoaderIntegration:
 
         assert CONFIG_FILE.exists()
         # Should contain default structure
-        assert "domains" in config
+        assert "cli_defaults" in config
         assert "logging" in config
 
     @mock.patch("sys.stdin.isatty", return_value=False)
@@ -168,7 +168,7 @@ class TestLoaderIntegration:
 
         # Should have both custom data and default keys
         assert "custom_key" in config
-        assert "domains" in config  # From defaults
+        assert "cli_defaults" in config  # From defaults
         assert "logging" in config  # From defaults
 
     def test_save_config_invalidates_cache(self, tmp_path):
@@ -218,7 +218,7 @@ class TestLoaderIntegration:
         def mutate_snapshot(index):
             snapshot = load_config()
             snapshot["logging"]["level"] = f"worker-{index}"
-            snapshot["domains"][f"worker-{index}.test"] = {}
+            snapshot.setdefault("custom", {})[f"worker-{index}"] = {}
 
         with ThreadPoolExecutor(max_workers=8) as executor:
             list(executor.map(mutate_snapshot, range(32)))

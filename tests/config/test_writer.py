@@ -16,7 +16,7 @@ class TestAtomicWriteJson:
     def test_atomic_write_success(self, tmp_path):
         """Test successful atomic write creates file with correct content."""
         config_file = tmp_path / "config.json"
-        test_data = {"domains": {}, "logging": {"level": "INFO"}}
+        test_data = {"headers": {"custom_headers": {}}, "logging": {"level": "INFO"}}
 
         atomic_write_json(config_file, test_data)
 

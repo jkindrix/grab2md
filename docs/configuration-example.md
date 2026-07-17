@@ -53,7 +53,6 @@ You can also edit the config file directly. The config file location is:
 Example config file with CLI defaults:
 ```json
 {
-  "domains": {},
   "logging": {"level": "WARNING"},
   "browser": {"preferred": "chrome"},
   "cli_defaults": {

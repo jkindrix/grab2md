@@ -13,7 +13,6 @@ logger = setup_logging()
 
 # Default Configuration
 DEFAULT_CONFIG = {
-    "domains": {},
     "domain_limits": {
         # Example domain-specific rate limits
         # "github.com": {
@@ -231,7 +230,7 @@ def save_config(config_data: Dict[str, Any]) -> None:
 
     Example:
         >>> config = load_config()
-        >>> config['domains']['example.com'] = {'footer_marker': 'Copyright'}
+        >>> config['headers']['custom_headers'] = {'X-Docs': 'true'}
         >>> save_config(config)
     """
     global _cached_config
@@ -302,7 +301,7 @@ def load_config(force_reload=False):
 
     Example:
         >>> config = load_config()
-        >>> print(config['domains'])
+        >>> print(config['cli_defaults']['convert']['content_mode'])
         {}
     """
     global _cached_config

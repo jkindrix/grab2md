@@ -24,8 +24,6 @@ def test_config_help_exposes_supported_command_surface():
         "set",
         "get",
         "delete",
-        "add-domain",
-        "list-domains",
         "reset",
         "set-cli-default",
         "list-cli-defaults",
@@ -65,21 +63,6 @@ def test_config_set_updates_nested_value():
     assert save.call_args.args[0]["browser"]["preferred"] == "firefox"
 
 
-def test_config_add_domain_quick_persists_domain():
-    config = {"domains": {}}
-    save = Mock()
-    with (
-        patch("html2md.cli.config_commands.load_config", return_value=config),
-        patch("html2md.cli.config_commands.save_config", save),
-    ):
-        result = runner.invoke(
-            app, ["config", "add-domain", "--domain", "example.com", "--quick"]
-        )
-
-    assert result.exit_code == 0
-    assert save.call_args.args[0]["domains"]["example.com"] == {}
-
-
 def test_config_backup_reports_created_path(tmp_path):
     manager = Mock()
     manager.create_backup.return_value = tmp_path / "config.backup.json"
@@ -113,7 +96,7 @@ def test_config_path_and_options_render_without_loading_state():
     assert "Configuration file" in path_result.output
     assert options_result.exit_code == 0
     assert "CLI Defaults" in options_result.output
-    assert "Domain-Specific Trimming" in options_result.output
+    assert "content_mode" in options_result.output
     assert "Browser Configuration" in options_result.output
 
 
@@ -168,29 +151,6 @@ def test_config_delete_confirms_or_preserves_value():
     assert "Deleted" in deleted.output
     assert cancelled.exit_code == 0
     save.assert_called_once()
-
-
-def test_config_list_domains_handles_empty_and_populated_state():
-    with patch(
-        "html2md.cli.config_commands.load_config",
-        side_effect=[
-            {"domains": {}},
-            {
-                "domains": {
-                    "example.com": {
-                        "footer_marker": "End",
-                        "path_rules": {"/docs": {"h1_occurrence": 1}},
-                    }
-                }
-            },
-        ],
-    ):
-        empty = runner.invoke(app, ["config", "list-domains"])
-        populated = runner.invoke(app, ["config", "list-domains"])
-
-    assert "No domains configured" in empty.output
-    assert "example.com" in populated.output
-    assert "1 path rule" in populated.output
 
 
 def test_config_reset_cancellation_and_success():

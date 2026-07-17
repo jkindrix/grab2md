@@ -45,7 +45,7 @@ def atomic_write_json(
         ValueError: If file_path is not a Path object
 
     Example:
-        >>> config = {"domains": {}, "logging": {"level": "INFO"}}
+        >>> config = {"headers": {"custom_headers": {}}, "logging": {"level": "INFO"}}
         >>> atomic_write_json(Path("/path/to/config.json"), config)
     """
     if not isinstance(file_path, Path):
