@@ -13,7 +13,6 @@ from typing import Dict, List, Optional
 from urllib.parse import unquote, urljoin, urlparse
 
 import requests
-from bs4 import BeautifulSoup, Tag
 from requests import Response, Session
 from rich.progress import Progress, TaskID
 
@@ -86,45 +85,6 @@ class ImageDownloader:
         self.allow_private_network = allow_private_network
         self.total_downloaded_bytes = 0
         self.downloaded_images: Dict[str, str] = {}
-
-    def extract_image_urls(self, html_content: str, base_url: str) -> List[str]:
-        """Extract absolute image URLs from image and inline-style attributes."""
-        soup = BeautifulSoup(html_content, "html.parser")
-        image_urls = []
-
-        for img in soup.find_all("img"):
-            if not isinstance(img, Tag):
-                continue
-            src = self._attribute_text(img, "src").strip()
-            if src:
-                image_urls.append(urljoin(base_url, src))
-
-            srcset = self._attribute_text(img, "srcset")
-            for part in srcset.split(",") if srcset else ():
-                url_part = part.strip().split()[0] if part.strip() else ""
-                if url_part:
-                    image_urls.append(urljoin(base_url, url_part))
-
-        style_pattern = re.compile(
-            r"background-image:\s*url\([\"']?([^\"'()]+)[\"']?\)", re.IGNORECASE
-        )
-        for element in soup.find_all(style=True):
-            if not isinstance(element, Tag):
-                continue
-            for match in style_pattern.finditer(self._attribute_text(element, "style")):
-                image_urls.append(urljoin(base_url, match.group(1)))
-
-        return list(dict.fromkeys(image_urls))
-
-    @staticmethod
-    def _attribute_text(tag: Tag, name: str) -> str:
-        """Normalize a Beautiful Soup attribute to text."""
-        value = tag.attrs.get(name)
-        if value is None:
-            return ""
-        if isinstance(value, (list, tuple)):
-            return " ".join(str(part) for part in value)
-        return str(value)
 
     @staticmethod
     def _content_type(value: str) -> str:
@@ -453,42 +413,3 @@ class ImageDownloader:
                     Path(output_dir).resolve()
                 ).as_posix()
         return results
-
-    def rewrite_image_urls(
-        self,
-        markdown_content: str,
-        url_mapping: Dict[str, str],
-        base_url: Optional[str] = None,
-    ) -> str:
-        """Rewrite exact downloaded image references to their local paths."""
-        image_pattern = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
-
-        def replace_url(match):
-            alt_text, url = match.groups()
-            local_path = url_mapping.get(url)
-            if local_path is None and base_url is not None:
-                local_path = url_mapping.get(urljoin(base_url, url))
-            return f"![{alt_text}]({local_path})" if local_path else match.group(0)
-
-        return image_pattern.sub(replace_url, markdown_content)
-
-    def process_markdown_with_images(
-        self,
-        markdown_content: str,
-        html_content: str,
-        base_url: str,
-        output_dir: Path,
-        progress: Optional[Progress] = None,
-    ) -> str:
-        """Acquire discovered images and rewrite successful exact references."""
-        image_urls = self.extract_image_urls(html_content, base_url)
-        if not image_urls:
-            return markdown_content
-
-        task = (
-            progress.add_task("Downloading images...", total=len(image_urls))
-            if progress
-            else None
-        )
-        url_mapping = self.download_images(image_urls, output_dir, progress, task)
-        return self.rewrite_image_urls(markdown_content, url_mapping, base_url)

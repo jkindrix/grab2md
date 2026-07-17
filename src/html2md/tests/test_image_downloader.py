@@ -4,6 +4,7 @@ import pytest
 import requests
 
 from html2md.markdown.converter import local_html_to_markdown
+from html2md.markdown.assets import AssetPipeline
 from html2md.network.image_downloader import (
     ImageDownloader,
     UnsafeImageSource,
@@ -364,15 +365,47 @@ def test_file_urls_are_disabled_without_an_explicit_local_root(tmp_path):
     )
 
 
-def test_exact_rewrite_does_not_replace_an_unrelated_same_basename():
-    downloader = ImageDownloader()
-    markdown = "![one](https://one.test/logo.png) ![two](https://two.test/logo.png)"
-
-    rewritten = downloader.rewrite_image_urls(
-        markdown, {"https://one.test/logo.png": "images/logo.png"}
+def test_structural_asset_rewrite_does_not_replace_unrelated_same_basename(tmp_path):
+    downloader = MagicMock()
+    downloader.download_images.return_value = {
+        "https://one.test/logo.png": "images/logo.png"
+    }
+    html = (
+        '<img src="https://one.test/logo.png" alt="one">'
+        '<img src="https://two.test/logo.png" alt="two">'
     )
 
-    assert rewritten == "![one](images/logo.png) ![two](https://two.test/logo.png)"
+    result = AssetPipeline(downloader).materialize(
+        html, "https://example.com", tmp_path
+    )
+
+    assert 'src="images/logo.png"' in result.html
+    assert 'src="https://two.test/logo.png"' in result.html
+
+
+def test_structural_asset_pipeline_rewrites_srcset_and_style_successes_only(tmp_path):
+    downloader = MagicMock()
+    downloader.download_images.return_value = {
+        "https://example.com/small.png": "images/small.png",
+        "https://example.com/background.png": "images/background.png",
+    }
+    html = """
+    <picture><source srcset="small.png 1x, large.png 2x"></picture>
+    <div style="background-image: url('background.png')"></div>
+    """
+
+    result = AssetPipeline(downloader).materialize(
+        html, "https://example.com/page", tmp_path
+    )
+
+    assert 'srcset="images/small.png 1x, large.png 2x"' in result.html
+    assert "images/background.png" in result.html
+    discovered = downloader.download_images.call_args.args[0]
+    assert discovered == [
+        "https://example.com/small.png",
+        "https://example.com/large.png",
+        "https://example.com/background.png",
+    ]
 
 
 def test_direct_remote_validation_rejects_invalid_port():

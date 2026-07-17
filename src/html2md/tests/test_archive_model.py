@@ -1,6 +1,5 @@
 """Archive identity, planning, manifest, and structural rewriting tests."""
 
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 from html2md.markdown.archive import (
@@ -17,9 +16,10 @@ from html2md.utils.parser import extract_links_from_html, extract_urls_from_mark
 
 
 def test_url_identity_normalizes_origin_and_excludes_fragments():
-    assert canonical_url_identity(
-        "HTTPS://Example.COM:443/docs/page?view=full#part"
-    ) == "https://example.com/docs/page?view=full"
+    assert (
+        canonical_url_identity("HTTPS://Example.COM:443/docs/page?view=full#part")
+        == "https://example.com/docs/page?view=full"
+    )
     assert canonical_url_identity("http://example.com:80") == "http://example.com/"
 
 
@@ -79,7 +79,7 @@ def test_structural_rewriter_handles_parentheses_titles_and_fenced_code(tmp_path
 
 
 def test_structural_discovery_honors_markdown_parentheses_and_html_base():
-    markdown = "[API](https://example.com/functions/run(value) \"API\")"
+    markdown = '[API](https://example.com/functions/run(value) "API")'
     html = '<base href="/docs/v2/"><A HREF=chapter.html>Chapter</A>'
 
     assert extract_urls_from_markdown(markdown) == [
@@ -105,9 +105,7 @@ def test_batch_manifest_reuses_two_requested_urls_with_one_final_identity(tmp_pa
         pages[0], "# Current", pages[0].html, DocumentMetadata(canonical_url=final)
     )
 
-    with patch(
-        "html2md.markdown.batch_processor.acquire_http_page", side_effect=pages
-    ):
+    with patch("html2md.markdown.batch_processor.acquire_http_page", side_effect=pages):
         result = process_markdown_links(
             [source], tmp_path / "output", page_pipeline=pipeline
         )

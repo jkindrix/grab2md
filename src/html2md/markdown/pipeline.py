@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
 import requests
 from markdownify import markdownify
 
+from html2md.markdown.assets import AssetPipeline
 from html2md.markdown.content_extractor import (
     ContentExtractionError,
     ContentMode,
@@ -74,6 +75,15 @@ class ConvertedDocument:
 
     page: AcquiredPage
     markdown: str
+    selected_html: str
+    metadata: DocumentMetadata
+
+
+@dataclass(frozen=True)
+class PreparedDocument:
+    """Selected, canonicalized HTML ready for optional asset processing."""
+
+    page: AcquiredPage
     selected_html: str
     metadata: DocumentMetadata
 
@@ -227,6 +237,49 @@ def acquire_local_page(file_path: str | Path) -> AcquiredPage:
 class PageConverter:
     """Pure HTML-to-Markdown conversion with no acquisition or file writes."""
 
+    def prepare(
+        self,
+        page: AcquiredPage,
+        *,
+        content_mode: ContentMode = ContentMode.FULL,
+        selector: str | None = None,
+    ) -> PreparedDocument:
+        """Canonicalize and select HTML without serializing or writing assets."""
+        try:
+            prepared_html, metadata = prepare_document(page.html, page.final_url)
+            selected_html = extract_content_html(
+                prepared_html, mode=content_mode, selector=selector
+            )
+            return PreparedDocument(page, selected_html, metadata)
+        except ContentExtractionError as error:
+            raise ConversionFailure(str(error)) from error
+        except Exception as error:
+            raise ConversionFailure(
+                f"Unable to prepare HTML from {page.final_url}: {error}"
+            ) from error
+
+    def render(
+        self, prepared: PreparedDocument, *, include_metadata: bool = False
+    ) -> ConvertedDocument:
+        """Serialize prepared HTML to Markdown without external side effects."""
+        try:
+            markdown = format_markdown(
+                markdownify(prepared.selected_html, heading_style="ATX")
+            )
+        except Exception as error:
+            raise ConversionFailure(
+                f"Unable to convert HTML from {prepared.page.final_url}: {error}"
+            ) from error
+        if not markdown.strip():
+            raise ConversionFailure(
+                f"Conversion produced no Markdown for {prepared.page.final_url}"
+            )
+        if include_metadata:
+            markdown = prepared.metadata.front_matter() + markdown
+        return ConvertedDocument(
+            prepared.page, markdown, prepared.selected_html, prepared.metadata
+        )
+
     def convert(
         self,
         page: AcquiredPage,
@@ -235,25 +288,8 @@ class PageConverter:
         selector: str | None = None,
         include_metadata: bool = False,
     ) -> ConvertedDocument:
-        try:
-            prepared_html, metadata = prepare_document(page.html, page.final_url)
-            selected_html = extract_content_html(
-                prepared_html, mode=content_mode, selector=selector
-            )
-            markdown = format_markdown(markdownify(selected_html, heading_style="ATX"))
-        except ContentExtractionError as error:
-            raise ConversionFailure(str(error)) from error
-        except Exception as error:
-            raise ConversionFailure(
-                f"Unable to convert HTML from {page.final_url}: {error}"
-            ) from error
-        if not markdown.strip():
-            raise ConversionFailure(
-                f"Conversion produced no Markdown for {page.final_url}"
-            )
-        if include_metadata:
-            markdown = metadata.front_matter() + markdown
-        return ConvertedDocument(page, markdown, selected_html, metadata)
+        prepared = self.prepare(page, content_mode=content_mode, selector=selector)
+        return self.render(prepared, include_metadata=include_metadata)
 
 
 class PagePipeline:
@@ -275,24 +311,23 @@ class PagePipeline:
         session: requests.Session | None = None,
         allow_private_network: bool = False,
     ) -> ConvertedDocument:
-        document = self.converter.convert(
+        prepared = self.converter.prepare(
             page,
             content_mode=content_mode,
             selector=selector,
-            include_metadata=include_metadata,
         )
         if not download_images or output_dir is None:
-            return document
+            return self.converter.render(prepared, include_metadata=include_metadata)
         downloader = ImageDownloader(
             session=session,
             images_dir=images_dir,
             local_root=page.source_path.parent if page.source_path else None,
             allow_private_network=allow_private_network,
         )
-        markdown = downloader.process_markdown_with_images(
-            document.markdown,
-            document.selected_html,
+        assets = AssetPipeline(downloader).materialize(
+            prepared.selected_html,
             page.final_url,
             Path(output_dir),
         )
-        return replace(document, markdown=markdown)
+        prepared = PreparedDocument(page, assets.html, prepared.metadata)
+        return self.converter.render(prepared, include_metadata=include_metadata)

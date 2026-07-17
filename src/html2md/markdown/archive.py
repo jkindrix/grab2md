@@ -117,9 +117,7 @@ class OutputPlanner:
         identity = canonical_url_identity(url)
         parts = urlsplit(identity)
         hostname = safe_path_segment(parts.netloc)
-        path_parts = [
-            safe_path_segment(part) for part in parts.path.split("/") if part
-        ]
+        path_parts = [safe_path_segment(part) for part in parts.path.split("/") if part]
         leaf = path_parts[-1] if path_parts else "index"
         stem = Path(leaf).stem or "index"
         digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:10]
