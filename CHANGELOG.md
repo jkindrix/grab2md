@@ -4,6 +4,9 @@ All notable changes are documented here. This project follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and intends to use
 [Semantic Versioning](https://semver.org/) once public releases begin.
 
+Versions through `0.3.0` were developed under the former `html2md` identity.
+The pending first public alpha uses `grab2md` consistently.
+
 ## [Unreleased]
 
 ### Added
@@ -18,6 +21,11 @@ All notable changes are documented here. This project follows
 
 ### Changed
 
+- Renamed the distribution, executable, import package, extension, repository,
+  runtime identity, and local storage namespaces from `html2md`/`html2md-cli`
+  to `grab2md` before the first public release.
+- Made `grab2md SOURCE` the primary single-page form while retaining the hidden
+  `grab2md convert SOURCE` pre-release compatibility alias.
 - Declared the pre-1.0 distribution CLI-only: internal Python modules remain
   importable but are not a supported compatibility surface; only version
   metadata is exported from the package root.
@@ -268,10 +276,10 @@ First alpha release after the stabilization and integrity remediation cycle.
   formats, oversized files, and output-root escapes.
 - The extension uses least-privilege permissions and exposes only tested modes.
 
-[Unreleased]: https://github.com/jkindrix/html2md/compare/v0.3.0...HEAD
-[0.3.0]: https://github.com/jkindrix/html2md/compare/v0.2.0...v0.3.0
-[0.2.0]: https://github.com/jkindrix/html2md/compare/v0.1.3...v0.2.0
-[0.1.3]: https://github.com/jkindrix/html2md/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/jkindrix/html2md/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/jkindrix/html2md/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/jkindrix/html2md/releases/tag/v0.1.0
+[Unreleased]: https://github.com/jkindrix/grab2md/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jkindrix/grab2md/compare/v0.2.0...v0.3.0
+[0.2.0]: https://github.com/jkindrix/grab2md/compare/v0.1.3...v0.2.0
+[0.1.3]: https://github.com/jkindrix/grab2md/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/jkindrix/grab2md/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/jkindrix/grab2md/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/jkindrix/grab2md/releases/tag/v0.1.0

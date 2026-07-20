@@ -1,4 +1,4 @@
-# HTML2MD Chrome Extension
+# GRAB2MD Chrome Extension
 
 A browser extension for quickly converting web content to Markdown.
 
@@ -31,14 +31,14 @@ The supported alpha surface is intentionally limited to converting the active ta
 2. Open Chrome and go to `chrome://extensions/`
 3. Enable "Developer mode" in the top-right corner
 4. Click "Load unpacked" and select the extension directory
-5. The HTML2MD extension is now installed
+5. The GRAB2MD extension is now installed
 
 ## Usage
 
 ### Basic Usage
 
 1. Navigate to any web page you want to convert
-2. Click the HTML2MD extension icon in your browser toolbar
+2. Click the GRAB2MD extension icon in your browser toolbar
 3. Select your conversion options (Full Page, Selection Only, or Main Article)
 4. Click "Convert to Markdown"
 5. The result will be shown, copied, or downloaded based on your settings
@@ -129,4 +129,4 @@ Copyright (c) 2025-2026 Justin Kindrix. Distributed under the [MIT License](../L
 - Uses [Turndown](https://github.com/mixmark-io/turndown) for HTML to Markdown conversion
 - Uses [Mozilla Readability](https://github.com/mozilla/readability) 0.6.0 for explicit article extraction
 - Retains Turndown v7.1.1 copyright, MIT terms, provenance, and modification notes in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)
-- Inspired by the [HTML2MD](https://github.com/jkindrix/html2md) command-line tool
+- Inspired by the [GRAB2MD](https://github.com/jkindrix/grab2md) command-line tool

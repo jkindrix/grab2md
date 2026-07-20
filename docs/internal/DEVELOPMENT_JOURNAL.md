@@ -1,5 +1,8 @@
 # HTML2MD Development Journal
 
+> Historical record: this journal predates the unreleased project rename to
+> `grab2md`; original names are preserved as written.
+
 > Historical record: references below to the unused async controller, its dependency, and old verification totals describe earlier repository states. The async controller/queue were removed during the 2026-07-16 stabilization work; current evidence lives in `INTEGRITY_REVIEW.md` and CI.
 
 ## Journal Entry Template

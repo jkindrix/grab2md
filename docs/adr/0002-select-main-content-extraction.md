@@ -25,7 +25,7 @@ Python choices were measured rather than selected from popularity claims:
   links, images, tables, and multiple output formats. A clean environment
   installed fourteen transitive packages. Its HTML output uses an extraction
   dialect (`head`, `ref`, `graphic`, `row`, and `cell`) rather than ordinary
-  source HTML, while its Markdown output would bypass html2md's single Markdown
+  source HTML, while its Markdown output would bypass grab2md's single Markdown
   conversion pipeline.
 - A semantic-only implementation preserves markup well but cannot handle the
   common generic `div` article case.
@@ -51,11 +51,11 @@ Trafilatura handled the three content fixtures but returned a fabricated main
 result for the ambiguous index. The complete matrix can be reproduced with:
 
 ```bash
-python -m venv /tmp/html2md-extractors
-/tmp/html2md-extractors/bin/pip install \
+python -m venv /tmp/grab2md-extractors
+/tmp/grab2md-extractors/bin/pip install \
   beautifulsoup4==4.13.4 markdownify==1.1.0 \
   readability-lxml==0.8.4.1 lxml-html-clean==0.4.5 trafilatura==2.1.0
-/tmp/html2md-extractors/bin/python benchmarks/main_content/benchmark.py
+/tmp/grab2md-extractors/bin/python benchmarks/main_content/benchmark.py
 ```
 
 ## Decision

@@ -153,7 +153,7 @@ async function main() {
   if (!xvfb) throw new Error('xvfb-run is required for unpacked-extension tests');
 
   const browser = findBrowser();
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'html2md-chromium-'));
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'grab2md-chromium-'));
   const downloads = path.join(profile, 'downloads');
   fs.mkdirSync(downloads);
   const port = await unusedPort();
@@ -253,9 +253,9 @@ async function main() {
     await waitFor(async () => {
       const stored = await evaluate(
         popupClient,
-        `new Promise(resolve => chrome.storage.sync.get('html2mdSettings', resolve))`
+        `new Promise(resolve => chrome.storage.sync.get('grab2mdSettings', resolve))`
       );
-      return stored.html2mdSettings?.markdownOptions?.headingStyle === 'setext';
+      return stored.grab2mdSettings?.markdownOptions?.headingStyle === 'setext';
     }, 'saved popup settings');
     await evaluate(popupClient, `themeToggleBtn.click()`);
     assert.equal(await evaluate(popupClient, `document.body.classList.contains('dark-theme')`), true);
@@ -304,10 +304,10 @@ async function main() {
     probe.requests.length = 0;
     await evaluate(
       popupClient,
-      `globalThis.html2mdCustomElementRuns = 0;
-       if (!customElements.get('html2md-probe')) {
-         customElements.define('html2md-probe', class extends HTMLElement {
-           constructor() { super(); globalThis.html2mdCustomElementRuns += 1; }
+      `globalThis.grab2mdCustomElementRuns = 0;
+       if (!customElements.get('grab2md-probe')) {
+         customElements.define('grab2md-probe', class extends HTMLElement {
+           constructor() { super(); globalThis.grab2mdCustomElementRuns += 1; }
          });
        }`
     );
@@ -316,15 +316,15 @@ async function main() {
       `convertToMarkdown(
         '<p>Passive fixture</p>' +
         '</x-turndown><p>Content after a forged sentinel close</p>' +
-        '<img src="${probe.origin}/image.png" alt="Probe" onerror="globalThis.html2mdCustomElementRuns += 1">' +
+        '<img src="${probe.origin}/image.png" alt="Probe" onerror="globalThis.grab2mdCustomElementRuns += 1">' +
         '<iframe src="${probe.origin}/frame"></iframe>' +
         '<audio src="${probe.origin}/audio"></audio>' +
         '<video src="${probe.origin}/video" poster="${probe.origin}/poster.png"></video>' +
         '<source src="${probe.origin}/source" srcset="${probe.origin}/set.png 1x">' +
         '<link rel="stylesheet" href="${probe.origin}/style.css">' +
         '<object data="${probe.origin}/object"></object>' +
-        '<script>globalThis.html2mdCustomElementRuns += 1<\/script>' +
-        '<html2md-probe></html2md-probe>' +
+        '<script>globalThis.grab2mdCustomElementRuns += 1<\/script>' +
+        '<grab2md-probe></grab2md-probe>' +
         '<meta http-equiv="refresh" content="0;url=${probe.origin}/navigate">'
       )`
     );
@@ -336,7 +336,7 @@ async function main() {
       [],
       `conversion initiated passive resource requests: ${JSON.stringify(probe.requests)}`
     );
-    assert.equal(await evaluate(popupClient, `globalThis.html2mdCustomElementRuns`), 0);
+    assert.equal(await evaluate(popupClient, `globalThis.grab2mdCustomElementRuns`), 0);
     assert.match(
       await evaluate(popupClient, `location.href`),
       new RegExp(`^chrome-extension://${extensionId}/popup\\.html`)

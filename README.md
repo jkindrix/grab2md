@@ -1,6 +1,6 @@
-# html2md
+# grab2md
 
-`html2md` converts local HTML, web pages, link collections, and crawlable sites
+`grab2md` converts local HTML, web pages, link collections, and crawlable sites
 to Markdown. It includes a Python CLI and an unpacked Chrome extension.
 
 > [!IMPORTANT]
@@ -14,8 +14,8 @@ to Markdown. It includes a Python CLI and an unpacked Chrome extension.
 - Development version: `0.3.0`
 - Source alpha release: `v0.3.0`
 - Tested Python versions: 3.11, 3.12, and 3.13
-- Planned PyPI distribution: `html2md-cli`
-- Installed command and Python import: `html2md`
+- Planned PyPI distribution: `grab2md`
+- Installed command and Python import: `grab2md`
 - Required gates: tests and production coverage, Ruff, Black, mypy, wheel smoke,
   extension runtime tests, Bandit, and dependency audit
 - No PyPI, Web Store, or stable API compatibility promise yet
@@ -29,21 +29,21 @@ and the extension's full-page/article/selection conversion modes.
 No PyPI release has been declared. Install from source during stabilization:
 
 ```bash
-git clone https://github.com/jkindrix/html2md.git
-cd html2md
+git clone https://github.com/jkindrix/grab2md.git
+cd grab2md
 poetry install --with dev --sync
-poetry run html2md --help
+poetry run grab2md --help
 ```
 
 JavaScript rendering is an isolated optional installation:
 
 ```bash
-python -m pip install "html2md-cli[render]"
+python -m pip install "grab2md[render]"
 python -m playwright install chromium
-html2md convert https://example.com/app --render-js
+grab2md https://example.com/app --render-js
 ```
 
-See [`docs/browser-rendering.md`](https://github.com/jkindrix/html2md/blob/main/docs/browser-rendering.md) for its resource,
+See [`docs/browser-rendering.md`](https://github.com/jkindrix/grab2md/blob/main/docs/browser-rendering.md) for its resource,
 network, and authentication boundaries.
 
 For an isolated non-development installation from a local checkout:
@@ -52,32 +52,36 @@ For an isolated non-development installation from a local checkout:
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 python -m pip install .
-html2md --version
+grab2md --version
 ```
 
-The distribution name differs because `html2md` is already occupied on PyPI.
-The `html2md-cli` name must be checked again immediately before publication.
+The `grab2md` name had no registered PyPI project when checked on 2026-07-19,
+but availability is not a reservation and must be checked again immediately
+before publication.
 
 ## Quick start
 
 Convert a URL or local HTML file:
 
 ```bash
-html2md convert https://example.com --output example.md
-html2md convert page.html --output page.md
+grab2md https://example.com --output example.md
+grab2md page.html --output page.md
 ```
+
+The earlier explicit form, `grab2md convert SOURCE`, remains accepted for
+pre-release scripts, but direct sources are the primary interface.
 
 Process Markdown files or plain URL lists and rewrite links between successful
 local outputs:
 
 ```bash
-html2md batch links.md urls.txt --output-dir documentation
+grab2md batch links.md urls.txt --output-dir documentation
 ```
 
 Crawl sequentially with robots.txt enabled by default:
 
 ```bash
-html2md crawl https://docs.example.com \
+grab2md crawl https://docs.example.com \
   --output-dir documentation \
   --max-depth 3 \
   --max-pages 100 \
@@ -87,12 +91,12 @@ html2md crawl https://docs.example.com \
 Inspect and resume crawl state:
 
 ```bash
-html2md state list
-html2md state info CRAWL_ID
-html2md state resume CRAWL_ID
+grab2md state list
+grab2md state info CRAWL_ID
+grab2md state resume CRAWL_ID
 ```
 
-Run `html2md COMMAND --help` for the complete, configuration-aware option list.
+Run `grab2md COMMAND --help` for the complete, configuration-aware option list.
 
 ## Commands
 
@@ -106,11 +110,11 @@ Run `html2md COMMAND --help` for the complete, configuration-aware option list.
 
 ### Python API support
 
-The supported pre-1.0 interface is the `html2md` command (and equivalent
-`python -m html2md` entry point). The installed Python modules are internal and
+The supported pre-1.0 interface is the `grab2md` command (and equivalent
+`python -m grab2md` entry point). The installed Python modules are internal and
 may change between alpha releases; importing conversion, crawler, cookie, or
 transport implementation modules is not a supported compatibility contract.
-`html2md.__version__` is exposed for metadata inspection only. A library API
+`grab2md.__version__` is exposed for metadata inspection only. A library API
 will be considered separately if real use cases establish the required result,
 exception, and compatibility contract.
 
@@ -172,17 +176,17 @@ signal behavior. Deferred URLs remain queued instead of being silently lost.
 
 ## Configuration and state
 
-Configuration is stored beneath the user's platform-appropriate `.html2md`
+Configuration is stored beneath the user's platform-appropriate `.grab2md`
 directory. Writes are validated, atomic, backed up, and recoverable. Run:
 
 ```bash
-html2md config show
-html2md config path
-html2md config show-options
-html2md config set-cli-default convert content_mode main
-html2md config set-cli-default crawl max_pages 250
-html2md config backup
-html2md config list-backups
+grab2md config show
+grab2md config path
+grab2md config show-options
+grab2md config set-cli-default convert content_mode main
+grab2md config set-cli-default crawl max_pages 250
+grab2md config backup
+grab2md config list-backups
 ```
 
 CLI defaults are typed and loaded at invocation time. Optional values accept
@@ -190,7 +194,7 @@ CLI defaults are typed and loaded at invocation time. Optional values accept
 configuration changes from separate processes use last-write-wins semantics,
 so serialize configuration commands in automation.
 
-CSS selectors are caller-owned generic inputs; html2md does not ship or
+CSS selectors are caller-owned generic inputs; grab2md does not ship or
 silently apply per-site extraction profiles. A selector can be supplied for one
 run or configured as a CLI default together with `content_mode=selector`.
 
@@ -212,7 +216,7 @@ The extension uses `activeTab`, `scripting`, `storage`, `downloads`, and
 batch, native CLI integration, background service-worker conversion, context
 menus, and keyboard shortcuts are not supported.
 
-See [`extension/README.md`](https://github.com/jkindrix/html2md/blob/main/extension/README.md) for installation and testing.
+See [`extension/README.md`](https://github.com/jkindrix/grab2md/blob/main/extension/README.md) for installation and testing.
 
 ## Security boundaries
 
@@ -226,7 +230,7 @@ See [`extension/README.md`](https://github.com/jkindrix/html2md/blob/main/extens
   token-like data.
 - Target authentication accepts scoped browser cookies, an owner-only JSON
   cookie export, header file, or Playwright storage-state file for rendered
-  conversion. Login flows remain outside html2md, and authentication files are
+  conversion. Login flows remain outside grab2md, and authentication files are
   rejected when group- or world-readable or when supplied through symlinks on
   POSIX systems.
 - Remote pages, crawl targets, robots files, and images
@@ -249,7 +253,7 @@ See [`extension/README.md`](https://github.com/jkindrix/html2md/blob/main/extens
   control. It exposes the connection to interception but does not authorize
   private-network access.
 
-See [`docs/network-security.md`](https://github.com/jkindrix/html2md/blob/main/docs/network-security.md) for the complete
+See [`docs/network-security.md`](https://github.com/jkindrix/grab2md/blob/main/docs/network-security.md) for the complete
 outbound request contract and maintainer integration rule.
 
 Windows relies on the current account's directory ACLs because POSIX mode bits
@@ -261,7 +265,7 @@ Remote relative links and image references are resolved against the final URL
 and the document's valid `<base>` element. `--metadata` adds deterministic YAML
 front matter for available title, author/date, canonical URL, description, and
 language fields. Local references remain relative. See
-[`docs/output-contract.md`](https://github.com/jkindrix/html2md/blob/main/docs/output-contract.md) for the exact contract.
+[`docs/output-contract.md`](https://github.com/jkindrix/grab2md/blob/main/docs/output-contract.md) for the exact contract.
 
 ## Known limitations
 
@@ -269,7 +273,7 @@ language fields. Local references remain relative. See
   authored boilerplate; opt-in main-content mode uses substantial semantic
   regions and a confidence-gated readability fallback, whose quality varies by
   document. The measured decision is recorded in
-  [`ADR 0002`](https://github.com/jkindrix/html2md/blob/main/docs/adr/0002-select-main-content-extraction.md).
+  [`ADR 0002`](https://github.com/jkindrix/grab2md/blob/main/docs/adr/0002-select-main-content-extraction.md).
 - JavaScript rendering is opt-in for `convert`; batch and crawl remain static.
 - Metadata extraction intentionally uses declared HTML/meta fields rather than
   text inference or executable structured data.
@@ -296,21 +300,21 @@ node extension/tests/chromium-smoke.js
 ```
 
 Coverage uses the production package as its denominator and enforces the floor
-documented in [`docs/coverage.md`](https://github.com/jkindrix/html2md/blob/main/docs/coverage.md).
+documented in [`docs/coverage.md`](https://github.com/jkindrix/grab2md/blob/main/docs/coverage.md).
 
 ## Project documentation
 
-- [`CHANGELOG.md`](https://github.com/jkindrix/html2md/blob/main/CHANGELOG.md): user-visible changes and changelog policy
-- [`CONTRIBUTING.md`](https://github.com/jkindrix/html2md/blob/main/CONTRIBUTING.md): development setup and contribution gates
-- [`SECURITY.md`](https://github.com/jkindrix/html2md/blob/main/SECURITY.md): private vulnerability-reporting route
-- [`SUPPORT.md`](https://github.com/jkindrix/html2md/blob/main/SUPPORT.md): alpha support and compatibility policy
-- [`docs/releasing.md`](https://github.com/jkindrix/html2md/blob/main/docs/releasing.md): reproducible release checklist
-- [`docs/deployment.md`](https://github.com/jkindrix/html2md/blob/main/docs/deployment.md): local deployment details
-- [`docs/configuration-example.md`](https://github.com/jkindrix/html2md/blob/main/docs/configuration-example.md): configuration example
-- [`docs/adr/0001-defer-scale-out-crawling.md`](https://github.com/jkindrix/html2md/blob/main/docs/adr/0001-defer-scale-out-crawling.md): scale-out architecture gate
-- [`docs/internal/`](https://github.com/jkindrix/html2md/tree/main/docs/internal): historical planning and review records
+- [`CHANGELOG.md`](https://github.com/jkindrix/grab2md/blob/main/CHANGELOG.md): user-visible changes and changelog policy
+- [`CONTRIBUTING.md`](https://github.com/jkindrix/grab2md/blob/main/CONTRIBUTING.md): development setup and contribution gates
+- [`SECURITY.md`](https://github.com/jkindrix/grab2md/blob/main/SECURITY.md): private vulnerability-reporting route
+- [`SUPPORT.md`](https://github.com/jkindrix/grab2md/blob/main/SUPPORT.md): alpha support and compatibility policy
+- [`docs/releasing.md`](https://github.com/jkindrix/grab2md/blob/main/docs/releasing.md): reproducible release checklist
+- [`docs/deployment.md`](https://github.com/jkindrix/grab2md/blob/main/docs/deployment.md): local deployment details
+- [`docs/configuration-example.md`](https://github.com/jkindrix/grab2md/blob/main/docs/configuration-example.md): configuration example
+- [`docs/adr/0001-defer-scale-out-crawling.md`](https://github.com/jkindrix/grab2md/blob/main/docs/adr/0001-defer-scale-out-crawling.md): scale-out architecture gate
+- [`docs/internal/`](https://github.com/jkindrix/grab2md/tree/main/docs/internal): historical planning and review records
 
 ## License
 
 Copyright (c) 2025-2026 Justin Kindrix. Distributed under the
-[MIT License](https://github.com/jkindrix/html2md/blob/main/LICENSE).
+[MIT License](https://github.com/jkindrix/grab2md/blob/main/LICENSE).

@@ -14,7 +14,7 @@ def setup_test_config_path(tmp_path):
     """Setup test config path before importing loader."""
     import os
 
-    os.environ["HTML2MD_CONFIG_PATH"] = str(tmp_path / "config.json")
+    os.environ["GRAB2MD_CONFIG_PATH"] = str(tmp_path / "config.json")
 
 
 class TestLoaderIntegration:
@@ -24,28 +24,28 @@ class TestLoaderIntegration:
     def setup_env(self, tmp_path, monkeypatch):
         """Setup test environment with isolated config path."""
         test_config = tmp_path / "config.json"
-        monkeypatch.setenv("HTML2MD_CONFIG_PATH", str(test_config))
+        monkeypatch.setenv("GRAB2MD_CONFIG_PATH", str(test_config))
 
         # Force reload of loader module to pick up new env var
         import sys
 
-        if "html2md.config.loader" in sys.modules:
-            del sys.modules["html2md.config.loader"]
-        if "html2md.config.backup" in sys.modules:
-            del sys.modules["html2md.config.backup"]
-        if "html2md.config.recovery" in sys.modules:
-            del sys.modules["html2md.config.recovery"]
+        if "grab2md.config.loader" in sys.modules:
+            del sys.modules["grab2md.config.loader"]
+        if "grab2md.config.backup" in sys.modules:
+            del sys.modules["grab2md.config.backup"]
+        if "grab2md.config.recovery" in sys.modules:
+            del sys.modules["grab2md.config.recovery"]
 
         yield
 
         # Cleanup
         for module in list(sys.modules.keys()):
-            if module.startswith("html2md.config"):
+            if module.startswith("grab2md.config"):
                 del sys.modules[module]
 
     def test_save_config_creates_file(self, tmp_path):
         """Test save_config creates config file if it doesn't exist."""
-        from html2md.config.loader import save_config, CONFIG_FILE
+        from grab2md.config.loader import save_config, CONFIG_FILE
 
         test_data = {"test": "data", "version": 1}
         save_config(test_data)
@@ -57,7 +57,7 @@ class TestLoaderIntegration:
 
     def test_save_and_load_roundtrip(self, tmp_path):
         """Test saving and loading config maintains data integrity."""
-        from html2md.config.loader import save_config, load_config
+        from grab2md.config.loader import save_config, load_config
 
         original_data = {
             "custom": {"selector_profiles": {"docs": "main article"}},
@@ -72,7 +72,7 @@ class TestLoaderIntegration:
 
     def test_load_config_creates_default_if_missing(self, tmp_path):
         """Test load_config creates default config if file doesn't exist."""
-        from html2md.config.loader import load_config, CONFIG_FILE
+        from grab2md.config.loader import load_config, CONFIG_FILE
 
         config = load_config()
 
@@ -87,7 +87,7 @@ class TestLoaderIntegration:
         self, mock_stdout, mock_stdin, tmp_path
     ):
         """Test loading corrupt config in non-interactive mode uses defaults."""
-        from html2md.config.loader import load_config, CONFIG_FILE, DEFAULT_CONFIG
+        from grab2md.config.loader import load_config, CONFIG_FILE, DEFAULT_CONFIG
 
         # Create corrupt config
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -109,7 +109,7 @@ class TestLoaderIntegration:
         self, mock_stdout, mock_stdin, tmp_path
     ):
         """Test loading corrupt config with backup available restores from backup."""
-        from html2md.config.loader import (
+        from grab2md.config.loader import (
             load_config,
             save_config,
             get_backup_manager,
@@ -140,7 +140,7 @@ class TestLoaderIntegration:
         self, mock_stdout, mock_stdin, tmp_path
     ):
         """Test loading corrupt config saves .corrupt file for debugging."""
-        from html2md.config.loader import load_config, CONFIG_FILE
+        from grab2md.config.loader import load_config, CONFIG_FILE
 
         # Create corrupt config
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
@@ -157,7 +157,7 @@ class TestLoaderIntegration:
 
     def test_save_config_validates_data(self, tmp_path):
         """Test save_config validates config data before saving."""
-        from html2md.config.loader import save_config, load_config
+        from grab2md.config.loader import save_config, load_config
 
         # Save incomplete config (missing required keys)
         incomplete_data = {"custom_key": "value"}
@@ -173,7 +173,7 @@ class TestLoaderIntegration:
 
     def test_save_config_invalidates_cache(self, tmp_path):
         """Test save_config invalidates the config cache."""
-        from html2md.config.loader import save_config, load_config
+        from grab2md.config.loader import save_config, load_config
 
         # Load initial config
         config1 = load_config()
@@ -190,7 +190,7 @@ class TestLoaderIntegration:
 
     def test_cached_loads_return_independent_snapshots(self):
         """Mutating a returned config cannot mutate the shared cache."""
-        from html2md.config.loader import load_config
+        from grab2md.config.loader import load_config
 
         first = load_config()
         first["logging"]["level"] = "DEBUG"
@@ -200,7 +200,7 @@ class TestLoaderIntegration:
 
     def test_save_caches_an_independent_snapshot(self):
         """Mutating save input after the call cannot alter cached state."""
-        from html2md.config.loader import load_config, save_config
+        from grab2md.config.loader import load_config, save_config
 
         supplied = load_config()
         supplied["logging"]["level"] = "INFO"
@@ -211,7 +211,7 @@ class TestLoaderIntegration:
 
     def test_concurrent_callers_cannot_mutate_cached_state(self):
         """Concurrent readers receive snapshots rather than shared dictionaries."""
-        from html2md.config.loader import load_config
+        from grab2md.config.loader import load_config
 
         baseline = load_config()
 
@@ -227,8 +227,8 @@ class TestLoaderIntegration:
 
     def test_invalid_save_preserves_existing_file(self):
         """Schema failure occurs before backup or replacement."""
-        from html2md.config.loader import CONFIG_FILE, load_config, save_config
-        from html2md.config.schema import ConfigValidationError
+        from grab2md.config.loader import CONFIG_FILE, load_config, save_config
+        from grab2md.config.schema import ConfigValidationError
 
         valid = load_config()
         valid["cli_defaults"]["crawl"]["rate_limit"] = 30
@@ -244,8 +244,8 @@ class TestLoaderIntegration:
 
     def test_invalid_persisted_value_fails_without_rewriting_user_file(self):
         """Semantic validation failure preserves persisted evidence."""
-        from html2md.config.loader import CONFIG_FILE, load_config
-        from html2md.config.schema import ConfigValidationError
+        from grab2md.config.loader import CONFIG_FILE, load_config
+        from grab2md.config.schema import ConfigValidationError
 
         invalid = {"cli_defaults": {"crawl": {"rate_limit": "30"}}}
         CONFIG_FILE.write_text(json.dumps(invalid), encoding="utf-8")
@@ -258,7 +258,7 @@ class TestLoaderIntegration:
 
     def test_multiple_save_operations_atomic(self, tmp_path):
         """Test multiple save operations maintain atomicity."""
-        from html2md.config.loader import save_config, load_config
+        from grab2md.config.loader import save_config, load_config
 
         # Perform multiple saves
         for i in range(5):
@@ -272,7 +272,7 @@ class TestLoaderIntegration:
 
     def test_concurrent_load_after_save(self, tmp_path):
         """Test loading after save returns updated data."""
-        from html2md.config.loader import save_config, load_config
+        from grab2md.config.loader import save_config, load_config
 
         # Save config
         data1 = {"value": "first"}
@@ -292,7 +292,7 @@ class TestLoaderIntegration:
 
     def test_get_backup_manager_singleton(self, tmp_path):
         """Test get_backup_manager returns same instance."""
-        from html2md.config.loader import get_backup_manager
+        from grab2md.config.loader import get_backup_manager
 
         mgr1 = get_backup_manager()
         mgr2 = get_backup_manager()
@@ -301,7 +301,7 @@ class TestLoaderIntegration:
 
     def test_get_recovery_handler_singleton(self, tmp_path):
         """Test get_recovery_handler returns same instance."""
-        from html2md.config.loader import get_recovery_handler
+        from grab2md.config.loader import get_recovery_handler
 
         handler1 = get_recovery_handler()
         handler2 = get_recovery_handler()
@@ -310,13 +310,13 @@ class TestLoaderIntegration:
 
     @mock.patch("sys.stdin.isatty", return_value=True)
     @mock.patch("sys.stdout.isatty", return_value=True)
-    @mock.patch("html2md.config.recovery.Confirm.ask", return_value=True)
-    @mock.patch("html2md.config.recovery.Prompt.ask", return_value="d")
+    @mock.patch("grab2md.config.recovery.Confirm.ask", return_value=True)
+    @mock.patch("grab2md.config.recovery.Prompt.ask", return_value="d")
     def test_load_corrupt_interactive_confirms_before_reset(
         self, mock_prompt, mock_confirm, mock_stdout, mock_stdin, tmp_path
     ):
         """Test interactive mode requires confirmation before resetting config."""
-        from html2md.config.loader import load_config, CONFIG_FILE, DEFAULT_CONFIG
+        from grab2md.config.loader import load_config, CONFIG_FILE, DEFAULT_CONFIG
 
         # Create corrupt config
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:

@@ -1,6 +1,6 @@
-# Deployment Guide for html2md
+# Deployment Guide for grab2md
 
-This guide explains how to deploy and install the `html2md` tool after making changes.
+This guide explains how to deploy and install the `grab2md` tool after making changes.
 
 ## Automated Deployment
 
@@ -24,8 +24,8 @@ This script will:
 
 ## Manual Deployment
 
-The distribution is named `html2md-cli`; it installs the `html2md` command and
-the `html2md` Python package. Before publishing, verify that the normalized
+The distribution is named `grab2md`; it installs the `grab2md` command and
+the `grab2md` Python package. Before publishing, verify that the normalized
 distribution name is still available on both TestPyPI and PyPI. A local build
 or pipx installation does not reserve the registry name.
 
@@ -54,24 +54,24 @@ pipx install . --force
 The following commands should now be available:
 
 ```bash
-html2md --help
-html2md --version
-python -m html2md --version
+grab2md --help
+grab2md --version
+python -m grab2md --version
 ```
 
 ## Usage after Deployment
 
-After deployment, you can use `html2md` from anywhere:
+After deployment, you can use `grab2md` from anywhere:
 
 ```bash
 # Convert a single URL
-html2md convert https://example.com --output example.md
+grab2md https://example.com --output example.md
 
 # Process a batch of URLs from a file
-html2md batch urls.txt --output-dir docs
+grab2md batch urls.txt --output-dir docs
 
 # Process batch URLs and output directly to domain-named directories
-html2md batch urls.txt --output-dir docs --flatten
+grab2md batch urls.txt --output-dir docs --flatten
 ```
 
 ## Troubleshooting
@@ -80,4 +80,4 @@ If you encounter any issues:
 
 - Check that Poetry and pipx are installed and up to date
 - Ensure all development dependencies are installed: `poetry install`
-- Try uninstalling before reinstalling: `pipx uninstall html2md`
+- Try uninstalling before reinstalling: `pipx uninstall grab2md`

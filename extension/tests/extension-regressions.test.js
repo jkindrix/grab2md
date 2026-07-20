@@ -60,7 +60,7 @@ test('conversion and settings persistence are isolated controllers', () => {
 
   const storage = {
     get(_key, callback) {
-      callback({ html2mdSettings: { markdownOptions: { headingStyle: 'setext' } } });
+      callback({ grab2mdSettings: { markdownOptions: { headingStyle: 'setext' } } });
     },
     set(value, callback) { this.saved = value; callback(); }
   };
@@ -75,7 +75,7 @@ test('conversion and settings persistence are isolated controllers', () => {
     assert.equal(loaded.markdownOptions.bulletMarker, '-');
     store.save(loaded, () => {});
   });
-  assert.equal(storage.saved.html2mdSettings.markdownOptions.headingStyle, 'setext');
+  assert.equal(storage.saved.grab2mdSettings.markdownOptions.headingStyle, 'setext');
 });
 
 test('popup exposes only implemented link and code formatting controls', () => {

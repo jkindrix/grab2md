@@ -1,7 +1,7 @@
 # Optional JavaScript rendering
 
 The default conversion path uses `requests` and does not execute page code.
-`html2md convert --render-js` is an explicit, URL-only mode for pages whose
+`grab2md URL --render-js` is an explicit, URL-only mode for pages whose
 meaningful DOM is created by JavaScript.
 
 ## Installation
@@ -9,9 +9,9 @@ meaningful DOM is created by JavaScript.
 Browser automation is isolated from the base package:
 
 ```bash
-python -m pip install "html2md-cli[render]"
+python -m pip install "grab2md[render]"
 python -m playwright install chromium
-html2md convert https://example.com/app --render-js --output app.md
+grab2md https://example.com/app --render-js --output app.md
 ```
 
 For a page requiring an existing browser session, create Playwright storage
@@ -20,7 +20,7 @@ explicitly:
 
 ```bash
 chmod 600 session-state.json
-html2md convert https://example.com/app --render-js \
+grab2md https://example.com/app --render-js \
   --storage-state session-state.json
 ```
 

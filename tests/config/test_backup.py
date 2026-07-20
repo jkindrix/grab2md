@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from html2md.config.backup import ConfigBackupManager
+from grab2md.config.backup import ConfigBackupManager
 
 
 class TestConfigBackupManager:

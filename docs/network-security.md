@@ -1,8 +1,8 @@
 # Outbound network security
 
 Remote documents and links are untrusted input. Every production HTTP(S)
-request initiated directly by html2md must use the shared guarded transport in
-`html2md.network.safe_http`. A bare `requests.get`, `Session.request`, urllib
+request initiated directly by grab2md must use the shared guarded transport in
+`grab2md.network.safe_http`. A bare `requests.get`, `Session.request`, urllib
 fetch, or independently resolving proxy is not an accepted acquisition path.
 
 ## Default policy

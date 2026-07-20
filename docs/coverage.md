@@ -1,11 +1,11 @@
 # Coverage baseline
 
-Coverage is measured against production code in `src/html2md`; package-internal test modules are excluded from both collection and reporting. The canonical suite includes unit, integration, and real CLI subprocess tests:
+Coverage is measured against production code in `src/grab2md`; package-internal test modules are excluded from both collection and reporting. The canonical suite includes unit, integration, and real CLI subprocess tests:
 
 ```bash
 poetry run coverage erase
-poetry run pytest src/html2md/tests tests/config \
-  --cov=html2md --cov-report=term-missing:skip-covered
+poetry run pytest src/grab2md/tests tests/config \
+  --cov=grab2md --cov-report=term-missing:skip-covered
 ```
 
 On 2026-07-19, Python 3.11.2 measured **4,789 production statements, 602

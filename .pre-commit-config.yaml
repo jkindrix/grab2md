@@ -15,14 +15,14 @@ repos:
     rev: 26.5.1
     hooks:
       - id: black
-        files: ^(src/html2md/|tests/config/).*\.py$
+        files: ^(src/grab2md/|tests/config/).*\.py$
         language_version: python3.11
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.2
     hooks:
       - id: ruff
-        files: ^(src/html2md/|tests/config/).*\.py$
+        files: ^(src/grab2md/|tests/config/).*\.py$
         language_version: python3.11
         args: ["--fix"]
 
@@ -30,7 +30,7 @@ repos:
     rev: 1.8.3
     hooks:
       - id: bandit
-        args: ["-r", "src/html2md", "-x", "src/html2md/tests", "-ll"]
+        args: ["-r", "src/grab2md", "-x", "src/grab2md/tests", "-ll"]
         pass_filenames: false
 
   - repo: https://github.com/pypa/pip-audit
@@ -44,7 +44,7 @@ repos:
       - id: mypy
         name: run mypy
         entry: poetry run mypy
-        args: ["src/html2md", "tests/config"]
+        args: ["src/grab2md", "tests/config"]
         language: system
         pass_filenames: false
         always_run: true
@@ -52,7 +52,7 @@ repos:
 
       - id: mypy-production-bodies
         name: check untyped production bodies
-        entry: poetry run mypy --check-untyped-defs --exclude src/html2md/tests/ src/html2md
+        entry: poetry run mypy --check-untyped-defs --exclude src/grab2md/tests/ src/grab2md
         language: system
         pass_filenames: false
         always_run: true
@@ -61,7 +61,7 @@ repos:
       - id: tests
         name: run tests
         entry: poetry run pytest
-        args: ["--no-header", "-x", "src/html2md/tests", "tests/config"]
+        args: ["--no-header", "-x", "src/grab2md/tests", "tests/config"]
         language: system
         pass_filenames: false
         always_run: true

@@ -1,5 +1,8 @@
 # HTML2MD Project Status and Integrity Record
 
+> Historical record: this review predates the unreleased project rename to
+> `grab2md`; commands, paths, and identity claims are preserved as measured.
+
 **Status date:** 2026-07-16
 
 **Recorded version:** 0.1.0 (alpha)

@@ -1,5 +1,8 @@
 # HTML2MD Development Roadmap
 
+> Historical planning record: this roadmap predates the unreleased project
+> rename to `grab2md` and is not the current release plan.
+
 > Historical and superseded. This 2025 planning artifact is not a current
 > delivery commitment. Scale-out work is governed by
 > [`ADR 0001`](../adr/0001-defer-scale-out-crawling.md) and remains deferred

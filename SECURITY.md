@@ -2,13 +2,13 @@
 
 ## Supported versions
 
-html2md has no stable public release. Security fixes are developed only on the
+grab2md has no stable public release. Security fixes are developed only on the
 current `main` branch and the latest source-alpha line. Older tags are retained
 for provenance and should not be assumed to receive backports.
 
 ## Report a vulnerability privately
 
-Email `jkindrix@gmail.com` with the subject `html2md security report`. Include:
+Email `jkindrix@gmail.com` with the subject `grab2md security report`. Include:
 
 - the affected commit or version;
 - the acquisition path or extension mode involved;

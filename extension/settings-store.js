@@ -1,7 +1,7 @@
 /** Persistence adapter for popup settings. */
 
 class Html2MdSettingsStore {
-  constructor(storage, key = 'html2mdSettings') {
+  constructor(storage, key = 'grab2mdSettings') {
     this.storage = storage;
     this.key = key;
   }

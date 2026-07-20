@@ -7,7 +7,7 @@ import os
 
 import pytest
 
-from html2md.config.writer import atomic_write_json
+from grab2md.config.writer import atomic_write_json
 
 
 class TestAtomicWriteJson:

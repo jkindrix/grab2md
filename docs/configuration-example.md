@@ -1,4 +1,4 @@
-# HTML2MD Configuration Examples
+# GRAB2MD Configuration Examples
 
 ## Setting CLI Defaults
 
@@ -8,20 +8,20 @@ You can now configure default values for CLI options so you don't have to specif
 
 ```bash
 # Set browser_cookies as default for convert command
-html2md config set-cli-default convert browser_cookies true
+grab2md config set-cli-default convert browser_cookies true
 
 # Now this command will automatically use browser cookies
-html2md convert https://example.com
+grab2md https://example.com
 ```
 
 ### Example 2: Use hierarchical folders by default for batch operations
 
 ```bash
 # Set hierarchical as default for batch command
-html2md config set-cli-default batch hierarchical true
+grab2md config set-cli-default batch hierarchical true
 
 # Now batch operations will create hierarchical domain folders
-html2md batch input.md -o output
+grab2md batch input.md -o output
 # Creates: output/com/example/www/
 ```
 
@@ -29,26 +29,26 @@ html2md batch input.md -o output
 
 ```bash
 # Set multiple defaults
-html2md config set-cli-default convert browser_cookies true
-html2md config set-cli-default convert browser chrome
-html2md config set-cli-default batch hierarchical true
-html2md config set-cli-default crawl max_pages 200
-html2md config set-cli-default crawl hierarchical true
+grab2md config set-cli-default convert browser_cookies true
+grab2md config set-cli-default convert browser chrome
+grab2md config set-cli-default batch hierarchical true
+grab2md config set-cli-default crawl max_pages 200
+grab2md config set-cli-default crawl hierarchical true
 ```
 
 ### View current defaults
 
 ```bash
 # List all CLI defaults
-html2md config list-cli-defaults
+grab2md config list-cli-defaults
 ```
 
 ### Using the config file directly
 
 You can also edit the config file directly. The config file location is:
-- Linux: `~/.config/html2md/config.json`
-- macOS: `~/Library/Application Support/html2md/config.json`
-- Windows: `%APPDATA%\html2md\config.json`
+- Linux: `~/.config/grab2md/config.json`
+- macOS: `~/Library/Application Support/grab2md/config.json`
+- Windows: `%APPDATA%\grab2md\config.json`
 
 Example config file with CLI defaults:
 ```json
@@ -94,11 +94,11 @@ Example config file with CLI defaults:
 ### Show config file path
 
 ```bash
-html2md config path
+grab2md config path
 ```
 
 ### Reset to defaults
 
 ```bash
-html2md config reset
+grab2md config reset
 ```

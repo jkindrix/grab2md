@@ -1,5 +1,8 @@
 # HTML2MD Work Breakdown Structure
 
+> Historical planning record: this breakdown predates the unreleased project
+> rename to `grab2md` and is retained for provenance.
+
 > Historical and superseded. Estimates and feature priorities in this document
 > are not active commitments. See
 > [`ADR 0001`](../adr/0001-defer-scale-out-crawling.md) for the accepted gate on

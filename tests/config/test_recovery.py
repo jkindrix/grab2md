@@ -7,8 +7,8 @@ from unittest import mock
 
 import pytest
 
-from html2md.config.backup import ConfigBackupManager
-from html2md.config.recovery import ConfigRecoveryHandler, RecoveryAction
+from grab2md.config.backup import ConfigBackupManager
+from grab2md.config.recovery import ConfigRecoveryHandler, RecoveryAction
 
 
 class TestConfigRecoveryHandler:
@@ -87,7 +87,7 @@ class TestConfigRecoveryHandler:
         action = handler._non_interactive_recovery()
         assert action == RecoveryAction.USE_DEFAULTS
 
-    @mock.patch("html2md.config.recovery.Prompt.ask", return_value="r")
+    @mock.patch("grab2md.config.recovery.Prompt.ask", return_value="r")
     def test_interactive_recovery_restore_backup(self, mock_prompt, setup_recovery):
         """Test interactive mode allows selecting backup restoration."""
         handler = setup_recovery["handler"]
@@ -104,8 +104,8 @@ class TestConfigRecoveryHandler:
 
         assert action == RecoveryAction.RESTORE_BACKUP
 
-    @mock.patch("html2md.config.recovery.Confirm.ask", return_value=True)
-    @mock.patch("html2md.config.recovery.Prompt.ask", return_value="d")
+    @mock.patch("grab2md.config.recovery.Confirm.ask", return_value=True)
+    @mock.patch("grab2md.config.recovery.Prompt.ask", return_value="d")
     def test_interactive_recovery_use_defaults_confirmed(
         self, mock_prompt, mock_confirm, setup_recovery
     ):
@@ -116,7 +116,7 @@ class TestConfigRecoveryHandler:
         action = handler._prompt_user_recovery()
         assert action == RecoveryAction.USE_DEFAULTS
 
-    @mock.patch("html2md.config.recovery.Prompt.ask", return_value="m")
+    @mock.patch("grab2md.config.recovery.Prompt.ask", return_value="m")
     def test_interactive_recovery_manual_fix(self, mock_prompt, setup_recovery):
         """Test interactive mode allows choosing manual fix."""
         handler = setup_recovery["handler"]
@@ -125,7 +125,7 @@ class TestConfigRecoveryHandler:
         action = handler._prompt_user_recovery()
         assert action == RecoveryAction.MANUAL_FIX
 
-    @mock.patch("html2md.config.recovery.Prompt.ask", return_value="q")
+    @mock.patch("grab2md.config.recovery.Prompt.ask", return_value="q")
     def test_interactive_recovery_quit(self, mock_prompt, setup_recovery):
         """Test interactive mode allows choosing to quit."""
         handler = setup_recovery["handler"]
@@ -292,8 +292,8 @@ class TestConfigRecoveryHandler:
         # Should restore from backup
         assert result == original_data
 
-    @mock.patch("html2md.config.recovery.Confirm.ask", side_effect=[False, True])
-    @mock.patch("html2md.config.recovery.Prompt.ask", side_effect=["d", "d"])
+    @mock.patch("grab2md.config.recovery.Confirm.ask", side_effect=[False, True])
+    @mock.patch("grab2md.config.recovery.Prompt.ask", side_effect=["d", "d"])
     def test_interactive_recovery_retry_on_cancelled_confirmation(
         self, mock_prompt, mock_confirm, setup_recovery
     ):

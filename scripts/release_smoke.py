@@ -78,13 +78,13 @@ def main() -> int:
     expected_version = arguments.expected_version or wheel_version(wheel)
     digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
 
-    with tempfile.TemporaryDirectory(prefix="html2md-release-smoke-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="grab2md-release-smoke-") as temporary:
         root = Path(temporary)
         environment = root / "venv"
         venv.EnvBuilder(with_pip=True, clear=True).create(environment)
         scripts = environment / ("Scripts" if os.name == "nt" else "bin")
         python = scripts / ("python.exe" if os.name == "nt" else "python")
-        command = scripts / ("html2md.exe" if os.name == "nt" else "html2md")
+        command = scripts / ("grab2md.exe" if os.name == "nt" else "grab2md")
         run([str(python), "-m", "pip", "install", "--quiet", str(wheel)], cwd=root)
 
         assert (
@@ -92,7 +92,7 @@ def main() -> int:
             == expected_version
         )
         run([str(command), "--help"], cwd=root)
-        run([str(python), "-I", "-m", "html2md", "--help"], cwd=root)
+        run([str(python), "-I", "-m", "grab2md", "--help"], cwd=root)
 
         source = root / "source.html"
         local_output = root / "local.md"

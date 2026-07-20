@@ -2,8 +2,8 @@
 
 import pytest
 
-from html2md.config.loader import DEFAULT_CONFIG
-from html2md.config.schema import (
+from grab2md.config.loader import DEFAULT_CONFIG
+from grab2md.config.schema import (
     ConfigValidationError,
     VALUE_TYPES,
     default_at_path,

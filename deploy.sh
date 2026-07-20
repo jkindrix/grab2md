@@ -16,11 +16,11 @@ fi
 
 echo "Running release gates..."
 poetry check
-poetry run ruff check src/html2md tests/config
-poetry run black --check src/html2md tests/config
-poetry run mypy src/html2md tests/config
-poetry run mypy --check-untyped-defs --exclude 'src/html2md/tests/' src/html2md
-poetry run pytest src/html2md/tests tests/config
+poetry run ruff check src/grab2md tests/config
+poetry run black --check src/grab2md tests/config
+poetry run mypy src/grab2md tests/config
+poetry run mypy --check-untyped-defs --exclude 'src/grab2md/tests/' src/grab2md
+poetry run pytest src/grab2md/tests tests/config
 
 echo "Building distributions..."
 rm -rf dist
@@ -35,7 +35,7 @@ if [[ "$dry_run" == true ]]; then
     trap 'rm -rf "$smoke_dir"' EXIT
     python -m venv "$smoke_dir/venv"
     "$smoke_dir/venv/bin/python" -m pip install --quiet dist/*.whl
-    html2md_command="$smoke_dir/venv/bin/html2md"
+    grab2md_command="$smoke_dir/venv/bin/grab2md"
     python_command="$smoke_dir/venv/bin/python"
 else
     command -v pipx >/dev/null || {
@@ -43,15 +43,15 @@ else
         exit 1
     }
     pipx install . --force
-    html2md_command="$(command -v html2md)"
+    grab2md_command="$(command -v grab2md)"
     python_command="python"
 fi
 
-installed_version="$($html2md_command --version)"
-module_version="$($python_command -m html2md --version)"
+installed_version="$($grab2md_command --version)"
+module_version="$($python_command -m grab2md --version)"
 if [[ "$installed_version" != "$expected_version" || "$module_version" != "$expected_version" ]]; then
     echo "Version mismatch: expected $expected_version, command=$installed_version, module=$module_version" >&2
     exit 1
 fi
 
-echo "Deployment verification complete: html2md $expected_version"
+echo "Deployment verification complete: grab2md $expected_version"

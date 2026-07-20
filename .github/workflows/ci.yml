@@ -35,7 +35,7 @@ jobs:
       - name: Validate metadata and lock
         run: poetry check
       - name: Run tests with production coverage gate
-        run: poetry run pytest src/html2md/tests tests/config --cov=html2md --cov-report=term-missing:skip-covered
+        run: poetry run pytest src/grab2md/tests tests/config --cov=grab2md --cov-report=term-missing:skip-covered
 
   package:
     name: Build and wheel smoke test
@@ -62,9 +62,9 @@ jobs:
           wheel = next(Path("dist").glob("*.whl"))
           with ZipFile(wheel) as archive:
               names = archive.namelist()
-          assert not any(name.startswith("html2md/tests/") for name in names)
-          assert "html2md/html2md" not in names
-          assert "html2md/__main__.py" in names
+          assert not any(name.startswith("grab2md/tests/") for name in names)
+          assert "grab2md/grab2md" not in names
+          assert "grab2md/__main__.py" in names
           PY
       - name: Run extension static regressions
         run: |
@@ -88,16 +88,16 @@ jobs:
       - name: Install locked dependencies
         run: poetry install --with dev --sync
       - name: Ruff
-        run: poetry run ruff check src/html2md tests/config
+        run: poetry run ruff check src/grab2md tests/config
       - name: Black
-        run: poetry run black --check src/html2md tests/config
+        run: poetry run black --check src/grab2md tests/config
       - name: Mypy
         run: |
-          poetry run mypy src/html2md tests/config
+          poetry run mypy src/grab2md tests/config
           poetry run mypy --check-untyped-defs \
-            --exclude 'src/html2md/tests/' src/html2md
+            --exclude 'src/grab2md/tests/' src/grab2md
       - name: Bandit
-        run: poetry run bandit -r src/html2md -x src/html2md/tests -ll
+        run: poetry run bandit -r src/grab2md -x src/grab2md/tests -ll
       - name: Audit locked development environment
         run: poetry run pip-audit
 
@@ -120,7 +120,7 @@ jobs:
       - name: Validate metadata and platform contracts
         run: |
           poetry check
-          poetry run pytest -q src/html2md/tests tests/config
+          poetry run pytest -q src/grab2md/tests tests/config
       - name: Build and smoke-test the installed wheel
         run: |
           poetry build
@@ -147,8 +147,8 @@ jobs:
           poetry run pip-audit --requirement "$RUNNER_TEMP/render-requirements.txt"
       - name: Exercise static and rendered fixtures
         env:
-          HTML2MD_RUN_RENDER_E2E: "1"
+          GRAB2MD_RUN_RENDER_E2E: "1"
         run: |
-          poetry run pytest -q src/html2md/tests/test_browser_renderer_e2e.py
+          poetry run pytest -q src/grab2md/tests/test_browser_renderer_e2e.py
           export CHROME_BIN="$(poetry run python -c 'from playwright.sync_api import sync_playwright; p = sync_playwright().start(); print(p.chromium.executable_path); p.stop()')"
           node extension/tests/chromium-smoke.js
