@@ -64,7 +64,6 @@ def test_static_acquisition_preserves_requested_and_final_representation_metadat
     assert page.status_code == 200
     assert page.media_type == "text/html"
     assert page.charset == "iso8859-1"
-    assert page.is_remote is True
     assert request.call_args.kwargs["headers"] == {"User-Agent": "fixture"}
 
 
@@ -199,7 +198,9 @@ def test_page_converter_is_pure_and_returns_selected_html_and_metadata():
         charset="utf-8",
     )
 
-    document = PageConverter().convert(page, include_metadata=True)
+    converter = PageConverter()
+    prepared = converter.prepare(page)
+    document = converter.render(prepared, include_metadata=True)
 
     assert document.page is page
     assert "# Page" in document.markdown

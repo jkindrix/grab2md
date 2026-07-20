@@ -3,8 +3,6 @@
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from email.utils import parsedate_to_datetime
 from typing import Dict, Optional
 
 import requests
@@ -39,24 +37,6 @@ class FetchResult:
             and 200 <= self.status_code < 400
             and (self.content is not None or self.body is not None)
         )
-
-    @property
-    def retry_after(self) -> Optional[int]:
-        """Return Retry-After as seconds for the concurrency limiter."""
-        value = self.headers.get("Retry-After")
-        if not value:
-            return None
-        try:
-            return max(0, int(value))
-        except ValueError:
-            try:
-                retry_at = parsedate_to_datetime(value)
-                if retry_at.tzinfo is None:
-                    retry_at = retry_at.replace(tzinfo=timezone.utc)
-                now = datetime.now(retry_at.tzinfo)
-                return max(0, int((retry_at - now).total_seconds()))
-            except (TypeError, ValueError, OverflowError):
-                return None
 
 
 def fetch_html(

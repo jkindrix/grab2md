@@ -80,11 +80,6 @@ class ArtifactManifest:
             raise ValueError(f"URL identity already maps to {existing.output_path}")
         self._aliases[identity] = record
 
-    def requested_mapping(self) -> dict[str, str]:
-        return {
-            record.requested_url: str(record.output_path) for record in self._records
-        }
-
     @classmethod
     def from_mapping(cls, mapping) -> "ArtifactManifest":
         manifest = cls()

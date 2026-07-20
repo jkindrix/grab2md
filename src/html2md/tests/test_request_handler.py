@@ -125,18 +125,6 @@ def test_client_error_is_not_retried():
     session.request.assert_called_once()
 
 
-def test_retry_after_is_exposed_to_domain_policy():
-    result = FetchResult(
-        requested_url="https://example.com",
-        final_url="https://example.com",
-        status_code=429,
-        headers={"Retry-After": "7"},
-        error="HTTP 429",
-    )
-
-    assert result.retry_after == 7
-
-
 def test_connection_failure_returns_structured_error_without_final_sleep():
     session = Mock()
     session.request.side_effect = requests.ConnectionError("offline")
@@ -170,7 +158,7 @@ def test_local_server_redirect_reports_final_url_and_success():
     assert ContractHandler.counts == {"/redirect": 1, "/ok": 1}
 
 
-def test_local_server_429_preserves_retry_after_without_hidden_retry():
+def test_local_server_429_preserves_header_without_hidden_retry():
     server, base_url = start_contract_server()
     try:
         result = fetch_html(
@@ -184,7 +172,7 @@ def test_local_server_429_preserves_retry_after_without_hidden_retry():
         server.server_close()
 
     assert result.status_code == 429
-    assert result.retry_after == 7
+    assert result.headers["Retry-After"] == "7"
     assert ContractHandler.counts["/limited"] == 1
 
 

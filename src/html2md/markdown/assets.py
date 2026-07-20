@@ -10,6 +10,11 @@ from urllib.parse import urljoin
 from bs4 import BeautifulSoup, Tag
 
 from html2md.network.image_downloader import ImageDownloader
+from html2md.utils.html_references import (
+    SrcsetCandidate,
+    parse_srcset,
+    serialize_srcset,
+)
 
 STYLE_URL = re.compile(
     r"(?P<prefix>background-image\s*:\s*url\(\s*['\"]?)"
@@ -52,10 +57,11 @@ class AssetPipeline:
                     urls.append(urljoin(base_url, value.strip()))
             srcset = tag.get("srcset")
             if isinstance(srcset, str):
-                for candidate in srcset.split(","):
-                    url = candidate.strip().split(maxsplit=1)[0]
-                    if url:
-                        urls.append(urljoin(base_url, url))
+                urls.extend(
+                    urljoin(base_url, candidate.url)
+                    for candidate in parse_srcset(srcset)
+                    if not candidate.url.casefold().startswith("data:")
+                )
         for tag in soup.find_all(style=True):
             if not isinstance(tag, Tag):
                 continue
@@ -79,16 +85,17 @@ class AssetPipeline:
                     tag["src"] = replacement
             srcset = tag.get("srcset")
             if isinstance(srcset, str):
-                rewritten = []
-                for candidate in srcset.split(","):
-                    parts = candidate.strip().split(maxsplit=1)
-                    if not parts:
-                        continue
-                    replacement = mapping.get(urljoin(base_url, parts[0]), parts[0])
-                    rewritten.append(
-                        f"{replacement} {parts[1]}" if len(parts) == 2 else replacement
-                    )
-                tag["srcset"] = ", ".join(rewritten)
+                tag["srcset"] = serialize_srcset(
+                    [
+                        SrcsetCandidate(
+                            mapping.get(
+                                urljoin(base_url, candidate.url), candidate.url
+                            ),
+                            candidate.descriptor,
+                        )
+                        for candidate in parse_srcset(srcset)
+                    ]
+                )
         for tag in soup.find_all(style=True):
             if not isinstance(tag, Tag):
                 continue

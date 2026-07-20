@@ -5,6 +5,8 @@ from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup, Tag
 
+from html2md.utils.html_references import resolve_document_base
+
 from html2md.markdown.markdown_links import scan_inline_links
 
 # Setup logger
@@ -103,10 +105,7 @@ def extract_links_from_html(html_content, base_url):
         list: List of absolute URLs found in the HTML
     """
     soup = BeautifulSoup(html_content, "html.parser")
-    document_base = base_url
-    base = soup.find("base", href=True)
-    if isinstance(base, Tag) and isinstance(base.get("href"), str):
-        document_base = urljoin(base_url, str(base.get("href")))
+    document_base = resolve_document_base(soup, base_url)
 
     # Convert relative links to absolute URLs and filter out non-HTTP(S) links
     absolute_urls = []

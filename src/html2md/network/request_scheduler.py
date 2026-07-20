@@ -5,12 +5,25 @@ from __future__ import annotations
 import random
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Callable
 from urllib.parse import urlsplit
 
 from html2md.network.rate_limiter import GlobalRateLimiter, RateLimitConfig
+
+
+def _parse_retry_after(value: str | None, *, now: float) -> int | None:
+    """Return Retry-After seconds for either delta-seconds or an HTTP date."""
+    if not value:
+        return None
+    try:
+        return max(0, int(value))
+    except ValueError:
+        try:
+            retry_at = parsedate_to_datetime(value)
+            return max(0, int(retry_at.timestamp() - now))
+        except (TypeError, ValueError, OverflowError):
+            return None
 
 
 @dataclass(frozen=True)
@@ -103,20 +116,9 @@ class SequentialRequestScheduler:
         response_time: float | None = None,
     ) -> None:
         """Record an HTTP response, including a usable Retry-After value."""
-        retry_after = None
-        value = response.headers.get("Retry-After")
-        if value:
-            try:
-                retry_after = max(0, int(value))
-            except ValueError:
-                try:
-                    retry_at = parsedate_to_datetime(value)
-                    if retry_at.tzinfo is None:
-                        retry_at = retry_at.replace(tzinfo=timezone.utc)
-                    now = datetime.now(retry_at.tzinfo)
-                    retry_after = max(0, int((retry_at - now).total_seconds()))
-                except (TypeError, ValueError, OverflowError):
-                    pass
+        retry_after = _parse_retry_after(
+            response.headers.get("Retry-After"), now=self.clock()
+        )
         self.after_request(
             request,
             success=response.status_code < 400,

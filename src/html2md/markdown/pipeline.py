@@ -74,10 +74,6 @@ class AcquiredPage:
     source_path: Path | None = None
     rendered: bool = False
 
-    @property
-    def is_remote(self) -> bool:
-        return self.source_path is None
-
 
 @dataclass(frozen=True)
 class ConvertedDocument:
@@ -358,17 +354,6 @@ class PageConverter:
         return ConvertedDocument(
             prepared.page, markdown, prepared.selected_html, prepared.metadata
         )
-
-    def convert(
-        self,
-        page: AcquiredPage,
-        *,
-        content_mode: ContentMode = ContentMode.FULL,
-        selector: str | None = None,
-        include_metadata: bool = False,
-    ) -> ConvertedDocument:
-        prepared = self.prepare(page, content_mode=content_mode, selector=selector)
-        return self.render(prepared, include_metadata=include_metadata)
 
 
 class PagePipeline:

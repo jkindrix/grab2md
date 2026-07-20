@@ -1,4 +1,6 @@
 from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
+from email.utils import format_datetime
 
 import requests
 
@@ -49,3 +51,20 @@ def test_retry_after_defers_the_next_request_to_the_same_origin():
     scheduler.before_request("https://example.com/two")
 
     sleep.assert_called_once_with(7.0)
+
+
+def test_http_date_retry_after_uses_the_scheduler_clock():
+    now = datetime(2026, 7, 19, tzinfo=timezone.utc).timestamp()
+    sleep = MagicMock()
+    scheduler = SequentialRequestScheduler(sleep=sleep, clock=lambda: now)
+    response = requests.Response()
+    response.status_code = 429
+    response.headers["Retry-After"] = format_datetime(
+        datetime(2026, 7, 19, 0, 0, 11, tzinfo=timezone.utc), usegmt=True
+    )
+
+    first = scheduler.before_request("https://example.com/one")
+    scheduler.after_response(first, response)
+    scheduler.before_request("https://example.com/two")
+
+    sleep.assert_called_once_with(11.0)

@@ -9,6 +9,13 @@ from urllib.parse import urljoin, urlsplit
 
 from bs4 import BeautifulSoup, Tag
 
+from html2md.utils.html_references import (
+    SrcsetCandidate,
+    parse_srcset,
+    resolve_document_base,
+    serialize_srcset,
+)
+
 
 @dataclass(frozen=True)
 class DocumentMetadata:
@@ -69,16 +76,6 @@ def _is_remote(url: str) -> bool:
     return urlsplit(url).scheme.casefold() in {"http", "https"}
 
 
-def _document_base(soup: BeautifulSoup, source_url: str) -> str:
-    base = soup.find("base", href=True)
-    if isinstance(base, Tag):
-        href = _attribute(base, "href")
-        candidate = urljoin(source_url, href) if href else source_url
-        if _is_remote(candidate):
-            return candidate
-    return source_url
-
-
 def _canonicalize(value: str, base_url: str) -> str:
     stripped = value.strip()
     if not stripped or stripped.startswith("#"):
@@ -88,16 +85,14 @@ def _canonicalize(value: str, base_url: str) -> str:
 
 
 def _canonicalize_srcset(value: str, base_url: str) -> str:
-    if value.lstrip().casefold().startswith("data:"):
-        return value
-    candidates = []
-    for candidate in value.split(","):
-        parts = candidate.strip().split(maxsplit=1)
-        if not parts:
-            continue
-        url = _canonicalize(parts[0], base_url)
-        candidates.append(f"{url} {parts[1]}" if len(parts) == 2 else url)
-    return ", ".join(candidates)
+    return serialize_srcset(
+        [
+            SrcsetCandidate(
+                _canonicalize(candidate.url, base_url), candidate.descriptor
+            )
+            for candidate in parse_srcset(value)
+        ]
+    )
 
 
 def prepare_document(
@@ -110,7 +105,7 @@ def prepare_document(
     """
     soup = BeautifulSoup(html_content, "html.parser")
     remote = _is_remote(source_url)
-    document_base = _document_base(soup, source_url) if remote else source_url
+    document_base = resolve_document_base(soup, source_url) if remote else source_url
 
     if remote:
         for tag_name, attribute in (
