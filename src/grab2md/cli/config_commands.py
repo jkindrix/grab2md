@@ -19,9 +19,18 @@ from grab2md.config.loader import (
     load_config,
     save_config,
 )
+from grab2md.config.path_access import (
+    ConfigPathError,
+    delete_at_path,
+    get_at_path,
+    set_at_path,
+    split_config_path,
+)
 from grab2md.config.schema import (
     ConfigValidationError,
+    cli_option_rows,
     default_at_path,
+    parse_config_value,
     parse_cli_value,
 )
 
@@ -65,31 +74,13 @@ def set_config_value(
     """Set a configuration value at the specified path."""
     config = load_config()
 
-    # Split the path into components
-    components = path.split(".")
-
-    # Navigate to the destination
-    current = config
-    for i, component in enumerate(components[:-1]):
-        if component not in current:
-            # Create missing dictionaries along the path
-            current[component] = {}
-        elif not isinstance(current[component], dict):
-            console.print(
-                f"[bold red]Error:[/bold red] '{'.'.join(components[:i+1])}' is not a dictionary"
-            )
-            return
-        current = current[component]
-
-    # Set the value (convert to appropriate type if possible)
-    last_component = components[-1]
     try:
-        # Try to parse as JSON
-        parsed_value = json.loads(value)
-        current[last_component] = parsed_value
-    except json.JSONDecodeError:
-        # If not valid JSON, use as string
-        current[last_component] = value
+        components = split_config_path(path)
+        parsed_value = parse_config_value(DEFAULT_CONFIG, components, value)
+        set_at_path(config, components, parsed_value)
+    except (ConfigPathError, ConfigValidationError) as error:
+        console.print(f"[bold red]Error:[/bold red] {error}")
+        raise typer.Exit(1)
 
     # Save the updated config
     try:
@@ -110,23 +101,11 @@ def get_config_value(
     """Get a configuration value at the specified path."""
     config = load_config()
 
-    # Split the path into components
-    components = path.split(".")
-
-    # Navigate to the destination
-    current = config
-    for i, component in enumerate(components):
-        if component not in current:
-            console.print(
-                f"[bold red]Error:[/bold red] Path '{path}' not found in configuration"
-            )
-            return
-        elif i < len(components) - 1 and not isinstance(current[component], dict):
-            console.print(
-                f"[bold red]Error:[/bold red] '{'.'.join(components[:i+1])}' is not a dictionary"
-            )
-            return
-        current = current[component]
+    try:
+        current = get_at_path(config, split_config_path(path))
+    except ConfigPathError as error:
+        console.print(f"[bold red]Error:[/bold red] {error}")
+        return
 
     # Display the value
     json_str = json.dumps(current, indent=2)
@@ -145,35 +124,15 @@ def delete_config_value(
     """Delete a configuration value at the specified path."""
     config = load_config()
 
-    # Split the path into components
-    components = path.split(".")
-
-    # Navigate to the parent
-    current = config
-    for i, component in enumerate(components[:-1]):
-        if component not in current:
-            console.print(
-                f"[bold red]Error:[/bold red] Path '{path}' not found in configuration"
-            )
-            return
-        elif not isinstance(current[component], dict):
-            console.print(
-                f"[bold red]Error:[/bold red] '{'.'.join(components[:i+1])}' is not a dictionary"
-            )
-            return
-        current = current[component]
-
-    # Delete the value
-    last_component = components[-1]
-    if last_component not in current:
-        console.print(
-            f"[bold red]Error:[/bold red] Path '{path}' not found in configuration"
-        )
+    try:
+        components = split_config_path(path)
+        deleted_value = get_at_path(config, components)
+    except ConfigPathError as error:
+        console.print(f"[bold red]Error:[/bold red] {error}")
         return
 
     if Confirm.ask(f"Are you sure you want to delete '{path}'?"):
-        deleted_value = current[last_component]
-        del current[last_component]
+        delete_at_path(config, components)
 
         # Save the updated config
         save_config(config)
@@ -318,59 +277,7 @@ def show_config_options():
     console.print("\n[bold yellow]CLI Defaults[/bold yellow]")
     console.print("Configure default values for command-line options\n")
 
-    cli_options = {
-        "convert": {
-            "browser_cookies": ("bool", "Use cookies from browser automatically"),
-            "no_cookies": ("bool", "Disable cookie loading by default"),
-            "browser": (
-                "str",
-                "Default browser for cookie extraction (chrome/firefox)",
-            ),
-            "content_mode": ("str", "Content mode (full/main/selector)"),
-            "selector": ("str", "CSS selector for selector content mode"),
-            "download_images": ("bool", "Download images from pages"),
-            "images_dir": ("str", "Directory name for downloaded images"),
-            "metadata": ("bool", "Prepend YAML document metadata"),
-            "enhanced_headers": ("bool", "Use an identified crawler user agent"),
-            "user_agent_contact": ("str", "Crawler contact email or URL"),
-            "render_js": ("bool", "Render JavaScript with optional Chromium"),
-            "fancy": ("bool", "Enable fancy output with progress bars"),
-            "local": ("bool", "Treat sources as local files by default"),
-        },
-        "batch": {
-            "hierarchical": (
-                "bool",
-                "Create hierarchical domain folders (com/example/www)",
-            ),
-            "flatten": ("bool", "Output files directly to domain directories"),
-            "flatten_all": ("bool", "Output all files to single directory"),
-            "content_mode": ("str", "Content mode (full/main/selector)"),
-            "selector": ("str", "CSS selector for selector content mode"),
-            "metadata": ("bool", "Prepend YAML document metadata"),
-            "visualize": ("bool", "Show visual directory structure"),
-            "quiet": ("bool", "Reduce output verbosity"),
-        },
-        "crawl": {
-            "hierarchical": ("bool", "Create hierarchical domain folders"),
-            "flatten": ("bool", "Output files directly to domain directories"),
-            "follow": (
-                "str",
-                "Link following strategy (domain-only/host-only/subdomain/regex)",
-            ),
-            "max_depth": ("int", "Maximum crawl depth"),
-            "max_pages": ("int", "Maximum pages to crawl"),
-            "delay": ("float", "Delay between requests in seconds (with ±30% jitter)"),
-            "respect_robots": ("bool", "Respect robots.txt rules and crawl-delay"),
-            "rate_limit": ("int", "Maximum requests per minute with circuit breaker"),
-            "content_mode": ("str", "Content mode (full/main/selector)"),
-            "selector": ("str", "CSS selector for selector content mode"),
-            "metadata": ("bool", "Prepend YAML document metadata"),
-            "visualize": ("bool", "Show visual directory structure"),
-            "quiet": ("bool", "Reduce output verbosity"),
-        },
-    }
-
-    for command, options in cli_options.items():
+    for command, options in cli_option_rows(DEFAULT_CONFIG).items():
         table = Table(
             title=f"{command.capitalize()} Command Options", title_style="bold blue"
         )
@@ -378,7 +285,7 @@ def show_config_options():
         table.add_column("Type", style="green")
         table.add_column("Description", style="white")
 
-        for option, (opt_type, description) in options.items():
+        for option, opt_type, description in options:
             table.add_row(option, opt_type, description)
 
         console.print(table)

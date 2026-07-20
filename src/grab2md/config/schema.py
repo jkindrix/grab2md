@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 from copy import deepcopy
 from typing import Any, Mapping, Sequence
@@ -76,6 +77,36 @@ ENUM_VALUES: dict[ConfigPath, frozenset[Any]] = {
     ),
     ("cli_defaults", "batch", "content_mode"): frozenset({"full", "main", "selector"}),
     ("cli_defaults", "crawl", "content_mode"): frozenset({"full", "main", "selector"}),
+}
+
+CLI_OPTION_DESCRIPTIONS = {
+    "allow_private_network": "Allow destinations on private or local networks",
+    "browser": "Browser used for cookie extraction (chrome/firefox)",
+    "browser_cookies": "Load cookies from the selected browser",
+    "content_mode": "Content mode (full/main/selector)",
+    "delay": "Delay between requests in seconds (with jitter)",
+    "download_images": "Download referenced page images",
+    "enhanced_headers": "Use an identified crawler user agent",
+    "fancy": "Enable interactive progress output",
+    "flatten": "Write files directly below each domain directory",
+    "flatten_all": "Write all files to one output directory",
+    "follow": "Link scope (domain-only/host-only/subdomain/regex)",
+    "hierarchical": "Create hierarchical domain directories",
+    "images_dir": "Directory name for downloaded images",
+    "local": "Treat sources as local files by default",
+    "max_depth": "Maximum crawl depth",
+    "max_pages": "Maximum pages to crawl",
+    "metadata": "Prepend YAML document metadata",
+    "no_cookies": "Disable cookie loading by default",
+    "polite": "Enable the preset polite crawl delay",
+    "quiet": "Reduce output verbosity",
+    "rate_limit": "Maximum requests per minute",
+    "render_js": "Render JavaScript with optional Chromium",
+    "respect_robots": "Honor robots.txt rules and crawl delay",
+    "selector": "CSS selector used in selector content mode",
+    "show_progress": "Show crawl progress",
+    "user_agent_contact": "Crawler contact email or URL",
+    "visualize": "Show the planned directory structure",
 }
 
 
@@ -261,3 +292,44 @@ def parse_cli_value(
         )
 
     return _validate_enum(path, _coerce_known_value(path, candidate, default))
+
+
+def parse_config_value(
+    defaults: Mapping[str, Any], path: ConfigPath, raw_value: str
+) -> Any:
+    """Parse known leaves through the schema and custom leaves as JSON/string."""
+    if path in VALUE_TYPES:
+        try:
+            decoded = json.loads(raw_value)
+        except json.JSONDecodeError:
+            decoded = raw_value
+        normalized = decoded if isinstance(decoded, str) else raw_value
+        return parse_cli_value(defaults, path, normalized)
+    try:
+        return json.loads(raw_value)
+    except json.JSONDecodeError:
+        return raw_value
+
+
+def cli_option_rows(
+    defaults: Mapping[str, Any],
+) -> dict[str, tuple[tuple[str, str, str], ...]]:
+    """Derive CLI-option help rows from canonical defaults and schema types."""
+    cli_defaults = defaults.get("cli_defaults")
+    if not isinstance(cli_defaults, Mapping):
+        raise ConfigValidationError(["cli_defaults expected mapping"])
+
+    rows: dict[str, tuple[tuple[str, str, str], ...]] = {}
+    for command, options in cli_defaults.items():
+        if not isinstance(options, Mapping):
+            raise ConfigValidationError([f"cli_defaults.{command} expected mapping"])
+        command_rows: list[tuple[str, str, str]] = []
+        for option, default in options.items():
+            path = ("cli_defaults", str(command), str(option))
+            option_type = _type_names(_expected_types(path, default))
+            description = CLI_OPTION_DESCRIPTIONS.get(
+                str(option), str(option).replace("_", " ").capitalize()
+            )
+            command_rows.append((str(option), option_type, description))
+        rows[str(command)] = tuple(command_rows)
+    return rows

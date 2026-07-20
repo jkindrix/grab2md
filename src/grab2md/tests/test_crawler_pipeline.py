@@ -12,6 +12,7 @@ from grab2md.markdown.crawl_engine import (
     CrawlFrontier,
     CrawlOptions,
     CrawlScope,
+    FrontierItem,
     SequentialCrawlEngine,
 )
 from grab2md.markdown.crawler import crawl_website
@@ -73,6 +74,19 @@ def test_crawl_decodes_charsetless_utf8_from_raw_response_bytes(tmp_path):
 
     output = Path(result.url_mapping["https://example.com"])
     assert output.read_text(encoding="utf-8").strip() == "# café ☕"
+
+
+def test_acquired_page_rejects_success_without_status_under_optimized_python():
+    result = FetchResult(
+        requested_url="https://example.com",
+        final_url="https://example.com",
+        content=b"<h1>Missing status</h1>",
+    )
+
+    with pytest.raises(RuntimeError, match="missing an HTTP status"):
+        SequentialCrawlEngine._acquired_page(
+            FrontierItem("https://example.com", 0), result
+        )
 
 
 def test_discovery_failure_does_not_persist_or_double_count_page(tmp_path):

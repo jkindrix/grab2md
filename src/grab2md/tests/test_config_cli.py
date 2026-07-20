@@ -62,6 +62,31 @@ def test_config_set_updates_nested_value():
     assert save.call_args.args[0]["browser"]["preferred"] == "firefox"
 
 
+def test_config_set_uses_schema_types_and_rejects_invalid_known_values():
+    save = Mock()
+    with (
+        patch(
+            "grab2md.cli.config_commands.load_config",
+            side_effect=[deepcopy(DEFAULT_CONFIG), deepcopy(DEFAULT_CONFIG)],
+        ),
+        patch("grab2md.cli.config_commands.save_config", save),
+    ):
+        typed = runner.invoke(
+            app,
+            ["config", "set", "headers.enhanced_user_agent", "false"],
+        )
+        invalid = runner.invoke(
+            app,
+            ["config", "set", "browser.preferred", "opera"],
+        )
+
+    assert typed.exit_code == 0
+    assert save.call_args.args[0]["headers"]["enhanced_user_agent"] is False
+    assert invalid.exit_code == 1
+    assert "must be one of" in invalid.output
+    assert save.call_count == 1
+
+
 def test_config_backup_reports_created_path(tmp_path):
     manager = Mock()
     manager.create_backup.return_value = tmp_path / "config.backup.json"
@@ -99,6 +124,15 @@ def test_config_path_and_options_render_without_loading_state():
     assert "Browser Configuration" in options_result.output
 
 
+def test_show_options_is_derived_from_every_cli_default():
+    result = runner.invoke(app, ["config", "show-options"])
+
+    assert result.exit_code == 0
+    for options in DEFAULT_CONFIG["cli_defaults"].values():
+        for option in options:
+            assert option in result.output
+
+
 def test_config_get_handles_values_and_invalid_paths():
     config = {"browser": {"preferred": "firefox"}, "scalar": 3}
     with patch("grab2md.cli.config_commands.load_config", return_value=config):
@@ -127,6 +161,20 @@ def test_config_set_handles_plain_strings_and_invalid_parent():
     assert plain.exit_code == 0
     assert save.call_args.args[0]["custom"]["label"] == "plain"
     assert "not a dictionary" in blocked.output
+
+
+@pytest.mark.parametrize("path", ["", ".browser", "browser.", "browser..preferred"])
+def test_config_commands_reject_empty_path_components(path):
+    save = Mock()
+    with (
+        patch("grab2md.cli.config_commands.load_config", return_value={}),
+        patch("grab2md.cli.config_commands.save_config", save),
+    ):
+        result = runner.invoke(app, ["config", "set", path, "value"])
+
+    assert result.exit_code == 1
+    assert "empty components" in result.output
+    save.assert_not_called()
 
 
 def test_config_delete_confirms_or_preserves_value():

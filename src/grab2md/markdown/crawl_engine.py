@@ -237,7 +237,8 @@ class SequentialCrawlEngine:
 
     @staticmethod
     def _acquired_page(item: FrontierItem, result: FetchResult) -> AcquiredPage:
-        assert result.status_code is not None
+        if result.status_code is None:
+            raise RuntimeError("Successful fetch result is missing an HTTP status")
         content = result.content
         if content is None:
             content = (result.body or "").encode("utf-8")

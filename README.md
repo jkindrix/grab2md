@@ -31,7 +31,7 @@ No PyPI release has been declared. Install from source during stabilization:
 ```bash
 git clone https://github.com/jkindrix/grab2md.git
 cd grab2md
-poetry install --with dev --sync
+poetry sync --with dev
 poetry run grab2md --help
 ```
 
@@ -176,8 +176,10 @@ signal behavior. Deferred URLs remain queued instead of being silently lost.
 
 ## Configuration and state
 
-Configuration is stored beneath the user's platform-appropriate `.grab2md`
-directory. Writes are validated, atomic, backed up, and recoverable. Run:
+Configuration is stored in the `grab2md` directory beneath the platform config
+root (`$XDG_CONFIG_HOME` or `~/.config` on Linux, `Application Support` on
+macOS, and `%APPDATA%` on Windows). Writes are validated, atomic, backed up,
+and recoverable. `GRAB2MD_CONFIG_PATH` overrides the complete file path. Run:
 
 ```bash
 grab2md config show
@@ -295,7 +297,7 @@ language fields. Local references remain relative. See
 Run the canonical local gates from a clean checkout:
 
 ```bash
-poetry install --with dev --sync
+poetry sync --with dev
 poetry check
 poetry run pre-commit run --all-files
 poetry run pre-commit run --all-files --hook-stage pre-push
