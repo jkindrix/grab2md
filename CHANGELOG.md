@@ -51,6 +51,8 @@ All notable changes are documented here. This project follows
   resources, and checkpointed discovered links with the page success transition.
 - Preserved caller-owned directory permissions during state export and closed
   HTTP sessions when browser-cookie extraction fails.
+- Prevented redirected Windows CLI output from crashing on decorative Unicode,
+  and converted local `file:` image URLs with the host platform's path rules.
 - Switched popup extraction to the documented `chrome.scripting` `func` key,
   escaped authored Markdown punctuation, and made table conversion unconditional
   instead of exposing an inert setting.

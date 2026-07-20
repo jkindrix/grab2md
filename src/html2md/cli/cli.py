@@ -759,6 +759,14 @@ def detect_color_support() -> int:
 
 def entry_point() -> None:
     """Entry point for the CLI."""
+    # Redirected Windows streams may use a legacy code page that cannot encode
+    # Rich's decorative Unicode. Preserve command execution and replace only
+    # unsupported presentation glyphs instead of crashing before work begins.
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if callable(reconfigure):
+            reconfigure(errors="replace")
+
     # Configure color detection
     color_system: Literal["auto", "standard", "256", "truecolor", "windows"] | None = (
         "auto"

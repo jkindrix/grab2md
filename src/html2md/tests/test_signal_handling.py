@@ -41,6 +41,7 @@ def test_signal_handler_restores_and_delegates_to_prior_handler(tmp_path):
 
 
 @pytest.mark.parametrize("signum", [signal.SIGINT, signal.SIGTERM])
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process signal contract")
 def test_signal_saves_one_valid_resumable_checkpoint_and_terminates(tmp_path, signum):
     state_dir = tmp_path / "states"
     output_dir = tmp_path / "output"
@@ -121,6 +122,7 @@ class BlockingHandler(BaseHTTPRequestHandler):
         pass
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX process signal contract")
 def test_cli_ctrl_c_checkpoints_in_flight_url(tmp_path):
     BlockingHandler.entered.clear()
     BlockingHandler.release.clear()

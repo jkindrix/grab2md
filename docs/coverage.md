@@ -8,8 +8,8 @@ poetry run pytest src/html2md/tests tests/config \
   --cov=html2md --cov-report=term-missing:skip-covered
 ```
 
-On 2026-07-19, Python 3.11.2 measured **4,784 production statements, 602
-missed, and 87.42% total coverage** (`476 passed, 4 skipped`) on the remediation
+On 2026-07-19, Python 3.11.2 measured **4,789 production statements, 602
+missed, and 87.43% total coverage** (`476 passed, 4 skipped`) on the remediation
 working tree based on `1140c269`. The enforced floor is 85%, preserving an
 interpreter-dependent buffer without allowing coverage to fall far below the
 earlier stabilization baseline. The floor must not be lowered merely to make a
@@ -25,7 +25,7 @@ The largest gaps are concentrated in:
 
 | Module | Statements | Missed | Coverage | Tracked work |
 |---|---:|---:|---:|---|
-| `cli/cli.py` | 201 | 64 | 68% | Keep callbacks limited to option translation, rendering, and exit status |
+| `cli/cli.py` | 205 | 64 | 69% | Keep callbacks limited to option translation, rendering, and exit status |
 | `cli/command_runtime.py` | 154 | 4 | 97% | Preserve direct presentation-neutral command tests |
 | `cli/conversion_presenter.py` | 53 | 10 | 81% | Preserve success/failure/output presentation fixtures |
 | `cli/config_commands.py` | 238 | 37 | 84% | Add remaining interactive/error fixtures |

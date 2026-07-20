@@ -88,7 +88,12 @@ def cli_server():
         thread.join(timeout=5)
 
 
-def run_cli(tmp_path: Path, *arguments: str, timeout: int = 30):
+def run_cli(
+    tmp_path: Path,
+    *arguments: str,
+    timeout: int = 30,
+    output_encoding: str | None = None,
+):
     home = tmp_path / "home"
     config = home / ".config" / "html2md" / "config.json"
     env = os.environ.copy()
@@ -111,6 +116,7 @@ def run_cli(tmp_path: Path, *arguments: str, timeout: int = 30):
         cwd=tmp_path,
         env=env,
         text=True,
+        encoding=output_encoding,
         capture_output=True,
         timeout=timeout,
         check=False,
@@ -309,10 +315,11 @@ def test_url_http_failures_exit_nonzero_without_output(tmp_path, cli_server, pat
     assert "Unable to retrieve content" in result.stderr
 
 
-def test_batch_subprocess_fetches_and_writes_url(tmp_path, cli_server):
+def test_batch_subprocess_fetches_and_writes_url(tmp_path, cli_server, monkeypatch):
     source = tmp_path / "links.md"
     output_dir = tmp_path / "batch-output"
     source.write_text(f"- [fixture]({cli_server}/ok)\n", encoding="utf-8")
+    monkeypatch.setenv("PYTHONIOENCODING", "cp1252")
 
     result = run_cli(
         tmp_path,
@@ -326,6 +333,7 @@ def test_batch_subprocess_fetches_and_writes_url(tmp_path, cli_server):
         "html",
         "--quiet",
         "--allow-private-network",
+        output_encoding="cp1252",
     )
 
     assert result.returncode == 0, result.stderr

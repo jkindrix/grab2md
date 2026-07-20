@@ -10,6 +10,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import unquote, urlparse
+from urllib.request import url2pathname
 
 import requests
 from requests import Session
@@ -231,7 +232,7 @@ class ImageDownloader:
         parsed = urlparse(url)
         if parsed.netloc not in {"", "localhost"}:
             raise UnsafeImageSource("Remote file URL authorities are not allowed")
-        source = Path(unquote(parsed.path)).resolve(strict=True)
+        source = Path(url2pathname(parsed.path)).resolve(strict=True)
         try:
             source.relative_to(self.local_root)
         except ValueError as error:

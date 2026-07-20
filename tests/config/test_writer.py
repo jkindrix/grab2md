@@ -100,6 +100,7 @@ class TestAtomicWriteJson:
         tmp_files = list(tmp_path.glob("*.tmp"))
         assert len(tmp_files) == 0
 
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX directory mode contract")
     def test_atomic_write_cleanup_on_permission_error(self, tmp_path):
         """Test temp file cleanup when permissions prevent final rename."""
         config_file = tmp_path / "config.json"
