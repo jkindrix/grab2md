@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup, Tag
 
 from grab2md.utils.html_references import resolve_document_base
 
-from grab2md.markdown.markdown_links import scan_inline_links
+from grab2md.utils.markdown_links import scan_inline_links
 from grab2md.utils.redaction import get_redacting_logger
 
 logger = get_redacting_logger(__name__)

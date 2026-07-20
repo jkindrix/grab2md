@@ -178,7 +178,7 @@ def ensure_config_exists():
             f"Configuration file not found: {CONFIG_FILE}. Creating with defaults."
         )
         # Use atomic write to ensure even initial creation is safe
-        from grab2md.config.writer import atomic_write_json
+        from grab2md.utils.atomic_writer import atomic_write_json
 
         atomic_write_json(
             CONFIG_FILE, DEFAULT_CONFIG, private=True, private_parent=True
@@ -229,7 +229,7 @@ def save_config(config_data: Dict[str, Any]) -> None:
 
         # Atomic write using our safe writer with disk-full error handling
         try:
-            from grab2md.config.writer import atomic_write_json
+            from grab2md.utils.atomic_writer import atomic_write_json
 
             atomic_write_json(
                 CONFIG_FILE,

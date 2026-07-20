@@ -349,7 +349,7 @@ class ConfigRecoveryHandler:
             self.backup_manager.create_backup(reason="pre-reset")
 
             # Write defaults atomically
-            from grab2md.config.writer import atomic_write_json
+            from grab2md.utils.atomic_writer import atomic_write_json
 
             atomic_write_json(
                 self.config_file,

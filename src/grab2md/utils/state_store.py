@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from grab2md.config.writer import atomic_write_json
+from grab2md.utils.atomic_writer import atomic_write_json
 from grab2md.utils.redaction import get_redacting_logger
 from grab2md.utils.state_schema import CrawlState
 

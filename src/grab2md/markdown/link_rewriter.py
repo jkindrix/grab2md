@@ -8,7 +8,7 @@ from typing import Callable, Mapping, Optional
 from urllib.parse import urlsplit, urlunsplit
 
 from grab2md.markdown.archive import ArtifactManifest, ArtifactStore
-from grab2md.markdown.markdown_links import scan_inline_links
+from grab2md.utils.markdown_links import scan_inline_links
 
 OutputPath = str | os.PathLike
 ProgressCallback = Callable[[str, Optional[str], Optional[str]], None]
