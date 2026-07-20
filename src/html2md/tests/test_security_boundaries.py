@@ -10,7 +10,7 @@ import pytest
 
 from html2md.config.writer import atomic_write_json
 from html2md.cookies import session_manager
-from html2md.markdown.batch_processor import create_directory_structure
+from html2md.markdown.archive import OutputPlanner
 from html2md.markdown.crawler import crawl_website
 from html2md.network.request_handler import FetchResult
 from html2md.utils.redaction import (
@@ -33,7 +33,7 @@ from html2md.utils.state_manager import StateManager
 def test_url_directories_remain_inside_output_root(tmp_path, url):
     output = tmp_path / "output"
 
-    directory = Path(create_directory_structure(output, url))
+    directory = OutputPlanner(output).plan(url)
 
     directory.relative_to(output.resolve())
     assert not (tmp_path / "outside").exists()
@@ -47,7 +47,7 @@ def test_output_containment_rejects_existing_symlink_escape(tmp_path):
     (output / "example.com").symlink_to(outside, target_is_directory=True)
 
     with pytest.raises(ValueError, match="escapes configured root"):
-        create_directory_structure(output, "https://example.com/page")
+        OutputPlanner(output).plan("https://example.com/page")
 
 
 def test_crawler_traversal_url_cannot_write_outside_root(tmp_path):
@@ -205,12 +205,18 @@ def test_chrome_cookie_temp_storage_cleans_up_on_failure_and_interruption(
 @pytest.mark.skipif(os.name != "posix", reason="POSIX mode assertions")
 def test_private_config_and_state_use_owner_only_modes(tmp_path):
     config_file = tmp_path / "config" / "config.json"
-    atomic_write_json(config_file, {"headers": {"custom_headers": {}}}, private=True)
+    atomic_write_json(
+        config_file,
+        {"headers": {"custom_headers": {}}},
+        private=True,
+        private_parent=True,
+    )
     os.chmod(config_file, 0o644)
     atomic_write_json(
         config_file,
         {"headers": {"custom_headers": {"X-Test": "updated"}}},
         private=True,
+        private_parent=True,
     )
     assert config_file.stat().st_mode & 0o777 == 0o600
     assert config_file.parent.stat().st_mode & 0o777 == 0o700
@@ -222,3 +228,27 @@ def test_private_config_and_state_use_owner_only_modes(tmp_path):
     state_file = manager.state_dir / f"{state.crawl_id}.json"
     assert state_file.stat().st_mode & 0o777 == 0o600
     assert state_file.parent.stat().st_mode & 0o777 == 0o700
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX mode assertions")
+def test_state_export_preserves_caller_parent_permissions(tmp_path):
+    manager = StateManager(state_dir=tmp_path / "states")
+    state = manager.create_new_state("https://example.com", tmp_path / "out", {})
+    shared_parent = tmp_path / "shared"
+    shared_parent.mkdir()
+    shared_parent.chmod(0o750)
+
+    export_file = shared_parent / "crawl.json"
+    manager.export_state(state.crawl_id, export_file)
+
+    assert shared_parent.stat().st_mode & 0o777 == 0o750
+    assert export_file.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX durability contract")
+def test_atomic_writer_fsyncs_file_and_parent_directory(tmp_path):
+    target = tmp_path / "state.json"
+    with patch("html2md.config.writer.os.fsync", wraps=os.fsync) as fsync:
+        atomic_write_json(target, {"value": 1}, private=True)
+
+    assert fsync.call_count == 2

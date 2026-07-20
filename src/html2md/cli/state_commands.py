@@ -11,7 +11,6 @@ from rich.table import Table
 from html2md.markdown.crawler import crawl_website
 from html2md.utils.state_manager import StateManager
 
-
 console = Console()
 state_app = typer.Typer(
     help="Manage crawl state and resume interrupted crawls.",

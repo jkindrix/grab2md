@@ -18,6 +18,7 @@ def atomic_write_json(
     data: Dict[str, Any],
     indent: int = 4,
     private: bool = False,
+    private_parent: bool = False,
 ) -> None:
     """
     Atomically write JSON data to a file using temp-rename pattern.
@@ -38,6 +39,9 @@ def atomic_write_json(
         file_path: Target file path where JSON will be written
         data: Dictionary to serialize as JSON
         indent: JSON indentation level for human readability (default: 4)
+        private: Restrict the target file to its owner on POSIX.
+        private_parent: Also manage and restrict the parent directory. Use only
+            for application-owned directories, never caller-selected parents.
 
     Raises:
         OSError: If write operation fails (permissions, disk full, etc.)
@@ -53,9 +57,9 @@ def atomic_write_json(
 
     # Ensure parent directory exists
     file_path.parent.mkdir(
-        parents=True, exist_ok=True, mode=0o700 if private else 0o777
+        parents=True, exist_ok=True, mode=0o700 if private_parent else 0o777
     )
-    if private and os.name == "posix":
+    if private_parent and os.name == "posix":
         os.chmod(file_path.parent, 0o700)
 
     # Create temp file in same directory (ensures same filesystem for atomic rename)
@@ -70,13 +74,20 @@ def atomic_write_json(
         with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=indent, ensure_ascii=False)
             f.flush()
-            # Force write to disk (prevent data loss on crash/power failure)
+            # Persist file contents before exposing the replacement name.
             os.fsync(f.fileno())
 
         # Atomic rename (POSIX guarantees atomicity, Windows best-effort on Python 3.3+)
         os.replace(temp_path, file_path)
         if private and os.name == "posix":
             os.chmod(file_path, 0o600)
+        if os.name == "posix":
+            directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            directory_fd = os.open(file_path.parent, directory_flags)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
 
     except BaseException:
         # Clean up temp file on any failure

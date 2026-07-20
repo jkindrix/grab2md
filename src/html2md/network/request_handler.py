@@ -15,7 +15,6 @@ from html2md.network.safe_http import (
     guarded_request,
 )
 
-
 logger = logging.getLogger("html2md")
 
 
@@ -28,6 +27,7 @@ class FetchResult:
     status_code: Optional[int] = None
     headers: Dict[str, str] = field(default_factory=dict)
     body: Optional[str] = None
+    content: Optional[bytes] = None
     error: Optional[str] = None
     attempts: int = 1
     elapsed: float = 0.0
@@ -37,7 +37,7 @@ class FetchResult:
         return (
             self.status_code is not None
             and 200 <= self.status_code < 400
-            and self.body is not None
+            and (self.content is not None or self.body is not None)
         )
 
     @property
@@ -108,7 +108,7 @@ def fetch_html(
                 final_url=response.url,
                 status_code=response.status_code,
                 headers=dict(response.headers),
-                body=response.text,
+                content=response.content,
                 error=(
                     None
                     if response.status_code < 400

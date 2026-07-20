@@ -6,14 +6,23 @@ import ipaddress
 import re
 import socket
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, MutableMapping, Optional, cast
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    Iterator,
+    Mapping,
+    MutableMapping,
+    Optional,
+    cast,
+)
 from urllib.parse import urljoin, urlsplit
 
 import requests
 from requests import Response, Session
 from requests.adapters import HTTPAdapter
-
 
 DEFAULT_MAX_BODY_BYTES = 10 * 1024 * 1024
 DEFAULT_MAX_REDIRECTS = 5
@@ -28,6 +37,7 @@ SAFE_CROSS_ORIGIN_HEADERS = {
     "upgrade-insecure-requests",
     "user-agent",
 }
+NAT64_WELL_KNOWN_PREFIX = ipaddress.ip_network("64:ff9b::/96")
 
 
 class UnsafeNetworkTarget(requests.RequestException):
@@ -36,6 +46,37 @@ class UnsafeNetworkTarget(requests.RequestException):
 
 class ResponseTooLarge(requests.RequestException):
     """Raised when a remote response exceeds its configured byte limit."""
+
+
+def _require_pinning_hooks() -> None:
+    """Fail closed when Requests lacks the adapter API used for DNS pinning."""
+    required = (
+        "get_connection_with_tls_context",
+        "build_connection_pool_key_attributes",
+    )
+    missing = [
+        name for name in required if not callable(getattr(HTTPAdapter, name, None))
+    ]
+    if missing:
+        raise RuntimeError(
+            "Installed Requests is incompatible with html2md DNS pinning; "
+            f"missing HTTPAdapter hook(s): {', '.join(missing)}"
+        )
+
+
+def _embedded_ipv4(
+    address: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> ipaddress.IPv4Address | None:
+    """Return a standardized embedded IPv4 address when one is identifiable."""
+    if not isinstance(address, ipaddress.IPv6Address):
+        return None
+    if address.ipv4_mapped is not None:
+        return address.ipv4_mapped
+    if address.sixtofour is not None:
+        return address.sixtofour
+    if address in NAT64_WELL_KNOWN_PREFIX:
+        return ipaddress.IPv4Address(address.packed[-4:])
+    return None
 
 
 class _PinnedAddressAdapter(HTTPAdapter):
@@ -142,7 +183,11 @@ class DestinationPolicy:
                 raise UnsafeNetworkTarget(
                     f"Invalid resolved network address: {raw_address}"
                 ) from error
-            if not self.allow_private and not address.is_global:
+            embedded_ipv4 = _embedded_ipv4(address)
+            if not self.allow_private and (
+                not address.is_global
+                or (embedded_ipv4 is not None and not embedded_ipv4.is_global)
+            ):
                 raise UnsafeNetworkTarget(
                     f"Network host resolves to a non-public address: {raw_address}; "
                     "use --allow-private-network only for destinations you trust"
@@ -181,6 +226,7 @@ class PinnedHttpClient:
     """Issue requests only to addresses authorized by a destination policy."""
 
     def __init__(self, session: Session, policy: DestinationPolicy):
+        _require_pinning_hooks()
         self.source = session
         self.policy = policy
         self.session = _clone_direct_session(session)
@@ -289,6 +335,14 @@ class PinnedHttpClient:
             next_url = urljoin(current_url, location)
             # Validate before releasing the current hop so unsafe redirects fail closed.
             self.policy.addresses_for(next_url)
+            if (
+                urlsplit(current_url).scheme.casefold() == "https"
+                and urlsplit(next_url).scheme.casefold() == "http"
+            ):
+                response.close()
+                raise UnsafeNetworkTarget(
+                    "HTTPS redirect cannot downgrade to an unencrypted HTTP target"
+                )
             if redirect_validator is not None:
                 redirect_validator(current_url, next_url)
             cross_origin = DestinationPolicy._origin(
@@ -337,6 +391,40 @@ class PinnedHttpClient:
         raise requests.TooManyRedirects("Redirect limit exceeded")
 
 
+@contextmanager
+def guarded_stream(
+    session: Session,
+    method: str,
+    url: str,
+    *,
+    policy: Optional[DestinationPolicy] = None,
+    headers: Optional[Mapping[str, str]] = None,
+    data: Any = None,
+    timeout: float = 30,
+    max_redirects: int = DEFAULT_MAX_REDIRECTS,
+    redirect_validator: Optional[Callable[[str, str], None]] = None,
+    request_scheduler: Any = None,
+) -> Iterator[Response]:
+    """Yield a streaming response while retaining its guarded transport."""
+    active_policy = policy or DestinationPolicy()
+    with PinnedHttpClient(session, active_policy) as client:
+        response = client.request(
+            method,
+            url,
+            headers=headers,
+            data=data,
+            timeout=timeout,
+            stream=True,
+            max_redirects=max_redirects,
+            redirect_validator=redirect_validator,
+            request_scheduler=request_scheduler,
+        )
+        try:
+            yield response
+        finally:
+            response.close()
+
+
 def guarded_request(
     session: Session,
     method: str,
@@ -354,19 +442,18 @@ def guarded_request(
     """Return a fully buffered response obtained through the guarded transport."""
     if max_body_bytes <= 0:
         raise ValueError("max_body_bytes must be positive")
-    active_policy = policy or DestinationPolicy()
-    with PinnedHttpClient(session, active_policy) as client:
-        response = client.request(
-            method,
-            url,
-            headers=headers,
-            data=data,
-            timeout=timeout,
-            stream=True,
-            max_redirects=max_redirects,
-            redirect_validator=redirect_validator,
-            request_scheduler=request_scheduler,
-        )
+    with guarded_stream(
+        session,
+        method,
+        url,
+        policy=policy,
+        headers=headers,
+        data=data,
+        timeout=timeout,
+        max_redirects=max_redirects,
+        redirect_validator=redirect_validator,
+        request_scheduler=request_scheduler,
+    ) as response:
         try:
             declared_length = response.headers.get("Content-Length")
             if declared_length is not None:
@@ -392,5 +479,6 @@ def guarded_request(
             response._content = b"".join(chunks)
             setattr(response, "_content_consumed", True)
             return response
-        finally:
+        except BaseException:
             response.close()
+            raise

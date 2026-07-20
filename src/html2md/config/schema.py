@@ -6,7 +6,6 @@ import math
 from copy import deepcopy
 from typing import Any, Mapping, Sequence
 
-
 ConfigPath = tuple[str, ...]
 NoneType = type(None)
 

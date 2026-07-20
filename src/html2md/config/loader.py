@@ -180,7 +180,9 @@ def ensure_config_exists():
         # Use atomic write to ensure even initial creation is safe
         from html2md.config.writer import atomic_write_json
 
-        atomic_write_json(CONFIG_FILE, DEFAULT_CONFIG, private=True)
+        atomic_write_json(
+            CONFIG_FILE, DEFAULT_CONFIG, private=True, private_parent=True
+        )
         return True
     return False
 
@@ -229,7 +231,13 @@ def save_config(config_data: Dict[str, Any]) -> None:
         try:
             from html2md.config.writer import atomic_write_json
 
-            atomic_write_json(CONFIG_FILE, validated_config, indent=4, private=True)
+            atomic_write_json(
+                CONFIG_FILE,
+                validated_config,
+                indent=4,
+                private=True,
+                private_parent=True,
+            )
         except OSError as e:
             # Handle disk full error gracefully
             if e.errno == 28:  # errno.ENOSPC - No space left on device

@@ -47,7 +47,7 @@ def extract_urls_from_markdown(markdown_content):
     Returns:
         list: List of URLs found in the markdown.
     """
-    urls = []
+    urls: list[str] = []
 
     # Structurally scan inline Markdown links, including balanced parentheses.
     urls.extend(
@@ -222,46 +222,6 @@ def get_urls_from_file(file_path):
     except Exception as e:
         logger.error(f"Error reading file {file_path}: {str(e)}")
         return []
-
-
-def generate_safe_filename(url):
-    """
-    Generate a safe filename from a URL.
-
-    Args:
-        url (str): URL to convert to a safe filename.
-
-    Returns:
-        str: Safe filename based on the URL.
-    """
-    parsed = urlparse(url)
-
-    # Create a base for the filename from the netloc and path
-    base = parsed.netloc + parsed.path
-
-    # Include query parameters if present
-    if parsed.query:
-        base += "_" + parsed.query
-
-    # Include fragment if present
-    if parsed.fragment:
-        base += "_" + parsed.fragment
-
-    # Remove any special characters and replace with underscores
-    safe_name = re.sub(r"[^\w\-_.]", "_", base)
-
-    # Remove any leading or trailing underscores
-    safe_name = safe_name.strip("_")
-
-    # Ensure the filename is not too long
-    if len(safe_name) > 100:
-        safe_name = safe_name[:100]
-
-    # Add .md extension
-    if not safe_name.endswith(".md"):
-        safe_name += ".md"
-
-    return safe_name
 
 
 def is_url(source, force_local=False):

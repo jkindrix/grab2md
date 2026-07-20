@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
+from requests.adapters import HTTPAdapter
 
 from html2md.network.safe_http import (
     DestinationPolicy,
@@ -16,8 +17,8 @@ from html2md.network.safe_http import (
     UnsafeNetworkTarget,
     _PinnedAddressAdapter,
     guarded_request,
+    guarded_stream,
 )
-
 
 PUBLIC_DNS = [(2, 1, 6, "", ("93.184.216.34", 443))]
 
@@ -34,6 +35,28 @@ def test_default_policy_rejects_every_non_public_address(address):
     ):
         with pytest.raises(UnsafeNetworkTarget, match="non-public"):
             DestinationPolicy().addresses_for("https://target.example/path")
+
+
+def test_policy_rejects_nat64_encoding_of_non_public_ipv4():
+    records = [(10, 1, 6, "", ("64:ff9b::a9fe:a9fe", 443))]
+    with patch("html2md.network.safe_http.socket.getaddrinfo", return_value=records):
+        with pytest.raises(UnsafeNetworkTarget, match="non-public"):
+            DestinationPolicy().addresses_for("https://metadata.example/path")
+
+
+def test_policy_allows_nat64_encoding_of_public_ipv4():
+    records = [(10, 1, 6, "", ("64:ff9b::5db8:d822", 443))]
+    with patch("html2md.network.safe_http.socket.getaddrinfo", return_value=records):
+        assert DestinationPolicy().addresses_for("https://public.example/path") == (
+            "64:ff9b::5db8:d822",
+        )
+
+
+def test_transport_fails_closed_without_required_requests_adapter_hook(monkeypatch):
+    monkeypatch.setattr(HTTPAdapter, "get_connection_with_tls_context", None)
+
+    with pytest.raises(RuntimeError, match="incompatible.*DNS pinning"):
+        PinnedHttpClient(requests.Session(), DestinationPolicy())
 
 
 def test_private_destinations_require_explicit_authorization():
@@ -128,6 +151,22 @@ def test_redirect_callback_runs_before_the_second_request():
     validator.assert_called_once_with(
         "https://one.example/start", "https://two.example/final"
     )
+    client.session.request.assert_called_once()
+
+
+def test_https_redirect_cannot_downgrade_to_public_http():
+    redirect = requests.Response()
+    redirect.status_code = 302
+    redirect.url = "https://one.example/start"
+    redirect.headers["Location"] = "http://two.example/final"
+    redirect.raw = MagicMock()
+
+    with patch("html2md.network.safe_http.socket.getaddrinfo", return_value=PUBLIC_DNS):
+        with PinnedHttpClient(requests.Session(), DestinationPolicy()) as client:
+            client.session.request = MagicMock(return_value=redirect)
+            with pytest.raises(UnsafeNetworkTarget, match="cannot downgrade"):
+                client.request("GET", "https://one.example/start")
+
     client.session.request.assert_called_once()
 
 
@@ -244,6 +283,42 @@ def test_buffered_response_limit_covers_private_opt_in_traffic():
                 policy=DestinationPolicy(allow_private=True),
                 max_body_bytes=32,
             )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+@pytest.mark.parametrize("consumer", ["buffered", "streaming"])
+def test_buffered_and_streaming_consumers_share_destination_policy(consumer):
+    private = [(2, 1, 6, "", ("169.254.169.254", 80))]
+    with patch("socket.getaddrinfo", return_value=private):
+        with pytest.raises(UnsafeNetworkTarget, match="non-public"):
+            if consumer == "buffered":
+                guarded_request(
+                    requests.Session(), "GET", "http://metadata.example/latest"
+                )
+            else:
+                with guarded_stream(
+                    requests.Session(), "GET", "http://metadata.example/latest"
+                ):
+                    pytest.fail("unsafe stream unexpectedly opened")
+
+
+def test_streaming_consumer_closes_response_and_transport():
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _BodyHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/body"
+    try:
+        with guarded_stream(
+            requests.Session(),
+            "GET",
+            url,
+            policy=DestinationPolicy(allow_private=True),
+        ) as response:
+            assert response.content == _BodyHandler.body
+        assert response.raw.closed is True
     finally:
         server.shutdown()
         server.server_close()

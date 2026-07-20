@@ -67,9 +67,9 @@ class TestStateIntegration:
 
         # Verify crawl completed
         assert result.success is True
-        assert result.processed_count >= 1
+        assert result.processed_count == 1
         assert result.crawl_id is not None
-        assert len(result.url_mapping) >= 1
+        assert len(result.url_mapping) == 1
 
         # Verify state was saved
         state_file = state_dir / f"{result.crawl_id}.json"
@@ -83,7 +83,7 @@ class TestStateIntegration:
         assert state_data["start_url"] == "https://example.com"
         assert state_data["output_dir"] == str(output_dir)
         assert len(state_data["checkpoints"]) >= 1
-        assert state_data["progress"]["statistics"]["urls_processed"] >= 1
+        assert state_data["progress"]["statistics"]["urls_processed"] == 1
 
     @patch("html2md.markdown.crawler.fetch_html")
     def test_crawler_resume_functionality(
@@ -115,7 +115,7 @@ class TestStateIntegration:
 
         # Verify initial crawl
         assert initial_result.crawl_id is not None
-        assert initial_result.processed_count >= 1
+        assert initial_result.processed_count == 1
 
         # Resume through a new manager, as a new CLI process would.
         resuming_manager = StateManager(state_dir=state_dir)

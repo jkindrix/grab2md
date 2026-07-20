@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-import json
-import os
-import stat
 from pathlib import Path
 from typing import Any
 
-MAX_AUTH_FILE_BYTES = 256 * 1024
+from html2md.utils.private_json import load_private_json
+
 FORBIDDEN_REQUEST_HEADERS = {
     "connection",
     "content-length",
@@ -21,43 +19,9 @@ FORBIDDEN_REQUEST_HEADERS = {
 }
 
 
-def _load_private_json(path: Path) -> Any:
-    candidate = path.expanduser()
-    if candidate.is_symlink():
-        raise ValueError(f"Authentication input must be a regular file: {candidate}")
-    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
-    try:
-        descriptor = os.open(candidate, flags)
-        with os.fdopen(descriptor, "rb") as auth_file:
-            metadata = os.fstat(auth_file.fileno())
-            if not stat.S_ISREG(metadata.st_mode):
-                raise ValueError(
-                    f"Authentication input must be a regular file: {candidate}"
-                )
-            if metadata.st_size > MAX_AUTH_FILE_BYTES:
-                raise ValueError(
-                    f"Authentication input exceeds {MAX_AUTH_FILE_BYTES} bytes: "
-                    f"{candidate}"
-                )
-            if os.name == "posix" and metadata.st_mode & 0o077:
-                raise ValueError(
-                    f"Authentication input must be owner-only (chmod 600): {candidate}"
-                )
-            contents = auth_file.read(MAX_AUTH_FILE_BYTES + 1)
-        if len(contents) > MAX_AUTH_FILE_BYTES:
-            raise ValueError(
-                f"Authentication input exceeds {MAX_AUTH_FILE_BYTES} bytes: {candidate}"
-            )
-        return json.loads(contents.decode("utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as error:
-        raise ValueError(
-            f"Authentication input is not valid UTF-8 JSON: {candidate}"
-        ) from error
-
-
 def load_private_headers(path: Path) -> dict[str, str]:
     """Return caller-supplied request headers from an owner-only JSON object."""
-    payload = _load_private_json(path)
+    payload = load_private_json(path)
     if not isinstance(payload, dict) or not payload:
         raise ValueError("Header input must be a non-empty JSON object")
     headers: dict[str, str] = {}
@@ -80,7 +44,7 @@ def load_private_headers(path: Path) -> dict[str, str]:
 
 def load_storage_state(path: Path) -> dict[str, Any]:
     """Load private Playwright state once so the browser cannot reopen a replacement."""
-    payload = _load_private_json(path)
+    payload = load_private_json(path)
     if not isinstance(payload, dict):
         raise ValueError("Browser storage state must be a JSON object")
     cookies = payload.get("cookies", [])

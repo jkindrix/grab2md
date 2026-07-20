@@ -10,7 +10,6 @@ from typer.testing import CliRunner
 from html2md.cli.cli import app
 from html2md.config.loader import DEFAULT_CONFIG
 
-
 runner = CliRunner()
 
 

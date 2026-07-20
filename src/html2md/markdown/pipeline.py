@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import codecs
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
@@ -29,6 +31,14 @@ from html2md.utils.formatter import format_markdown
 logger = logging.getLogger("html2md")
 
 HTML_MEDIA_TYPES = frozenset({"text/html", "application/xhtml+xml"})
+_META_CHARSET = re.compile(
+    rb"<meta\b[^>]*\bcharset\s*=\s*[\"']?\s*([a-zA-Z0-9._:+-]+)",
+    re.IGNORECASE,
+)
+_CONTENT_CHARSET = re.compile(
+    rb"<meta\b[^>]*\bcontent\s*=\s*[\"'][^\"']*?charset\s*=\s*" rb"([a-zA-Z0-9._:+-]+)",
+    re.IGNORECASE,
+)
 
 
 class AcquisitionFailure(RuntimeError):
@@ -103,6 +113,92 @@ def _content_type(headers: Mapping[str, str]) -> tuple[str, str | None]:
     return media_type, charset
 
 
+def _canonical_encoding(label: str, *, source: str) -> str:
+    try:
+        return codecs.lookup(label).name
+    except LookupError as error:
+        raise AcquisitionFailure(
+            source, f"HTML declares an unknown charset: {label}"
+        ) from error
+
+
+def _html_encoding(content: bytes, declared: str | None, *, source: str) -> str:
+    """Choose deterministic HTML decoding with explicit declarations first."""
+    if declared:
+        return _canonical_encoding(declared, source=source)
+    for marker, encoding in (
+        (codecs.BOM_UTF32_BE, "utf-32"),
+        (codecs.BOM_UTF32_LE, "utf-32"),
+        (codecs.BOM_UTF8, "utf-8-sig"),
+        (codecs.BOM_UTF16_BE, "utf-16"),
+        (codecs.BOM_UTF16_LE, "utf-16"),
+    ):
+        if content.startswith(marker):
+            return encoding
+
+    prefix = content[:4096]
+    match = _META_CHARSET.search(prefix) or _CONTENT_CHARSET.search(prefix)
+    if match:
+        return _canonical_encoding(match.group(1).decode("ascii"), source=source)
+
+    try:
+        content.decode("utf-8", errors="strict")
+        return "utf-8"
+    except UnicodeDecodeError:
+        # Deterministic HTML-compatible legacy fallback. Other legacy
+        # encodings must be declared in HTTP or HTML metadata.
+        return "cp1252"
+
+
+def _decode_html(
+    content: bytes, declared: str | None, *, source: str
+) -> tuple[str, str]:
+    encoding = _html_encoding(content, declared, source=source)
+    try:
+        return content.decode(encoding, errors="strict"), encoding
+    except UnicodeDecodeError as error:
+        raise AcquisitionFailure(
+            source, f"HTML body is not valid {encoding}: {error}"
+        ) from error
+
+
+def acquired_http_page(
+    *,
+    requested_url: str,
+    final_url: str,
+    status_code: int,
+    headers: Mapping[str, str],
+    content: bytes,
+) -> AcquiredPage:
+    """Build one deterministically decoded HTML page from an HTTP response."""
+    response_headers = dict(headers)
+    media_type, declared_charset = _content_type(response_headers)
+    if media_type and media_type not in HTML_MEDIA_TYPES:
+        raise AcquisitionFailure(
+            requested_url,
+            f"Expected HTML from {requested_url}, received {media_type}",
+            status_code=status_code,
+        )
+    html, selected_charset = _decode_html(
+        content, declared_charset, source=requested_url
+    )
+    if not html.strip():
+        raise AcquisitionFailure(
+            requested_url,
+            f"Empty HTML response from {requested_url}",
+            status_code=status_code,
+        )
+    return AcquiredPage(
+        requested_url=requested_url,
+        final_url=final_url,
+        html=html,
+        status_code=status_code,
+        headers=response_headers,
+        media_type=media_type or "text/html",
+        charset=selected_charset,
+    )
+
+
 def acquire_http_page(
     url: str,
     *,
@@ -143,34 +239,17 @@ def acquire_http_page(
             status_code=status_code,
         ) from error
 
-    response_headers = dict(response.headers)
-    media_type, declared_charset = _content_type(response_headers)
-    if media_type and media_type not in HTML_MEDIA_TYPES:
-        raise AcquisitionFailure(
-            url,
-            f"Expected HTML from {url}, received {media_type}",
-            status_code=response.status_code,
-        )
-    if response.encoding is None:
-        response.encoding = declared_charset or "utf-8"
-    html = response.text
-    if not html.strip():
-        raise AcquisitionFailure(
-            url,
-            f"Empty HTML response from {url}",
-            status_code=response.status_code,
-        )
     response_url = getattr(response, "url", None)
     final_url = response_url if isinstance(response_url, str) and response_url else url
-    return AcquiredPage(
+    page = acquired_http_page(
         requested_url=url,
         final_url=final_url,
-        html=html,
         status_code=response.status_code,
-        headers=response_headers,
-        media_type=media_type or "text/html",
-        charset=response.encoding or declared_charset or "utf-8",
+        headers=response.headers,
+        content=response.content,
     )
+    response.encoding = page.charset
+    return page
 
 
 def acquire_rendered_page(

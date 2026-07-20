@@ -1,23 +1,21 @@
 import logging
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from urllib.parse import urlparse
+from typing import Callable, Iterable
 
 from html2md.cookies.session_manager import get_session
 from html2md.markdown.content_extractor import ContentMode, validate_content_request
 from html2md.markdown.archive import (
     ArtifactManifest,
-    ArtifactRecord,
     ArtifactStore,
     OutputPlanner,
     canonical_url_identity,
 )
+from html2md.markdown.archiving import ArchiveCoordinator
 from html2md.markdown.link_rewriter import rewrite_archived_files
 from html2md.markdown.pipeline import PagePipeline, acquire_http_page
 from html2md.network.header_manager import HeaderManager
-from html2md.utils.parser import get_urls_from_file
-from html2md.utils.path_safety import contained_path, safe_path_segment
+from html2md.utils.parser import extract_urls_from_markdown
 
 # Setup logger
 logger = logging.getLogger("html2md")
@@ -44,6 +42,7 @@ class BatchResult:
     url_mapping: dict[str, str] = field(default_factory=dict)
     error: str | None = None
     manifest: ArtifactManifest | None = None
+    input_errors: list[str] = field(default_factory=list)
 
     @property
     def processed_count(self) -> int:
@@ -55,66 +54,105 @@ class BatchResult:
 
     @property
     def success(self) -> bool:
-        return bool(self.items) and self.failed_count == 0 and self.error is None
+        return (
+            bool(self.items)
+            and self.failed_count == 0
+            and not self.input_errors
+            and self.error is None
+        )
 
 
-def create_directory_structure(
-    output_dir, url, flatten_domain=False, flatten_all=False, hierarchical_domains=False
-):
-    """
-    Create a directory structure based on the URL's domain.
+class BatchInputError(ValueError):
+    """A batch source could not be read as a UTF-8 text document."""
 
-    Args:
-        output_dir (str): Base output directory
-        url (str): URL to create structure for
-        flatten_domain (bool, optional): If True, uses the domain name directly as output directory
-                                         instead of creating a subdirectory structure. Defaults to False.
-        flatten_all (bool, optional): If True, returns the output_dir directly without creating
-                                     any domain-based subdirectories. Defaults to False.
-        hierarchical_domains (bool, optional): If True, creates hierarchical domain structure
-                                              (e.g., com/jetbrains/www). Defaults to False.
 
-    Returns:
-        str: Path to the directory where the file should be saved
-    """
-    output_root = Path(output_dir).expanduser().resolve()
-    parsed_url = urlparse(url)
-    domain = safe_path_segment(parsed_url.netloc)
+@dataclass(frozen=True)
+class BatchInput:
+    path: Path
+    urls: tuple[str, ...]
 
-    if flatten_all:
-        domain_dir = output_root
-    elif hierarchical_domains:
-        # Split domain into parts and reverse them
-        # e.g., www.jetbrains.com -> ['com', 'jetbrains', 'www']
-        domain_parts = [safe_path_segment(part) for part in domain.split(".")]
-        domain_parts.reverse()
 
-        # Build hierarchical path
-        domain_dir = output_root
-        for part in domain_parts:
-            domain_dir = os.path.join(domain_dir, part)
-    elif flatten_domain:
-        # Just use the domain as the output directory
-        domain_dir = output_root / domain
+ProgressCallback = Callable[[str, str | None, str | None], None]
+
+
+def load_batch_input(source_file: str | Path) -> BatchInput:
+    """Load one input, distinguishing an unreadable file from an empty one."""
+    path = Path(source_file).expanduser()
+    try:
+        content = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError) as error:
+        raise BatchInputError(f"Could not read batch input {path}: {error}") from error
+    return BatchInput(path, tuple(extract_urls_from_markdown(content)))
+
+
+def discover_batch_urls(inputs: Iterable[BatchInput]) -> list[str]:
+    """Return canonical-identity-deduplicated URLs in source order."""
+    discovered: list[str] = []
+    identities: set[str] = set()
+    for batch_input in inputs:
+        for url in batch_input.urls:
+            identity = canonical_url_identity(url)
+            if identity not in identities:
+                identities.add(identity)
+                discovered.append(url)
+    return discovered
+
+
+def _archive_batch_url(
+    url: str,
+    *,
+    content_mode: ContentMode,
+    selector: str | None,
+    download_images: bool,
+    images_dir: str,
+    verify_ssl: bool,
+    include_metadata: bool,
+    allow_private_network: bool,
+    header_manager: HeaderManager,
+    page_pipeline: PagePipeline,
+    planner: OutputPlanner,
+    manifest: ArtifactManifest,
+    progress: ProgressCallback,
+) -> BatchItemResult:
+    """Convert one URL and register only its durable output."""
+    progress(f"Fetching content from {url}", url, "fetching")
+    session = get_session(verify_ssl=verify_ssl)
+    try:
+        page = acquire_http_page(
+            url,
+            session=session,
+            headers=header_manager.get_headers(url),
+            allow_private_network=allow_private_network,
+        )
+        archiver = ArchiveCoordinator(
+            manifest=manifest,
+            planner=planner,
+            write_text=ArtifactStore.write_text,
+        )
+
+        def convert(output_path: Path):
+            return page_pipeline.convert(
+                page,
+                content_mode=content_mode,
+                selector=selector,
+                download_images=download_images,
+                output_dir=output_path.parent,
+                images_dir=images_dir,
+                include_metadata=include_metadata,
+                session=session,
+                allow_private_network=allow_private_network,
+            )
+
+        outcome = archiver.archive(url, page, convert)
+    finally:
+        session.close()
+
+    output_file = str(outcome.output_path)
+    if outcome.reused:
+        progress(f"Reused archived target: {output_file}", url, "skipped")
     else:
-        # Create domain directory as a subdirectory
-        domain_dir = output_root / domain
-
-        # Create path directories if they exist
-        path_parts = [
-            safe_path_segment(part) for part in parsed_url.path.strip("/").split("/")
-        ]
-        if path_parts and path_parts[0]:
-            # If there are path components, create directories for them
-            for i in range(len(path_parts) - 1):  # Exclude the last part (filename)
-                if path_parts[i]:
-                    domain_dir = Path(domain_dir) / path_parts[i]
-
-    # Create the directories if they don't exist
-    domain_dir = contained_path(output_root, domain_dir)
-    domain_dir.mkdir(parents=True, exist_ok=True)
-
-    return str(domain_dir)
+        progress(f"Saved markdown to: {output_file}", url, "saved")
+    return BatchItemResult(url, output_file=output_file)
 
 
 def process_markdown_links(
@@ -159,13 +197,32 @@ def process_markdown_links(
         BatchResult: Per-URL outcomes and durable URL-to-file mappings.
     """
     content_mode = validate_content_request(content_mode, selector)
+    Path(output_dir).mkdir(parents=True, exist_ok=True)
 
-    # Create output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
+    def update_progress(
+        message: str, url: str | None = None, status: str | None = None
+    ) -> None:
+        logger.info(message)
+        if progress_callback:
+            progress_callback(message, url, status)
 
-    # URL to local file mapping for link rewriting
-    url_to_file_mapping = {}
-    item_results = []
+    inputs: list[BatchInput] = []
+    input_errors: list[str] = []
+    for source_file in source_files:
+        update_progress(f"Processing links in file: {source_file}")
+        try:
+            batch_input = load_batch_input(source_file)
+        except BatchInputError as error:
+            input_errors.append(str(error))
+            update_progress(str(error), status="error")
+            continue
+        inputs.append(batch_input)
+        if batch_input.urls:
+            update_progress(f"Found {len(batch_input.urls)} URLs in {source_file}")
+        else:
+            update_progress(f"No URLs found in file: {source_file}", status="warning")
+
+    urls = discover_batch_urls(inputs)
     manifest = ArtifactManifest()
     planner = OutputPlanner(
         output_dir,
@@ -173,144 +230,46 @@ def process_markdown_links(
         flatten_all=flatten_all,
         hierarchical_domains=hierarchical_domains,
     )
-    discovered_identities = set()
-    header_manager = header_manager or HeaderManager()
-    page_pipeline = page_pipeline or PagePipeline()
+    active_headers = header_manager or HeaderManager()
+    active_pipeline = page_pipeline or PagePipeline()
+    item_results: list[BatchItemResult] = []
+    url_to_file_mapping: dict[str, str] = {}
 
-    # Helper function to update progress
-    def update_progress(message, url=None, status=None):
-        logger.info(message)
-        if progress_callback:
-            progress_callback(message, url, status)
-
-    # First pass: Process all URLs and build the mapping
-    for source_file in source_files:
-        update_progress(f"Processing links in file: {source_file}")
-
-        # Extract URLs from the source file
-        urls = get_urls_from_file(source_file)
-        if not urls:
-            update_progress(f"No URLs found in file: {source_file}", status="warning")
-            update_progress(
-                "This file may contain URLs in a format that's not being detected.",
-                status="info",
+    for index, url in enumerate(urls, 1):
+        update_progress(f"Processing URL {index}/{len(urls)}: {url}", url, "processing")
+        try:
+            item = _archive_batch_url(
+                url,
+                content_mode=content_mode,
+                selector=selector,
+                download_images=download_images,
+                images_dir=images_dir,
+                verify_ssl=verify_ssl,
+                include_metadata=include_metadata,
+                allow_private_network=allow_private_network,
+                header_manager=active_headers,
+                page_pipeline=active_pipeline,
+                planner=planner,
+                manifest=manifest,
+                progress=update_progress,
             )
-            update_progress(
-                "Supported formats: Markdown links, plain URLs, and HTML links.",
-                status="info",
-            )
-            continue
+        except Exception as failure:
+            item = BatchItemResult(url, error=str(failure))
+            update_progress(f"Error processing URL {url}: {failure}", url, "error")
+        item_results.append(item)
+        if item.success and item.output_file is not None:
+            url_to_file_mapping[url] = item.output_file
 
-        update_progress(f"Found {len(urls)} URLs in {source_file}")
-
-        # Log all found URLs for visibility
-        update_progress("URLs to process:", status="info")
-        for i, url in enumerate(urls, 1):
-            update_progress(f"  {i}. {url}", status="info")
-
-        # Process each URL
-        for index, url in enumerate(urls):
-            # Skip if already processed
-            identity = canonical_url_identity(url)
-            if identity in discovered_identities:
-                update_progress(
-                    f"Skipping already processed URL: {url}", url, "skipped"
-                )
-                continue
-            discovered_identities.add(identity)
-
-            # Update progress
-            update_progress(
-                f"Processing URL {index+1}/{len(urls)}: {url}", url, "processing"
-            )
-
-            try:
-                # Create session for the URL
-                update_progress(f"Fetching content from {url}", url, "fetching")
-                session = get_session(verify_ssl=verify_ssl)
-                headers = header_manager.get_headers(url)
-
-                try:
-                    page = acquire_http_page(
-                        url,
-                        session=session,
-                        headers=headers,
-                        allow_private_network=allow_private_network,
-                    )
-                    existing = manifest.resolve(page.final_url)
-                    if existing is not None:
-                        manifest.register_alias(url, existing)
-                        output_file = str(existing.output_path)
-                        url_to_file_mapping[url] = output_file
-                        item_results.append(
-                            BatchItemResult(url, output_file=output_file)
-                        )
-                        update_progress(
-                            f"Reused archived redirect target: {output_file}",
-                            url,
-                            "skipped",
-                        )
-                        continue
-                    output_path = planner.plan(page.final_url)
-                    document = page_pipeline.convert(
-                        page,
-                        content_mode=content_mode,
-                        selector=selector,
-                        download_images=download_images,
-                        output_dir=output_path.parent,
-                        images_dir=images_dir,
-                        include_metadata=include_metadata,
-                        session=session,
-                        allow_private_network=allow_private_network,
-                    )
-                    markdown_content = document.markdown
-                finally:
-                    session.close()
-
-                if markdown_content:
-                    # Save to file
-                    canonical_url = document.metadata.canonical_url
-                    existing = (
-                        manifest.resolve(canonical_url) if canonical_url else None
-                    )
-                    if existing is not None:
-                        manifest.register_alias(url, existing)
-                        manifest.register_alias(page.final_url, existing)
-                        output_path = existing.output_path
-                    else:
-                        ArtifactStore.write_text(output_path, markdown_content)
-                        manifest.register(
-                            ArtifactRecord(
-                                requested_url=url,
-                                final_url=page.final_url,
-                                canonical_url=canonical_url,
-                                output_path=output_path,
-                            )
-                        )
-                    output_file = str(output_path)
-
-                    # Only durable output files are eligible for local rewriting.
-                    url_to_file_mapping[url] = output_file
-                    item_results.append(BatchItemResult(url, output_file=output_file))
-                    update_progress(f"Saved markdown to: {output_file}", url, "saved")
-                else:
-                    item_results.append(
-                        BatchItemResult(
-                            url, error="Conversion returned no Markdown content"
-                        )
-                    )
-                    update_progress(f"Failed to process URL: {url}", url, "failed")
-
-            except Exception as e:
-                item_results.append(BatchItemResult(url, error=str(e)))
-                update_progress(f"Error processing URL {url}: {str(e)}", url, "error")
-
-    # Second pass: Rewrite links in all files to point to local files.
     rewrite_archived_files(manifest, update_progress)
-
     processed_count = sum(item.success for item in item_results)
     update_progress(f"Completed processing {processed_count} URLs")
-    error = None if item_results else "No URLs were found in the batch inputs"
+    result_error = "; ".join(input_errors) if input_errors else None
+    if not item_results and result_error is None:
+        result_error = "No URLs were found in the batch inputs"
     return BatchResult(
-        item_results, url_to_file_mapping, error=error, manifest=manifest
+        items=item_results,
+        url_mapping=url_to_file_mapping,
+        error=result_error,
+        manifest=manifest,
+        input_errors=input_errors,
     )

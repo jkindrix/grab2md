@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -7,11 +8,8 @@ from html2md.markdown.converter import local_html_to_markdown
 from html2md.markdown.assets import AssetPipeline
 from html2md.network.image_downloader import (
     ImageDownloader,
-    UnsafeImageSource,
-    _PinnedAddressAdapter,
-    _PinnedExchange,
 )
-
+from html2md.network.safe_http import guarded_stream as real_guarded_stream
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"safe-image-data"
 JPEG = b"\xff\xd8\xff" + b"safe-image-data"
@@ -19,10 +17,11 @@ PUBLIC_DNS = [(2, 1, 6, "", ("93.184.216.34", 443))]
 
 
 class FakeResponse:
-    def __init__(self, status=200, headers=None, chunks=None):
+    def __init__(self, status=200, headers=None, chunks=None, url=""):
         self.status_code = status
         self.headers = headers or {}
         self._chunks = chunks or []
+        self.url = url
         self.closed = False
 
     def iter_content(self, chunk_size=8192):
@@ -42,28 +41,32 @@ class FakeSession:
         self.responses = list(responses)
         self.calls = []
 
-    def get(self, url, **kwargs):
+    def request(self, method, url, **kwargs):
+        del method
         self.calls.append((url, kwargs))
         return self.responses.pop(0)
 
 
 @pytest.fixture(autouse=True)
-def route_fake_sessions_through_the_pinned_boundary(monkeypatch):
-    original = ImageDownloader._send_to_address
+def provide_fake_responses_at_the_shared_streaming_boundary(monkeypatch):
+    @contextmanager
+    def stream(session, method, url, *, policy, **kwargs):
+        if not isinstance(session, FakeSession):
+            with real_guarded_stream(
+                session, method, url, policy=policy, **kwargs
+            ) as response:
+                yield response
+            return
 
-    def send(downloader, url, address, **_kwargs):
-        if isinstance(downloader.session, FakeSession):
-            response = downloader.session.get(
-                url,
-                timeout=downloader.timeout,
-                stream=True,
-                allow_redirects=False,
-                pinned_address=address,
-            )
-            return _PinnedExchange(response=response, session=None)
-        return original(downloader, url, address)
+        policy.addresses_for(url)
+        response = session.request(method, url, **kwargs)
+        response.url = response.url or url
+        try:
+            yield response
+        finally:
+            response.close()
 
-    monkeypatch.setattr(ImageDownloader, "_send_to_address", send)
+    monkeypatch.setattr("html2md.network.image_downloader.guarded_stream", stream)
 
 
 def public_dns(*args, **kwargs):
@@ -120,29 +123,14 @@ def test_remote_policy_blocks_non_public_and_metadata_destinations(
     assert session.calls == []
 
 
-def test_redirect_target_is_resolved_and_revalidated(tmp_path):
-    redirect = FakeResponse(
-        302, {"Location": "http://169.254.169.254/latest/meta-data"}
+def test_remote_image_uses_the_shared_streaming_boundary(tmp_path):
+    image = FakeResponse(
+        200,
+        {"Content-Type": "image/png"},
+        [PNG],
+        url="https://cdn.example.com/final.png",
     )
-    session = FakeSession(redirect)
-    downloader = ImageDownloader(session=session)
-
-    def selective_dns(hostname, *args, **kwargs):
-        del args, kwargs
-        address = "93.184.216.34" if hostname == "example.com" else "169.254.169.254"
-        return [(2, 1, 6, "", (address, 80))]
-
-    with patch("html2md.network.safe_http.socket.getaddrinfo", selective_dns):
-        assert downloader.download_image("https://example.com/image", tmp_path) is None
-
-    assert redirect.closed
-    assert len(session.calls) == 1
-
-
-def test_safe_redirect_is_followed_without_requests_automatic_redirects(tmp_path):
-    redirect = FakeResponse(302, {"Location": "https://cdn.example.com/final"})
-    image = FakeResponse(200, {"Content-Type": "image/png"}, [PNG])
-    session = FakeSession(redirect, image)
+    session = FakeSession(image)
     downloader = ImageDownloader(session=session)
 
     with patch("html2md.network.safe_http.socket.getaddrinfo", public_dns):
@@ -150,13 +138,10 @@ def test_safe_redirect_is_followed_without_requests_automatic_redirects(tmp_path
 
     assert result is not None
     assert result.read_bytes() == PNG
-    assert [call[0] for call in session.calls] == [
-        "https://example.com/image",
-        "https://cdn.example.com/final",
-    ]
-    assert all(call[1]["allow_redirects"] is False for call in session.calls)
-    assert all(call[1]["pinned_address"] == "93.184.216.34" for call in session.calls)
-    assert redirect.closed and image.closed
+    assert result.name == "final.png"
+    assert [call[0] for call in session.calls] == ["https://example.com/image"]
+    assert session.calls[0][1]["max_redirects"] == 5
+    assert image.closed
 
 
 def test_transport_connects_to_validated_address_without_second_dns(
@@ -202,47 +187,6 @@ def test_transport_attempts_only_validated_public_addresses(tmp_path, monkeypatc
         "93.184.216.34",
         "93.184.216.35",
     ]
-
-
-def test_https_pin_preserves_host_header_sni_and_certificate_hostname():
-    adapter = _PinnedAddressAdapter("93.184.216.34")
-    adapter.poolmanager = MagicMock()
-    request = requests.Request(
-        "GET", "https://assets.example.test:8443/image.png"
-    ).prepare()
-
-    adapter.get_connection_with_tls_context(request, verify=True)
-    adapter.add_headers(request)
-
-    call = adapter.poolmanager.connection_from_host.call_args
-    assert call.kwargs["host"] == "93.184.216.34"
-    assert call.kwargs["port"] == 8443
-    assert call.kwargs["scheme"] == "https"
-    assert call.kwargs["pool_kwargs"]["server_hostname"] == "assets.example.test"
-    assert call.kwargs["pool_kwargs"]["assert_hostname"] == "assets.example.test"
-    assert request.headers["Host"] == "assets.example.test:8443"
-
-
-def test_cross_origin_image_hop_drops_session_secrets():
-    source = requests.Session()
-    source.headers.update(
-        {
-            "Authorization": "Bearer secret",
-            "X-API-Key": "secret",
-            "Accept": "image/png",
-        }
-    )
-    source.auth = ("user", "secret")
-    downloader = ImageDownloader(session=source)
-
-    direct = downloader._direct_session("93.184.216.34", retain_credentials=False)
-    try:
-        assert "Authorization" not in direct.headers
-        assert "X-API-Key" not in direct.headers
-        assert direct.headers["Accept"] == "image/png"
-        assert direct.auth is None
-    finally:
-        direct.close()
 
 
 @pytest.mark.parametrize(
@@ -408,6 +352,13 @@ def test_structural_asset_pipeline_rewrites_srcset_and_style_successes_only(tmp_
     ]
 
 
-def test_direct_remote_validation_rejects_invalid_port():
-    with pytest.raises(UnsafeImageSource, match="invalid port"):
-        ImageDownloader._validate_remote_url("https://example.com:invalid/image.png")
+def test_remote_validation_rejects_invalid_port_without_requesting(tmp_path):
+    session = FakeSession()
+
+    assert (
+        ImageDownloader(session=session).download_image(
+            "https://example.com:invalid/image.png", tmp_path
+        )
+        is None
+    )
+    assert session.calls == []

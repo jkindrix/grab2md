@@ -87,7 +87,7 @@ class ScopedCookieSession(requests.Session):
         request_path = parsed.path or "/"
         now = int(datetime.now(timezone.utc).timestamp())
         applicable = []
-        for cookie in prepared._cookies:
+        for cookie in cast(Any, prepared)._cookies:
             host_only = bool(cookie.get_nonstandard_attr("HostOnly")) or not bool(
                 cookie.domain_specified
             )

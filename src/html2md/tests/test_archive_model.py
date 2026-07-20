@@ -9,6 +9,7 @@ from html2md.markdown.archive import (
     canonical_url_identity,
 )
 from html2md.markdown.batch_processor import process_markdown_links
+from html2md.markdown.archiving import ArchiveCoordinator
 from html2md.markdown.document import DocumentMetadata
 from html2md.markdown.link_rewriter import rewrite_links
 from html2md.markdown.pipeline import AcquiredPage, ConvertedDocument
@@ -50,6 +51,55 @@ def test_manifest_resolves_requested_redirect_and_canonical_aliases(tmp_path):
     assert manifest.resolve("https://example.com/start#top") is record
     assert manifest.resolve("https://www.example.com/final") is record
     assert manifest.resolve("https://example.com/guide") is record
+
+
+def test_archive_coordinator_reuses_final_identity_without_reconversion(tmp_path):
+    manifest = ArtifactManifest()
+    store = Mock()
+    archiver = ArchiveCoordinator(
+        manifest=manifest,
+        planner=OutputPlanner(tmp_path),
+        write_text=store.write_text,
+    )
+    first_page = AcquiredPage(
+        "https://example.com/old",
+        "https://example.com/current",
+        "<h1>Current</h1>",
+        200,
+        {},
+        "text/html",
+        "utf-8",
+    )
+    document = ConvertedDocument(
+        first_page,
+        "# Current",
+        first_page.html,
+        DocumentMetadata(canonical_url="https://example.com/guide"),
+    )
+    convert = Mock(return_value=document)
+
+    first = archiver.archive(first_page.requested_url, first_page, convert)
+    second_convert = Mock()
+    second_page = AcquiredPage(
+        "https://example.com/another",
+        first_page.final_url,
+        first_page.html,
+        200,
+        {},
+        "text/html",
+        "utf-8",
+    )
+    second = archiver.archive(second_page.requested_url, second_page, second_convert)
+
+    assert first.reused is False
+    assert second.reused is True
+    assert second.output_path == first.output_path
+    convert.assert_called_once_with(first.output_path)
+    second_convert.assert_not_called()
+    store.write_text.assert_called_once_with(first.output_path, "# Current")
+    assert manifest.resolve(second_page.requested_url) is manifest.resolve(
+        first_page.final_url
+    )
 
 
 def test_structural_rewriter_handles_parentheses_titles_and_fenced_code(tmp_path):

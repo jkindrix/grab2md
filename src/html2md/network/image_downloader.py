@@ -7,25 +7,22 @@ import logging
 import os
 import re
 import tempfile
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from urllib.parse import unquote, urljoin, urlparse
+from urllib.parse import unquote, urlparse
 
 import requests
-from requests import Response, Session
+from requests import Session
 from rich.progress import Progress, TaskID
 
-from html2md.utils.path_safety import contained_output_file, contained_path
 from html2md.network.safe_http import (
     DestinationPolicy,
-    PinnedHttpClient,
-    SAFE_CROSS_ORIGIN_HEADERS,
     UnsafeNetworkTarget,
-    _PinnedAddressAdapter,
+    guarded_stream,
 )
+from html2md.utils.path_safety import contained_output_file, contained_path
 
-__all__ = ["ImageDownloader", "UnsafeImageSource", "_PinnedAddressAdapter"]
+__all__ = ["ImageDownloader", "UnsafeImageSource"]
 
 logger = logging.getLogger("html2md")
 
@@ -34,17 +31,10 @@ class UnsafeImageSource(ValueError):
     """Raised when an image source violates the acquisition policy."""
 
 
-@dataclass
-class _PinnedExchange:
-    response: Response
-    session: Optional[Session]
-
-
 class ImageDownloader:
     """Download public web images and copy explicitly rooted local images."""
 
     ALLOWED_REMOTE_SCHEMES = {"http", "https"}
-    REDIRECT_STATUSES = {301, 302, 303, 307, 308}
     MIME_EXTENSIONS = {
         "image/jpeg": ".jpg",
         "image/png": ".png",
@@ -129,132 +119,6 @@ class ImageDownloader:
                 )
         return detected
 
-    @classmethod
-    def _validate_remote_url(cls, url: str) -> List[str]:
-        parsed = urlparse(url)
-        if parsed.scheme.lower() not in cls.ALLOWED_REMOTE_SCHEMES:
-            raise UnsafeImageSource(
-                f"Unsupported remote image scheme: {parsed.scheme or 'missing'}"
-            )
-        if parsed.username is not None or parsed.password is not None:
-            raise UnsafeImageSource("Image URLs containing credentials are not allowed")
-        try:
-            port = parsed.port
-        except ValueError as error:
-            raise UnsafeImageSource("Image URL contains an invalid port") from error
-        del port
-        try:
-            return list(DestinationPolicy().addresses_for(url))
-        except UnsafeNetworkTarget as error:
-            raise UnsafeImageSource(str(error)) from error
-
-    def _direct_session(
-        self, address: str, *, retain_credentials: bool = True
-    ) -> Session:
-        """Clone request identity into a direct, address-pinned session."""
-        client = PinnedHttpClient(self.session, DestinationPolicy())
-        client._mount(address)
-        if not retain_credentials:
-            client.session.headers = requests.structures.CaseInsensitiveDict(
-                {
-                    name: value
-                    for name, value in client.session.headers.items()
-                    if name.casefold() in SAFE_CROSS_ORIGIN_HEADERS
-                }
-            )
-            client.session.auth = None
-        return client.session
-
-    def _send_to_address(
-        self, url: str, address: str, *, retain_credentials: bool = True
-    ) -> _PinnedExchange:
-        direct = self._direct_session(address, retain_credentials=retain_credentials)
-        try:
-            response = direct.get(
-                url,
-                timeout=self.timeout,
-                stream=True,
-                allow_redirects=False,
-            )
-            return _PinnedExchange(response=response, session=direct)
-        except BaseException:
-            direct.close()
-            raise
-
-    def _request_remote(self, url: str) -> tuple[Response, str, Optional[Session]]:
-        current_url = url
-        previous_url: Optional[str] = None
-        retain_credentials = True
-        for redirect_count in range(self.max_redirects + 1):
-            if self.allow_private_network:
-                try:
-                    addresses = list(
-                        DestinationPolicy(allow_private=True).addresses_for(current_url)
-                    )
-                except UnsafeNetworkTarget as error:
-                    raise UnsafeImageSource(str(error)) from error
-            else:
-                addresses = self._validate_remote_url(current_url)
-            exchange: Optional[_PinnedExchange] = None
-            last_connection_error: Optional[requests.RequestException] = None
-            for address in addresses:
-                scheduled = (
-                    self.scheduler.before_request(current_url)
-                    if self.scheduler
-                    else None
-                )
-                try:
-                    if previous_url is not None and DestinationPolicy._origin(
-                        previous_url
-                    ) != DestinationPolicy._origin(current_url):
-                        retain_credentials = False
-                    exchange = self._send_to_address(
-                        current_url,
-                        address,
-                        retain_credentials=retain_credentials,
-                    )
-                    if scheduled is not None:
-                        self.scheduler.after_response(
-                            scheduled,
-                            exchange.response,
-                        )
-                    break
-                except (requests.ConnectionError, requests.Timeout) as error:
-                    if scheduled is not None:
-                        self.scheduler.after_request(scheduled, success=False)
-                    last_connection_error = error
-                except BaseException:
-                    if scheduled is not None:
-                        self.scheduler.after_request(scheduled, success=False)
-                    raise
-            if exchange is None:
-                if last_connection_error is not None:
-                    raise last_connection_error
-                raise UnsafeImageSource("Image host has no usable public address")
-
-            response = exchange.response
-            if response.status_code not in self.REDIRECT_STATUSES:
-                try:
-                    response.raise_for_status()
-                except BaseException:
-                    response.close()
-                    if exchange.session is not None:
-                        exchange.session.close()
-                    raise
-                return response, current_url, exchange.session
-
-            location = response.headers.get("Location")
-            response.close()
-            if exchange.session is not None:
-                exchange.session.close()
-            if not location:
-                raise UnsafeImageSource("Image redirect has no Location header")
-            if redirect_count == self.max_redirects:
-                raise UnsafeImageSource("Image redirect limit exceeded")
-            previous_url = current_url
-            current_url = urljoin(current_url, location)
-        raise UnsafeImageSource("Image redirect limit exceeded")
-
     def _destination(self, output_dir: Path, url: str, mime_type: str) -> Path:
         output_root = Path(output_dir).resolve()
         images_path = contained_path(output_root, self.images_dir)
@@ -312,38 +176,52 @@ class ImageDownloader:
             raise
 
     def _acquire_remote(self, url: str, output_dir: Path) -> Path:
-        response, final_url, direct_session = self._request_remote(url)
         staged_path: Optional[Path] = None
         try:
-            declared_type = response.headers.get("Content-Type", "")
-            if self._content_type(declared_type) not in self.MIME_EXTENSIONS:
-                raise UnsafeImageSource(
-                    f"Unsupported image Content-Type: {self._content_type(declared_type) or 'missing'}"
-                )
-            content_length = response.headers.get("Content-Length")
-            if content_length:
-                try:
-                    stated_size = int(content_length)
-                except ValueError as error:
-                    raise UnsafeImageSource("Invalid image Content-Length") from error
-                if stated_size < 0 or stated_size > self.max_file_bytes:
-                    raise UnsafeImageSource("Image exceeds the per-file byte limit")
-                if self.total_downloaded_bytes + stated_size > self.max_total_bytes:
-                    raise UnsafeImageSource("Images exceed the aggregate byte limit")
+            policy = DestinationPolicy(allow_private=self.allow_private_network)
+            with guarded_stream(
+                self.session,
+                "GET",
+                url,
+                policy=policy,
+                timeout=self.timeout,
+                max_redirects=self.max_redirects,
+                request_scheduler=self.scheduler,
+            ) as response:
+                response.raise_for_status()
+                declared_type = response.headers.get("Content-Type", "")
+                if self._content_type(declared_type) not in self.MIME_EXTENSIONS:
+                    raise UnsafeImageSource(
+                        "Unsupported image Content-Type: "
+                        f"{self._content_type(declared_type) or 'missing'}"
+                    )
+                content_length = response.headers.get("Content-Length")
+                if content_length:
+                    try:
+                        stated_size = int(content_length)
+                    except ValueError as error:
+                        raise UnsafeImageSource(
+                            "Invalid image Content-Length"
+                        ) from error
+                    if stated_size < 0 or stated_size > self.max_file_bytes:
+                        raise UnsafeImageSource("Image exceeds the per-file byte limit")
+                    if self.total_downloaded_bytes + stated_size > self.max_total_bytes:
+                        raise UnsafeImageSource(
+                            "Images exceed the aggregate byte limit"
+                        )
 
-            staged_path, byte_count = self._stage_chunks(
-                response.iter_content(chunk_size=8192), output_dir
-            )
+                staged_path, byte_count = self._stage_chunks(
+                    response.iter_content(chunk_size=8192), output_dir
+                )
             mime_type = self._verify_image(staged_path, declared_type)
-            destination = self._destination(output_dir, final_url, mime_type)
+            destination = self._destination(output_dir, response.url, mime_type)
             os.replace(staged_path, destination)
             staged_path = None
             self.total_downloaded_bytes += byte_count
             return destination
+        except UnsafeNetworkTarget as error:
+            raise UnsafeImageSource(str(error)) from error
         finally:
-            response.close()
-            if direct_session is not None:
-                direct_session.close()
             if staged_path is not None:
                 staged_path.unlink(missing_ok=True)
 

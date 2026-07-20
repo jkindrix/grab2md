@@ -350,7 +350,12 @@ class ConfigRecoveryHandler:
             # Write defaults atomically
             from html2md.config.writer import atomic_write_json
 
-            atomic_write_json(self.config_file, self.default_config, private=True)
+            atomic_write_json(
+                self.config_file,
+                self.default_config,
+                private=True,
+                private_parent=True,
+            )
 
             console.print("[yellow]Configuration reset to defaults[/yellow]")
             console.print(

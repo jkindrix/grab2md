@@ -11,7 +11,6 @@ from html2md.markdown.crawler import CrawlResult, crawl_website
 from html2md.network.request_handler import FetchResult
 from html2md.utils.state_manager import StateManager
 
-
 runner = CliRunner()
 
 

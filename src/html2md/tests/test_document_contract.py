@@ -3,7 +3,6 @@
 from html2md.markdown.converter import html_content_to_markdown
 from html2md.markdown.document import prepare_document
 
-
 REMOTE_HTML = """
 <!doctype html>
 <html lang="en-US">

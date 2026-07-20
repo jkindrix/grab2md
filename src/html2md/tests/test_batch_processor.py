@@ -1,9 +1,14 @@
 import unittest
-from unittest import mock
 
-from html2md.markdown.batch_processor import create_directory_structure
+import pytest
+
+from html2md.markdown.batch_processor import (
+    BatchInputError,
+    load_batch_input,
+    process_markdown_links,
+)
 from html2md.markdown.link_rewriter import rewrite_links
-from html2md.utils.parser import extract_urls_from_markdown, generate_safe_filename
+from html2md.utils.parser import extract_urls_from_markdown
 
 
 class TestBatchProcessor(unittest.TestCase):
@@ -32,34 +37,6 @@ class TestBatchProcessor(unittest.TestCase):
 
         urls = extract_urls_from_markdown(markdown)
         self.assertEqual(urls, expected_urls)
-
-    def test_generate_safe_filename(self):
-        """Test generating safe filenames from URLs."""
-        test_cases = [
-            ("https://example.com/page", "example.com_page.md"),
-            ("https://example.com/path/to/page", "example.com_path_to_page.md"),
-            ("https://example.com/page?query=value", "example.com_page_query_value.md"),
-            ("https://example.com/page#section", "example.com_page_section.md"),
-            ("https://example.com/page with spaces", "example.com_page_with_spaces.md"),
-        ]
-
-        for url, expected in test_cases:
-            self.assertEqual(generate_safe_filename(url), expected)
-
-    @mock.patch("pathlib.Path.mkdir")
-    def test_create_directory_structure(self, mock_mkdir):
-        """Test creating directory structure from URLs."""
-        output_dir = "/output"
-        test_cases = [
-            ("https://example.com/page", "/output/example.com"),
-            ("https://example.com/path/to/page", "/output/example.com/path/to"),
-            ("https://subdomain.example.com/page", "/output/subdomain.example.com"),
-        ]
-
-        for url, expected in test_cases:
-            result = create_directory_structure(output_dir, url)
-            self.assertEqual(result, expected)
-            mock_mkdir.assert_called_with(parents=True, exist_ok=True)
 
     def test_rewrite_links(self):
         """Test rewriting links in markdown content."""
@@ -90,3 +67,33 @@ class TestBatchProcessor(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_missing_batch_input_is_not_reported_as_an_empty_valid_file(tmp_path):
+    missing = tmp_path / "missing.md"
+
+    with pytest.raises(BatchInputError, match="Could not read batch input"):
+        load_batch_input(missing)
+
+    result = process_markdown_links([missing], tmp_path / "output")
+    assert result.items == []
+    assert result.input_errors
+    assert "Could not read batch input" in (result.error or "")
+
+
+def test_valid_batch_input_without_urls_has_a_distinct_empty_result(tmp_path):
+    source = tmp_path / "empty.md"
+    source.write_text("# No links here\n", encoding="utf-8")
+
+    result = process_markdown_links([source], tmp_path / "output")
+
+    assert result.input_errors == []
+    assert result.error == "No URLs were found in the batch inputs"
+
+
+def test_non_utf8_batch_input_is_a_typed_failure(tmp_path):
+    source = tmp_path / "invalid.md"
+    source.write_bytes(b"\xff\xfe\xfa")
+
+    with pytest.raises(BatchInputError, match="Could not read batch input"):
+        load_batch_input(source)

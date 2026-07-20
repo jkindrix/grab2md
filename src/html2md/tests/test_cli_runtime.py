@@ -7,6 +7,7 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from html2md import __version__
+import html2md
 from html2md.cli import cli
 from html2md.cli.runtime import build_header_config
 from html2md.config.loader import DEFAULT_CONFIG
@@ -17,6 +18,10 @@ def test_cli_version_uses_installed_distribution_metadata():
 
     assert result.exit_code == 0
     assert result.output.strip() == version("html2md-cli") == __version__
+
+
+def test_package_root_exports_only_version_metadata():
+    assert html2md.__all__ == ["__version__"]
 
 
 def test_cli_import_does_not_read_or_validate_user_config(tmp_path):
@@ -61,8 +66,13 @@ def test_all_network_commands_share_one_header_config_factory():
         .with_name("conversion_presenter.py")
         .read_text(encoding="utf-8")
     )
+    command_runtime_source = (
+        Path(cli.__file__).with_name("command_runtime.py").read_text(encoding="utf-8")
+    )
 
-    assert source.count("build_header_config(") == 1
+    assert source.count("build_header_config(") == 0
+    assert command_runtime_source.count("build_header_config(") == 1
+    assert command_runtime_source.count("build_header_manager(") == 1
     assert conversion_source.count("build_header_config(") == 1
     assert presenter_source.count("def process_single_") == 2
     assert presenter_source.count("convert_source(") == 1

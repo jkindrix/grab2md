@@ -112,7 +112,7 @@ def test_empty_html_is_a_conversion_failure():
 
 def test_url_conversion_passes_headers_without_mutating_session():
     response = Mock(
-        text="<h1>Fetched</h1><p>body</p>",
+        content=b"<h1>Fetched</h1><p>body</p>",
         encoding="utf-8",
         status_code=200,
         headers={"Content-Type": "text/html"},
@@ -135,7 +135,7 @@ def test_url_conversion_passes_headers_without_mutating_session():
 
 def test_url_conversion_uses_final_response_url_for_relative_references():
     response = Mock(
-        text='<a href="next">Next</a>',
+        content=b'<a href="next">Next</a>',
         encoding="utf-8",
         status_code=200,
         headers={"Content-Type": "text/html"},

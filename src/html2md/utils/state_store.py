@@ -15,7 +15,6 @@ from typing import Any, Dict, Optional
 from html2md.config.writer import atomic_write_json
 from html2md.utils.state_schema import CrawlState
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -48,7 +47,13 @@ class CrawlStateStore:
             shutil.copy2(state_file, backup_file)
             if os.name == "posix":
                 os.chmod(backup_file, 0o600)
-        atomic_write_json(state_file, state.to_dict(), indent=2, private=True)
+        atomic_write_json(
+            state_file,
+            state.to_dict(),
+            indent=2,
+            private=True,
+            private_parent=True,
+        )
 
     def list_resumable(self) -> list[Dict[str, Any]]:
         crawls: list[Dict[str, Any]] = []

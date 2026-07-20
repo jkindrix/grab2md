@@ -6,7 +6,6 @@ from html2md.cookies.replay import ScopedCookieSession, _ScopedCookiePolicy
 from html2md.network.header_manager import HeaderManager
 from html2md.utils.redaction import get_redacting_logger
 
-
 logger = get_redacting_logger("session_manager")
 _insecure_warning_emitted = False
 

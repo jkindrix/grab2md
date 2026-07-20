@@ -56,6 +56,7 @@ def convert_source(
     no_cookies: bool,
     browser_cookies: bool,
     browser: Optional[str],
+    cookie_path: Optional[Path] = None,
     cookie_json: Optional[Path] = None,
     headers_file: Optional[Path] = None,
     storage_state: Optional[Path] = None,
@@ -82,6 +83,7 @@ def convert_source(
             no_cookies=no_cookies,
             browser_cookies=browser_cookies,
             browser=browser,
+            cookie_path=cookie_path,
             cookie_json=cookie_json,
             headers_file=headers_file,
             storage_state=storage_state,
@@ -104,7 +106,7 @@ def convert_source(
             False,
             "JavaScript rendering is available only for HTTP(S) URLs.",
         )
-    if headers_file or storage_state:
+    if browser_cookies or cookie_path or cookie_json or headers_file or storage_state:
         return ConversionResult(
             source,
             str(Path(source).expanduser().resolve()),
@@ -136,6 +138,7 @@ def _convert_url(
     no_cookies: bool,
     browser_cookies: bool,
     browser: Optional[str],
+    cookie_path: Optional[Path],
     cookie_json: Optional[Path],
     headers_file: Optional[Path],
     storage_state: Optional[Path],
@@ -152,7 +155,7 @@ def _convert_url(
     logger.info("Processing URL: %s", source)
     try:
         validate_content_request(content_mode, selector)
-        if render_js and (browser_cookies or cookie_json):
+        if render_js and (browser_cookies or cookie_path or cookie_json):
             raise ValueError(
                 "JavaScript rendering does not import browser or JSON cookies; "
                 "use the static authenticated path."
@@ -176,7 +179,7 @@ def _convert_url(
         session = None
         if not render_js:
             session = get_session(verify_ssl=not insecure)
-            if not no_cookies and browser_cookies:
+            if not no_cookies and (browser_cookies or cookie_json):
                 if cookie_json:
                     on_status(f"Loading cookies from JSON file for {source}")
                 else:
@@ -184,9 +187,17 @@ def _convert_url(
                         "preferred", "chrome"
                     )
                     on_status(f"Extracting cookies from {browser_name} for {source}")
-                cookie_session = apply_browser_cookies(
-                    session, source, cookie_json, browser=browser
-                )
+                try:
+                    cookie_session = apply_browser_cookies(
+                        session,
+                        source,
+                        cookie_json,
+                        browser=browser,
+                        cookie_path=cookie_path,
+                    )
+                except BaseException:
+                    session.close()
+                    raise
                 if cookie_session is not session:
                     session.close()
                 session = cookie_session

@@ -9,7 +9,6 @@ from typer.testing import CliRunner
 from html2md.cli.cli import app
 from html2md.markdown.converter import html_to_markdown
 
-
 runner = CliRunner()
 
 

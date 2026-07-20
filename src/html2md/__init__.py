@@ -1,6 +1,7 @@
-"""
-html2md - A Python package to convert HTML content to Markdown
-with a beautiful UI using Typer and Rich.
+"""Version metadata for the CLI-only pre-1.0 distribution.
+
+Internal modules remain importable for implementation and testing, but they are
+not a supported compatibility surface before 1.0.
 """
 
 from importlib.metadata import PackageNotFoundError, version
@@ -9,3 +10,5 @@ try:
     __version__ = version("html2md-cli")
 except PackageNotFoundError:  # Source tree imported without installation metadata.
     __version__ = "0+unknown"
+
+__all__ = ["__version__"]

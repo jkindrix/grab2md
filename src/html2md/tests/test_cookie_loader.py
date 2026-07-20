@@ -2,9 +2,13 @@
 
 import json
 import importlib
+import os
 import sqlite3
+import sys
+from base64 import b64encode
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import requests
@@ -14,26 +18,35 @@ from html2md.cookies.session_manager import (
     CookieRecord,
     CookieSourceError,
     apply_browser_cookies,
+    decrypt_chrome_cookie,
+    get_browser_cookie_path,
     get_chrome_cookies,
+    get_chrome_encryption_key,
     get_domain_cookies,
     get_firefox_cookies,
     load_cookies_from_json,
+    _find_firefox_profile,
 )
+
+
+def write_private_cookie_file(path, payload, *, encode=True):
+    contents = json.dumps(payload) if encode else payload
+    path.write_text(contents, encoding="utf-8")
+    if os.name == "posix":
+        path.chmod(0o600)
+    return path
 
 
 def test_exported_cookie_list_filters_exact_hosts_and_real_subdomains(tmp_path):
     cookie_file = tmp_path / "cookies.json"
-    cookie_file.write_text(
-        json.dumps(
-            [
-                {"name": "parent", "value": "a", "domain": ".example.com"},
-                {"name": "exact", "value": "b", "domain": "docs.example.com"},
-                {"name": "other", "value": "c", "domain": "notexample.com"},
-            ]
-        ),
-        encoding="utf-8",
+    write_private_cookie_file(
+        cookie_file,
+        [
+            {"name": "parent", "value": "a", "domain": ".example.com"},
+            {"name": "exact", "value": "b", "domain": "docs.example.com"},
+            {"name": "other", "value": "c", "domain": "notexample.com"},
+        ],
     )
-
     cookies = load_cookies_from_json(cookie_file, "https://docs.example.com/page")
 
     assert [(cookie.name, cookie.domain, cookie.host_only) for cookie in cookies] == [
@@ -44,7 +57,7 @@ def test_exported_cookie_list_filters_exact_hosts_and_real_subdomains(tmp_path):
 
 def test_exported_cookie_dict_requires_target_and_creates_host_only_records(tmp_path):
     cookie_file = tmp_path / "cookies.json"
-    cookie_file.write_text(json.dumps({"session": "token", "theme": "dark"}))
+    write_private_cookie_file(cookie_file, {"session": "token", "theme": "dark"})
 
     with pytest.raises(CookieSourceError, match="target URL"):
         load_cookies_from_json(cookie_file)
@@ -57,7 +70,7 @@ def test_exported_cookie_dict_requires_target_and_creates_host_only_records(tmp_
 
 def test_malformed_cookie_export_fails_explicitly(tmp_path):
     cookie_file = tmp_path / "cookies.json"
-    cookie_file.write_text("not-json", encoding="utf-8")
+    write_private_cookie_file(cookie_file, "not-json", encode=False)
 
     with pytest.raises(CookieSourceError, match="Could not load cookie export"):
         load_cookies_from_json(cookie_file, "https://example.com")
@@ -65,7 +78,7 @@ def test_malformed_cookie_export_fails_explicitly(tmp_path):
 
 def test_empty_cookie_export_fails_before_unauthenticated_fallback(tmp_path):
     cookie_file = tmp_path / "cookies.json"
-    cookie_file.write_text("[]", encoding="utf-8")
+    write_private_cookie_file(cookie_file, [])
 
     with pytest.raises(CookieSourceError, match="No applicable cookies"):
         apply_browser_cookies(
@@ -80,18 +93,16 @@ def test_unsupported_browser_fails_explicitly():
 
 def test_apply_cookie_export_preserves_domain_and_path(tmp_path):
     cookie_file = tmp_path / "cookies.json"
-    cookie_file.write_text(
-        json.dumps(
-            [
-                {
-                    "name": "session",
-                    "value": "secret",
-                    "domain": ".example.com",
-                    "path": "/docs",
-                }
-            ]
-        ),
-        encoding="utf-8",
+    write_private_cookie_file(
+        cookie_file,
+        [
+            {
+                "name": "session",
+                "value": "secret",
+                "domain": ".example.com",
+                "path": "/docs",
+            }
+        ],
     )
     session = requests.Session()
 
@@ -107,6 +118,25 @@ def test_apply_cookie_export_preserves_domain_and_path(tmp_path):
         ".example.com",
         "/docs",
     )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission contract")
+def test_cookie_export_rejects_group_or_world_access(tmp_path):
+    cookie_file = tmp_path / "cookies.json"
+    cookie_file.write_text('{"session":"secret"}', encoding="utf-8")
+    cookie_file.chmod(0o640)
+
+    with pytest.raises(CookieSourceError, match="chmod 600"):
+        load_cookies_from_json(cookie_file, "https://example.com")
+
+
+def test_cookie_export_rejects_symlinks(tmp_path):
+    target = write_private_cookie_file(tmp_path / "target.json", {"session": "secret"})
+    cookie_file = tmp_path / "cookies.json"
+    cookie_file.symlink_to(target)
+
+    with pytest.raises(CookieSourceError, match="regular file"):
+        load_cookies_from_json(cookie_file, "https://example.com")
 
 
 def test_browser_cookie_mapping_is_applied_to_target_host():
@@ -183,7 +213,7 @@ def test_browser_cookie_mapping_honors_explicit_browser():
             session, "https://example.com/page", browser="firefox"
         )
 
-    select.assert_called_once_with("firefox")
+    select.assert_called_once_with("firefox", None)
     source.load.assert_called_once_with("https://example.com/page")
 
 
@@ -205,7 +235,7 @@ def test_domain_cookie_loader_routes_to_configured_browser():
     assert result == [
         CookieRecord("firefox", "cookie", "www.example.com", host_only=True)
     ]
-    firefox.assert_called_once_with("www.example.com")
+    firefox.assert_called_once_with("www.example.com", cookie_path=None)
 
 
 def test_browser_source_selection_reads_configuration_at_call_time():
@@ -245,6 +275,136 @@ def test_exported_cookie_source_reports_capability_without_loading(tmp_path):
     assert capability.name == "exported JSON"
 
 
+def test_macos_chrome_source_fails_closed_before_cookie_decryption(tmp_path):
+    from html2md.cookies.sources import ChromeCookieSource
+    import html2md.cookies.session_manager as session_manager
+
+    database = tmp_path / "Cookies"
+    database.write_bytes(b"fixture")
+    with (
+        patch("html2md.cookies.sources.sys.platform", "darwin"),
+        patch(
+            "html2md.cookies.session_manager.get_browser_cookie_path",
+            return_value=database,
+        ),
+    ):
+        capability = ChromeCookieSource().capability()
+
+    assert capability.available is False
+    assert "unavailable on macOS" in capability.detail
+
+    with patch.object(session_manager.sys, "platform", "darwin"):
+        with pytest.raises(CookieSourceError, match="owner-private JSON"):
+            session_manager.get_chrome_encryption_key()
+
+
+@pytest.mark.parametrize(
+    ("platform", "browser", "relative_path"),
+    [
+        (
+            "win32",
+            "chrome",
+            "AppData/Local/Google/Chrome/User Data/Default/Network/Cookies",
+        ),
+        ("win32", "firefox", "AppData/Roaming/Mozilla/Firefox/Profiles"),
+        (
+            "darwin",
+            "chrome",
+            "Library/Application Support/Google/Chrome/Default/Cookies",
+        ),
+        ("darwin", "firefox", "Library/Application Support/Firefox/Profiles"),
+        ("linux", "chrome", ".config/google-chrome/Default/Cookies"),
+        ("linux", "firefox", ".mozilla/firefox"),
+    ],
+)
+def test_browser_cookie_default_paths_are_explicit_platform_contracts(
+    tmp_path, platform, browser, relative_path
+):
+    with (
+        patch("html2md.cookies.session_manager.load_config", return_value={}),
+        patch("html2md.cookies.session_manager.sys.platform", platform),
+        patch("html2md.cookies.session_manager.Path.home", return_value=tmp_path),
+    ):
+        path = get_browser_cookie_path(browser)
+
+    assert path == tmp_path / relative_path
+
+
+@pytest.mark.parametrize(
+    ("platform", "platform_name"), [("darwin", "macOS"), ("linux", "Linux")]
+)
+def test_chrome_capability_rejects_unimplemented_key_stores(
+    tmp_path, platform, platform_name
+):
+    from html2md.cookies.sources import ChromeCookieSource
+
+    database = tmp_path / "Cookies"
+    database.write_bytes(b"fixture")
+    with (
+        patch("html2md.cookies.sources.sys.platform", platform),
+        patch(
+            "html2md.cookies.session_manager.get_browser_cookie_path",
+            return_value=database,
+        ),
+    ):
+        capability = ChromeCookieSource().capability()
+
+    assert capability.available is False
+    assert platform_name in capability.detail
+    assert "exported cookie JSON" in capability.detail
+
+
+def test_windows_chrome_capability_probes_the_key_boundary(tmp_path):
+    from html2md.cookies.sources import ChromeCookieSource
+
+    database = tmp_path / "Cookies"
+    database.write_bytes(b"fixture")
+    with (
+        patch("html2md.cookies.sources.sys.platform", "win32"),
+        patch(
+            "html2md.cookies.session_manager.get_browser_cookie_path",
+            return_value=database,
+        ),
+        patch(
+            "html2md.cookies.session_manager.get_chrome_encryption_key",
+            side_effect=CookieSourceError("DPAPI permission denied"),
+        ) as retrieve_key,
+    ):
+        capability = ChromeCookieSource().capability()
+
+    assert capability.available is False
+    assert capability.detail == "DPAPI permission denied"
+    retrieve_key.assert_called_once_with()
+
+
+def test_windows_chrome_key_decodes_and_removes_dpapi_prefix(tmp_path):
+    local_state = tmp_path / "AppData/Local/Google/Chrome/User Data/Local State"
+    local_state.parent.mkdir(parents=True)
+    local_state.write_text(
+        json.dumps(
+            {"os_crypt": {"encrypted_key": b64encode(b"DPAPIwrapped").decode()}}
+        ),
+        encoding="utf-8",
+    )
+    crypt = SimpleNamespace(
+        CryptUnprotectData=Mock(return_value=(None, b"decrypted-key"))
+    )
+    with (
+        patch("html2md.cookies.session_manager.sys.platform", "win32"),
+        patch("html2md.cookies.session_manager.Path.home", return_value=tmp_path),
+        patch.dict(sys.modules, {"win32crypt": crypt}),
+    ):
+        key = get_chrome_encryption_key()
+
+    assert key == b"decrypted-key"
+    assert crypt.CryptUnprotectData.call_args.args[0] == b"wrapped"
+
+
+def test_chrome_app_bound_cookie_format_fails_explicitly():
+    with pytest.raises(CookieSourceError, match="app-bound"):
+        decrypt_chrome_cookie(b"v20opaque", b"unused")
+
+
 class _CopiedDatabase:
     def cleanup(self):
         return None
@@ -252,14 +412,12 @@ class _CopiedDatabase:
 
 def _create_chrome_database(path: Path):
     connection = sqlite3.connect(path)
-    connection.execute(
-        """
+    connection.execute("""
         CREATE TABLE cookies (
             name TEXT, value TEXT, encrypted_value BLOB, host_key TEXT,
             expires_utc INTEGER, path TEXT, is_secure INTEGER, is_httponly INTEGER
         )
-        """
-    )
+        """)
     future = int(
         (datetime.now(timezone.utc).timestamp() + 3600 + 11_644_473_600) * 1_000_000
     )
@@ -306,22 +464,21 @@ def test_chrome_lookup_enforces_boundaries_and_preserves_scope(tmp_path):
 
 
 def test_firefox_lookup_enforces_boundaries_and_preserves_scope(tmp_path):
-    profile = tmp_path / "profile"
-    profile.mkdir()
-    (tmp_path / "profiles.ini").write_text(
+    firefox_root = tmp_path / "firefox"
+    profile = firefox_root / "profile"
+    profile.mkdir(parents=True)
+    (firefox_root / "profiles.ini").write_text(
         "[Profile0]\nDefault=1\nIsRelative=1\nPath=profile\n",
         encoding="utf-8",
     )
     database = profile / "cookies.sqlite"
     connection = sqlite3.connect(database)
-    connection.execute(
-        """
+    connection.execute("""
         CREATE TABLE moz_cookies (
             name TEXT, value TEXT, host TEXT, expiry INTEGER, path TEXT,
             isSecure INTEGER, isHttpOnly INTEGER
         )
-        """
-    )
+        """)
     future = int(datetime.now(timezone.utc).timestamp() + 3600)
     connection.executemany(
         "INSERT INTO moz_cookies VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -336,7 +493,7 @@ def test_firefox_lookup_enforces_boundaries_and_preserves_scope(tmp_path):
     with (
         patch(
             "html2md.cookies.session_manager.get_browser_cookie_path",
-            return_value=profile,
+            return_value=firefox_root,
         ),
         patch(
             "html2md.cookies.session_manager._copy_cookie_database",
@@ -356,3 +513,44 @@ def test_firefox_lookup_enforces_boundaries_and_preserves_scope(tmp_path):
             host_only=False,
         )
     ]
+
+
+def test_firefox_profile_selection_prefers_install_default_over_relative_profiles(
+    tmp_path,
+):
+    firefox_root = tmp_path / "firefox"
+    relative = firefox_root / "Profiles" / "relative"
+    profile_default = firefox_root / "Profiles" / "profile-default"
+    install_default = firefox_root / "Profiles" / "install-default"
+    for profile in (relative, profile_default, install_default):
+        profile.mkdir(parents=True)
+    (firefox_root / "profiles.ini").write_text(
+        """[InstallABC]
+Default=Profiles/install-default
+Locked=1
+
+[Profile0]
+IsRelative=1
+Path=Profiles/relative
+
+[Profile1]
+Default=1
+IsRelative=1
+Path=Profiles/profile-default
+""",
+        encoding="utf-8",
+    )
+
+    assert _find_firefox_profile(firefox_root) == install_default
+
+
+def test_firefox_profile_selection_reads_install_defaults_from_installs_ini(tmp_path):
+    firefox_root = tmp_path / "firefox"
+    selected = firefox_root / "Profiles" / "selected"
+    selected.mkdir(parents=True)
+    (firefox_root / "installs.ini").write_text(
+        "[ABC]\nDefault=Profiles/selected\nLocked=1\n",
+        encoding="utf-8",
+    )
+
+    assert _find_firefox_profile(firefox_root) == selected

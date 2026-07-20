@@ -12,7 +12,6 @@ import requests
 from html2md.markdown.converter import html_to_markdown
 from html2md.network.header_manager import HeaderManager
 
-
 HTML = b"<!DOCTYPE html><html><body><h1>Compression Test</h1></body></html>"
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 from typing import Protocol
 
 from html2md.config.loader import load_config
@@ -48,33 +49,65 @@ class ExportedCookieSource:
 
 @dataclass(frozen=True)
 class ChromeCookieSource:
+    path: Path | None = None
     name: str = "chrome"
 
     def capability(self) -> CookieSourceCapability:
-        from html2md.cookies.session_manager import HAS_CRYPTO, get_browser_cookie_path
+        from html2md.cookies.session_manager import (
+            HAS_CRYPTO,
+            get_browser_cookie_path,
+            get_chrome_encryption_key,
+        )
 
-        path = get_browser_cookie_path(self.name)
-        available = bool(HAS_CRYPTO and path and path.is_file())
+        path = get_browser_cookie_path(self.name, self.path)
+        supported_platform = sys.platform == "win32"
+        platform_name = {
+            "darwin": "macOS",
+            "win32": "Windows",
+        }.get(
+            sys.platform, "Linux" if sys.platform.startswith("linux") else sys.platform
+        )
+        available = bool(HAS_CRYPTO and supported_platform and path and path.is_file())
         detail = str(path) if path else "cookie database path is unavailable"
         if not HAS_CRYPTO:
             detail = "cookie decryption dependency is unavailable"
+        elif not supported_platform:
+            detail = (
+                f"automatic Chrome cookie decryption is unavailable on {platform_name}; "
+                "use an owner-private exported cookie JSON file"
+            )
+        elif not path or not path.is_file():
+            detail = f"Chrome cookie database not found at {path}"
+        else:
+            try:
+                get_chrome_encryption_key()
+            except (CookieSourceError, ImportError) as error:
+                available = False
+                detail = str(error)
         return CookieSourceCapability(self.name, available, detail)
 
     def load(self, url: str) -> list[CookieRecord]:
         from html2md.cookies.session_manager import get_chrome_cookies
         from html2md.cookies.replay import target_hostname
 
-        return get_chrome_cookies(target_hostname(url))
+        capability = self.capability()
+        if not capability.available:
+            raise CookieSourceError(
+                f"Chrome cookie source is unavailable on {sys.platform}: "
+                f"{capability.detail}"
+            )
+        return get_chrome_cookies(target_hostname(url), cookie_path=self.path)
 
 
 @dataclass(frozen=True)
 class FirefoxCookieSource:
+    path: Path | None = None
     name: str = "firefox"
 
     def capability(self) -> CookieSourceCapability:
         from html2md.cookies.session_manager import get_browser_cookie_path
 
-        path = get_browser_cookie_path(self.name)
+        path = get_browser_cookie_path(self.name, self.path)
         available = bool(path and path.exists())
         return CookieSourceCapability(
             self.name,
@@ -86,17 +119,19 @@ class FirefoxCookieSource:
         from html2md.cookies.session_manager import get_firefox_cookies
         from html2md.cookies.replay import target_hostname
 
-        return get_firefox_cookies(target_hostname(url))
+        return get_firefox_cookies(target_hostname(url), cookie_path=self.path)
 
 
-def browser_cookie_source(browser: str | None = None) -> CookieSource:
+def browser_cookie_source(
+    browser: str | None = None, cookie_path: Path | None = None
+) -> CookieSource:
     """Resolve one supported adapter using configuration at call time."""
     configured = load_config().get("browser", {}).get("preferred", "chrome")
     selected = browser or configured
     if selected == "chrome":
-        return ChromeCookieSource()
+        return ChromeCookieSource(cookie_path)
     if selected == "firefox":
-        return FirefoxCookieSource()
+        return FirefoxCookieSource(cookie_path)
     raise CookieSourceError(
         "Cookie extraction is supported only for chrome and firefox, "
         f"not {selected!r}"

@@ -87,9 +87,9 @@ def test_rewrite_archived_files_isolates_missing_file_failure(tmp_path):
 
 def test_batch_mapping_and_rewrites_exclude_failed_outputs(tmp_path):
     source = tmp_path / "links.md"
-    source.write_text("fixture", encoding="utf-8")
     good = "https://example.com/good"
     failed = "https://example.com/failed"
+    source.write_text(f"{good}\n{failed}\n", encoding="utf-8")
     good_page = AcquiredPage(
         good,
         good,
@@ -119,15 +119,9 @@ def test_batch_mapping_and_rewrites_exclude_failed_outputs(tmp_path):
         ConversionFailure("conversion failed"),
     ]
 
-    with (
-        patch(
-            "html2md.markdown.batch_processor.get_urls_from_file",
-            return_value=[good, failed],
-        ),
-        patch(
-            "html2md.markdown.batch_processor.acquire_http_page",
-            side_effect=[good_page, failed_page],
-        ),
+    with patch(
+        "html2md.markdown.batch_processor.acquire_http_page",
+        side_effect=[good_page, failed_page],
     ):
         result = process_markdown_links(
             [source], tmp_path / "output", page_pipeline=pipeline

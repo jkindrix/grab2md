@@ -45,8 +45,7 @@ def test_signal_saves_one_valid_resumable_checkpoint_and_terminates(tmp_path, si
     state_dir = tmp_path / "states"
     output_dir = tmp_path / "output"
     queued_url = "https://example.com/interrupted"
-    script = textwrap.dedent(
-        f"""
+    script = textwrap.dedent(f"""
         import time
         from html2md.utils.state_manager import StateManager
 
@@ -60,8 +59,7 @@ def test_signal_saves_one_valid_resumable_checkpoint_and_terminates(tmp_path, si
             print(state.crawl_id, flush=True)
             while True:
                 time.sleep(1)
-        """
-    )
+        """)
     process = subprocess.Popen(
         [sys.executable, "-c", script],
         cwd=tmp_path,

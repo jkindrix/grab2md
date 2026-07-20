@@ -15,7 +15,6 @@ import threading
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Dict, Optional, Tuple
 from urllib.parse import urlparse
 
 logger = logging.getLogger("html2md")
@@ -66,7 +65,7 @@ class SlidingWindowCounter:
         self.requests: deque[float] = deque()
         self.lock = threading.Lock()
 
-    def add_request(self, timestamp: Optional[float] = None) -> None:
+    def add_request(self, timestamp: float | None = None) -> None:
         """Add a request to the counter."""
         if timestamp is None:
             timestamp = time.time()
@@ -75,7 +74,7 @@ class SlidingWindowCounter:
             self.requests.append(timestamp)
             self._cleanup_old_requests(timestamp)
 
-    def get_request_count(self, timestamp: Optional[float] = None) -> int:
+    def get_request_count(self, timestamp: float | None = None) -> int:
         """Get current request count in the window."""
         if timestamp is None:
             timestamp = time.time()
@@ -172,7 +171,7 @@ class DomainRateLimiter:
         )  # Keep last 100 response times
         self.lock = threading.Lock()
 
-    def can_make_request(self) -> Tuple[bool, float]:
+    def can_make_request(self) -> tuple[bool, float]:
         """
         Check if a request can be made now.
 
@@ -221,7 +220,7 @@ class DomainRateLimiter:
         return current_time
 
     def record_request_end(
-        self, start_time: float, success: bool, response_time: Optional[float] = None
+        self, start_time: float, success: bool, response_time: float | None = None
     ) -> None:
         """Record the completion of a request."""
         if response_time is None:
@@ -281,9 +280,9 @@ class DomainRateLimiter:
 class GlobalRateLimiter:
     """Global rate limiter managing multiple domains."""
 
-    def __init__(self, config: Optional[RateLimitConfig] = None):
+    def __init__(self, config: RateLimitConfig | None = None):
         self.config = config or RateLimitConfig()
-        self.domain_limiters: Dict[str, DomainRateLimiter] = {}
+        self.domain_limiters: dict[str, DomainRateLimiter] = {}
         self.lock = threading.Lock()
 
     def _get_domain_limiter(self, url: str) -> DomainRateLimiter:
@@ -296,7 +295,7 @@ class GlobalRateLimiter:
 
         return self.domain_limiters[domain]
 
-    def can_make_request(self, url: str) -> Tuple[bool, float]:
+    def can_make_request(self, url: str) -> tuple[bool, float]:
         """
         Check if a request can be made to the given URL.
 
@@ -316,7 +315,7 @@ class GlobalRateLimiter:
         url: str,
         start_time: float,
         success: bool,
-        response_time: Optional[float] = None,
+        response_time: float | None = None,
     ) -> None:
         """Record the completion of a request."""
         limiter = self._get_domain_limiter(url)
@@ -327,7 +326,7 @@ class GlobalRateLimiter:
         limiter = self._get_domain_limiter(url)
         return limiter.get_stats()
 
-    def get_all_stats(self) -> Dict[str, RateLimitStats]:
+    def get_all_stats(self) -> dict[str, RateLimitStats]:
         """Get statistics for all domains."""
         with self.lock:
             return {

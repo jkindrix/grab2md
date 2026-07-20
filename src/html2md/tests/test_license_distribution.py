@@ -3,7 +3,6 @@
 import tomllib
 from pathlib import Path
 
-
 PROJECT_ROOT = Path(__file__).parents[3]
 
 
@@ -28,8 +27,19 @@ def test_package_metadata_and_readmes_point_to_mit_grant():
     )
 
     assert metadata["tool"]["poetry"]["license"] == "MIT"
-    assert "[MIT License](./LICENSE)" in root_readme
+    assert "html2md/blob/main/LICENSE" in root_readme
     assert "[MIT License](../LICENSE)" in extension_readme
+    urls = metadata["tool"]["poetry"]["urls"]
+    assert set(urls) == {"Repository", "Issues", "Changelog", "Documentation"}
+    assert all(
+        value.startswith("https://github.com/jkindrix/html2md")
+        for value in urls.values()
+    )
+    assert (
+        "Programming Language :: Python :: 3.13"
+        in metadata["tool"]["poetry"]["classifiers"]
+    )
+    assert "](./" not in root_readme
 
 
 def test_vendored_turndown_notice_preserves_license_and_provenance():

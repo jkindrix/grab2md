@@ -67,7 +67,13 @@ def start_contract_server():
 
 
 def response(status, body="", url="https://example.com/final", headers=None):
-    return Mock(status_code=status, text=body, url=url, headers=headers or {})
+    return Mock(
+        status_code=status,
+        text=body,
+        content=body.encode("utf-8"),
+        url=url,
+        headers=headers or {},
+    )
 
 
 def test_fetch_result_preserves_redirect_target_status_and_headers():

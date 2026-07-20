@@ -21,6 +21,7 @@ def _convert_one(
     no_cookies: bool,
     browser_cookies: bool,
     browser: Optional[Enum],
+    cookie_path: Optional[Path],
     cookie_json: Optional[Path],
     headers_file: Optional[Path],
     storage_state: Optional[Path],
@@ -45,6 +46,7 @@ def _convert_one(
         no_cookies=no_cookies,
         browser_cookies=browser_cookies,
         browser=browser.value if browser else None,
+        cookie_path=cookie_path,
         cookie_json=cookie_json,
         headers_file=headers_file,
         storage_state=storage_state,
@@ -87,7 +89,6 @@ def process_single_with_progress(
     console: Optional[Console] = None,
 ) -> bool:
     """Render a shared conversion result with interactive progress output."""
-    del cookie_path  # The command persists this preference before conversion.
     if progress is None or task_id is None or console is None:
         raise ValueError("progress, task_id, and console are required in fancy mode")
     progress.update(task_id, description=f"Processing {source}")
@@ -99,6 +100,7 @@ def process_single_with_progress(
         no_cookies,
         browser_cookies,
         browser,
+        cookie_path,
         cookie_json,
         headers_file,
         storage_state,
@@ -183,7 +185,6 @@ def process_single_quiet(
     allow_private_network: bool = False,
 ) -> bool:
     """Render a shared conversion result without decoration."""
-    del cookie_path  # The command persists this preference before conversion.
     result = _convert_one(
         source,
         content_mode,
@@ -192,6 +193,7 @@ def process_single_quiet(
         no_cookies,
         browser_cookies,
         browser,
+        cookie_path,
         cookie_json,
         headers_file,
         storage_state,

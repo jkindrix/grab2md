@@ -20,7 +20,6 @@ from html2md.network.request_handler import FetchResult
 from html2md.network.safe_http import UnsafeNetworkTarget
 from html2md.utils.state_manager import StateManager
 
-
 HTML = "<html><body><h1>Fetched once</h1></body></html>"
 
 
@@ -58,6 +57,35 @@ def test_each_page_is_fetched_once_and_same_body_is_converted(tmp_path):
     output = Path(crawl_result.url_mapping["https://example.com"])
     assert output.read_text(encoding="utf-8").strip() == "# Fetched once"
     assert fetch.call_args.kwargs["request_scheduler"] is not None
+
+
+def test_crawl_decodes_charsetless_utf8_from_raw_response_bytes(tmp_path):
+    html = "<html><body><h1>café ☕</h1></body></html>"
+    fetched = FetchResult(
+        requested_url="https://example.com",
+        final_url="https://example.com",
+        status_code=200,
+        headers={"Content-Type": "text/html"},
+        content=html.encode("utf-8"),
+    )
+    with patch("html2md.markdown.crawler.fetch_html", return_value=fetched):
+        result = crawl(tmp_path)
+
+    output = Path(result.url_mapping["https://example.com"])
+    assert output.read_text(encoding="utf-8").strip() == "# café ☕"
+
+
+def test_frontier_deduplicates_fragments_but_preserves_query_resources():
+    frontier = CrawlFrontier([("https://example.com/page#top", 0)])
+
+    assert frontier.enqueue("https://example.com/page#details", 0) is False
+    assert frontier.enqueue("https://example.com/page?view=one#top", 0) is True
+    assert frontier.enqueue("https://example.com/page?view=two", 0) is True
+    assert frontier.snapshot() == [
+        ("https://example.com/page#top", 0),
+        ("https://example.com/page?view=one#top", 0),
+        ("https://example.com/page?view=two", 0),
+    ]
 
 
 def test_redirect_final_url_sets_discovery_scope_before_robots_checks(tmp_path):
@@ -202,6 +230,65 @@ def test_429_response_is_requeued_and_retried(tmp_path):
     assert fetch.call_count == 2
 
 
+def test_disabled_checkpoints_do_not_mutate_resume_scope(tmp_path):
+    redirected = FetchResult(
+        requested_url="https://example.com",
+        final_url="https://www.example.com/final",
+        status_code=200,
+        body=HTML,
+    )
+    manager = StateManager(state_dir=tmp_path / "states")
+    with patch("html2md.markdown.crawler.fetch_html", return_value=redirected):
+        result = crawl_website(
+            "https://example.com",
+            tmp_path / "output",
+            max_pages=1,
+            respect_robots=False,
+            enable_checkpoints=False,
+            state_manager=manager,
+        )
+
+    assert result.success is True
+    assert manager.current_state is not None
+    assert manager.current_state.config["scope_url"] == "https://example.com"
+    assert [item.message for item in manager.current_state.checkpoints] == [
+        "Initial state"
+    ]
+
+
+def test_no_progress_suppresses_callbacks_without_suppressing_the_crawl(tmp_path):
+    progress = Mock()
+    with patch("html2md.markdown.crawler.fetch_html", return_value=fetch_result()):
+        result = crawl(tmp_path, show_progress=False, progress_callback=progress)
+
+    assert result.success is True
+    progress.assert_not_called()
+
+
+def test_partial_failure_checkpoint_describes_the_terminal_state(tmp_path):
+    manager = StateManager(state_dir=tmp_path / "states")
+    failed = FetchResult(
+        requested_url="https://example.com",
+        final_url="https://example.com",
+        status_code=500,
+        error="HTTP 500",
+    )
+    with patch("html2md.markdown.crawler.fetch_html", return_value=failed):
+        result = crawl_website(
+            "https://example.com",
+            tmp_path / "output",
+            max_pages=1,
+            respect_robots=False,
+            state_manager=manager,
+        )
+
+    assert result.failed_count == 1
+    assert manager.current_state is not None
+    assert manager.current_state.checkpoints[-1].message == (
+        "Crawl completed with 1 failed URLs"
+    )
+
+
 def test_engine_uses_injected_pipeline_store_checkpoint_and_event_sink(tmp_path):
     url = "https://example.com/page"
     frontier = CrawlFrontier([(url, 0)])
@@ -249,3 +336,57 @@ def test_engine_uses_injected_pipeline_store_checkpoint_and_event_sink(tmp_path)
     store.write_text.assert_called_once()
     checkpoint.succeeded.assert_called_once()
     assert any(call.args[2] == "saved" for call in events.call_args_list)
+
+
+def test_success_checkpoint_contains_links_discovered_from_completed_page(tmp_path):
+    url = "https://example.com/page"
+    child = "https://example.com/child"
+    frontier = CrawlFrontier([(url, 0)])
+    checkpoint = Mock()
+    snapshots = []
+    checkpoint.succeeded.side_effect = lambda _url, _output, current: snapshots.append(
+        current.snapshot()
+    )
+    headers = Mock()
+    headers.get_headers.return_value = {"User-Agent": "html2md"}
+    fetch = Mock(
+        return_value=FetchResult(
+            url,
+            url,
+            status_code=200,
+            body=f'<html><a href="{child}">Child</a></html>',
+        )
+    )
+    store = Mock()
+    store.write_text.side_effect = ArtifactStore.write_text
+    engine = SequentialCrawlEngine(
+        frontier=frontier,
+        scope=CrawlScope(url, "domain-only"),
+        robots=None,
+        scheduler=Mock(),
+        page_pipeline=PagePipeline(),
+        artifact_store=store,
+        checkpoint_store=checkpoint,
+        event_sink=Mock(),
+        session=Mock(),
+        network_policy=Mock(),
+        header_manager=headers,
+        manifest=ArtifactManifest(),
+        output_planner=OutputPlanner(tmp_path),
+        url_mapping={},
+        fetch_page=fetch,
+        options=CrawlOptions(
+            max_depth=1,
+            max_pages=1,
+            content_mode=ContentMode.FULL,
+            selector=None,
+            download_images=False,
+            images_dir="images",
+            include_metadata=False,
+            allow_private_network=False,
+        ),
+    )
+
+    engine.run()
+
+    assert snapshots == [[(child, 1)]]

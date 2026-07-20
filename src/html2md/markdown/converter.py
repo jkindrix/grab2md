@@ -134,8 +134,9 @@ def html_content_to_markdown(
             )
             .markdown
         )
-    except ConversionFailure:
-        raise
+    except ConversionFailure as error:
+        logger.error("%s", error)
+        return None
 
 
 def local_html_to_markdown(
@@ -170,7 +171,7 @@ def local_html_to_markdown(
             )
             .markdown
         )
-    except AcquisitionFailure as error:
+    except (AcquisitionFailure, ConversionFailure) as error:
         logger.error("%s", error)
         return None
     finally:

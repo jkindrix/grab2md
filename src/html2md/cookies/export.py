@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-import json
-
 from html2md.cookies.errors import CookieSourceError
 from html2md.cookies.replay import CookieRecord, target_hostname
+from html2md.utils.private_json import load_private_json
 from html2md.utils.redaction import get_redacting_logger
-
 
 logger = get_redacting_logger("session_manager")
 
@@ -16,8 +14,7 @@ def load_cookies_from_json(json_file, url=None) -> list[CookieRecord]:
     """Load scoped records from a browser developer-tools export."""
     cookies: list[CookieRecord] = []
     try:
-        with open(json_file, "r", encoding="utf-8") as cookie_file:
-            cookie_data = json.load(cookie_file)
+        cookie_data = load_private_json(json_file, description="Cookie export")
 
         hostname = target_hostname(url) if url else ""
         if isinstance(cookie_data, list):

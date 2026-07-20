@@ -54,13 +54,14 @@ def test_url_conversion_builds_one_session_and_threads_security_options(
     monkeypatch.setattr(conversion_service, "PagePipeline", Mock(return_value=pipeline))
 
     output = tmp_path / "docs" / "page.md"
+    cookie_path = tmp_path / "Profiles" / "cookies.sqlite"
     result = conversion_service.convert_source(
         "https://example.com/page",
         output=output,
         no_cookies=False,
         browser_cookies=True,
         browser="firefox",
-        cookie_json=tmp_path / "cookies.json",
+        cookie_path=cookie_path,
         download_images=True,
         insecure=True,
         include_metadata=True,
@@ -73,8 +74,9 @@ def test_url_conversion_builds_one_session_and_threads_security_options(
     apply_cookies.assert_called_once_with(
         session,
         "https://example.com/page",
-        tmp_path / "cookies.json",
+        None,
         browser="firefox",
+        cookie_path=cookie_path,
     )
     assert acquire.call_args.kwargs["headers"] == {"User-Agent": "html2md-test"}
     assert acquire.call_args.kwargs["session"] is session
@@ -134,6 +136,63 @@ def test_conversion_exceptions_become_typed_failures(monkeypatch):
     assert result.succeeded is False
     assert result.error == "bad config"
     assert result.markdown is None
+
+
+def test_cookie_extraction_failure_closes_the_created_session(monkeypatch):
+    session = Mock()
+    monkeypatch.setattr(conversion_service, "get_session", Mock(return_value=session))
+    monkeypatch.setattr(
+        conversion_service,
+        "apply_browser_cookies",
+        Mock(side_effect=RuntimeError("cookie failure")),
+    )
+
+    result = conversion_service.convert_source(
+        "https://example.com",
+        output=None,
+        no_cookies=False,
+        browser_cookies=True,
+        browser="chrome",
+    )
+
+    assert result.succeeded is False
+    assert result.error == "cookie failure"
+    session.close.assert_called_once()
+
+
+def test_cookie_json_is_an_explicit_source_without_browser_database_flag(
+    monkeypatch, tmp_path
+):
+    session = Mock()
+    page = _page()
+    pipeline = Mock()
+    pipeline.convert.return_value = _document(page)
+    apply_cookies = Mock(return_value=session)
+    monkeypatch.setattr(conversion_service, "get_session", Mock(return_value=session))
+    monkeypatch.setattr(conversion_service, "apply_browser_cookies", apply_cookies)
+    monkeypatch.setattr(
+        conversion_service, "acquire_http_page", Mock(return_value=page)
+    )
+    monkeypatch.setattr(conversion_service, "PagePipeline", Mock(return_value=pipeline))
+    cookie_json = tmp_path / "cookies.json"
+
+    result = conversion_service.convert_source(
+        "https://example.com",
+        output=None,
+        no_cookies=False,
+        browser_cookies=False,
+        browser=None,
+        cookie_json=cookie_json,
+    )
+
+    assert result.succeeded
+    apply_cookies.assert_called_once_with(
+        session,
+        "https://example.com",
+        cookie_json,
+        browser=None,
+        cookie_path=None,
+    )
 
 
 def test_empty_conversion_is_not_success(monkeypatch, tmp_path):

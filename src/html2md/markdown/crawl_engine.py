@@ -8,16 +8,16 @@ from typing import Any, Callable, Iterable, MutableMapping, Optional
 
 from html2md.markdown.archive import (
     ArtifactManifest,
-    ArtifactRecord,
     OutputPlanner,
+    canonical_url_identity,
 )
+from html2md.markdown.archiving import ArchiveCoordinator
 from html2md.markdown.content_extractor import ContentMode
 from html2md.markdown.link_rewriter import rewrite_archived_files
-from html2md.markdown.pipeline import AcquiredPage, PagePipeline
+from html2md.markdown.pipeline import AcquiredPage, PagePipeline, acquired_http_page
 from html2md.network.request_handler import FetchResult
 from html2md.network.safe_http import UnsafeNetworkTarget
 from html2md.utils.parser import extract_links_from_html, should_follow_link
-
 
 MAX_RATE_LIMIT_RETRIES = 2
 ProgressSink = Callable[[str, Optional[str], Optional[str]], None]
@@ -39,11 +39,13 @@ class CrawlFrontier:
         *,
         terminal_urls: Iterable[str] = (),
     ) -> None:
-        self._queue = deque(FrontierItem(url, depth) for url, depth in items)
-        self._queued = {item.url for item in self._queue}
+        self._queue: deque[FrontierItem] = deque()
+        self._queued: set[str] = set()
         self._active: set[str] = set()
-        self._terminal = set(terminal_urls)
+        self._terminal = {canonical_url_identity(url) for url in terminal_urls}
         self._retryable_attempts: dict[str, int] = defaultdict(int)
+        for url, depth in items:
+            self.enqueue(url, depth)
 
     def __bool__(self) -> bool:
         return bool(self._queue)
@@ -55,31 +57,42 @@ class CrawlFrontier:
     def pop(self) -> Optional[FrontierItem]:
         while self._queue:
             item = self._queue.popleft()
-            self._queued.discard(item.url)
-            if item.url not in self._terminal:
-                self._active.add(item.url)
+            identity = canonical_url_identity(item.url)
+            self._queued.discard(identity)
+            if identity not in self._terminal:
+                self._active.add(identity)
                 return item
         return None
 
     def enqueue(self, url: str, depth: int) -> bool:
-        if url in self._terminal or url in self._queued or url in self._active:
+        identity = canonical_url_identity(url)
+        if (
+            identity in self._terminal
+            or identity in self._queued
+            or identity in self._active
+        ):
             return False
         self._queue.append(FrontierItem(url, depth))
-        self._queued.add(url)
+        self._queued.add(identity)
         return True
 
     def retry(self, item: FrontierItem) -> int:
-        self._retryable_attempts[item.url] += 1
-        self._active.discard(item.url)
+        identity = canonical_url_identity(item.url)
+        self._retryable_attempts[identity] += 1
+        self._active.discard(identity)
         self.enqueue(item.url, item.depth)
-        return self._retryable_attempts[item.url]
+        return self._retryable_attempts[identity]
 
     def can_retry(self, url: str) -> bool:
-        return self._retryable_attempts[url] < MAX_RATE_LIMIT_RETRIES
+        return (
+            self._retryable_attempts[canonical_url_identity(url)]
+            < MAX_RATE_LIMIT_RETRIES
+        )
 
     def finish(self, url: str) -> None:
-        self._active.discard(url)
-        self._terminal.add(url)
+        identity = canonical_url_identity(url)
+        self._active.discard(identity)
+        self._terminal.add(identity)
 
     def snapshot(self, active: Optional[FrontierItem] = None) -> list[tuple[str, int]]:
         queued = [(item.url, item.depth) for item in self._queue]
@@ -119,7 +132,8 @@ class CrawlCheckpointStore:
             self.state_manager.update_progress(url, False, error_message=error)
 
     def set_scope(self, scope_url: str) -> None:
-        self.state_manager.current_state.config["scope_url"] = scope_url
+        if self.enabled and self.state_manager.current_state is not None:
+            self.state_manager.current_state.config["scope_url"] = scope_url
 
 
 @dataclass(frozen=True)
@@ -170,14 +184,17 @@ class SequentialCrawlEngine:
         self.robots = robots
         self.scheduler = scheduler
         self.page_pipeline = page_pipeline
-        self.artifact_store = artifact_store
         self.checkpoints = checkpoint_store
         self.emit = event_sink
         self.session = session
         self.network_policy = network_policy
         self.header_manager = header_manager
         self.manifest = manifest
-        self.output_planner = output_planner
+        self.archiver = ArchiveCoordinator(
+            manifest=manifest,
+            planner=output_planner,
+            write_text=artifact_store.write_text,
+        )
         self.url_mapping = url_mapping
         self.fetch_page = fetch_page
         self.options = options
@@ -210,53 +227,41 @@ class SequentialCrawlEngine:
             request_scheduler=self.scheduler,
         )
 
-    def _persist(self, item: FrontierItem, result: FetchResult) -> str:
-        existing = self.manifest.resolve(result.final_url)
-        if existing is not None:
-            self.manifest.register_alias(item.url, existing)
-            return str(existing.output_path)
-
-        output_path = self.output_planner.plan(result.final_url)
-        page = AcquiredPage(
+    @staticmethod
+    def _acquired_page(item: FrontierItem, result: FetchResult) -> AcquiredPage:
+        assert result.status_code is not None
+        content = result.content
+        if content is None:
+            content = (result.body or "").encode("utf-8")
+        return acquired_http_page(
             requested_url=item.url,
             final_url=result.final_url,
-            html=result.body or "",
             status_code=result.status_code,
             headers=result.headers,
-            media_type="text/html",
-            charset="utf-8",
+            content=content,
         )
-        document = self.page_pipeline.convert(
-            page,
-            content_mode=self.options.content_mode,
-            selector=self.options.selector,
-            download_images=self.options.download_images,
-            output_dir=output_path.parent,
-            images_dir=self.options.images_dir,
-            include_metadata=self.options.include_metadata,
-            session=self.session,
-            allow_private_network=self.options.allow_private_network,
-            request_scheduler=self.scheduler,
-        )
-        canonical_url = document.metadata.canonical_url
-        canonical_record = (
-            self.manifest.resolve(canonical_url) if canonical_url else None
-        )
-        if canonical_record is not None:
-            self.manifest.register_alias(item.url, canonical_record)
-            self.manifest.register_alias(result.final_url, canonical_record)
-            return str(canonical_record.output_path)
 
-        self.artifact_store.write_text(output_path, document.markdown)
-        self.manifest.register(
-            ArtifactRecord(item.url, result.final_url, canonical_url, output_path)
-        )
-        return str(output_path)
+    def _persist(self, item: FrontierItem, page: AcquiredPage) -> str:
+        def convert(output_path):
+            return self.page_pipeline.convert(
+                page,
+                content_mode=self.options.content_mode,
+                selector=self.options.selector,
+                download_images=self.options.download_images,
+                output_dir=output_path.parent,
+                images_dir=self.options.images_dir,
+                include_metadata=self.options.include_metadata,
+                session=self.session,
+                allow_private_network=self.options.allow_private_network,
+                request_scheduler=self.scheduler,
+            )
 
-    def _discover(self, item: FrontierItem, result: FetchResult) -> None:
+        return str(self.archiver.archive(item.url, page, convert).output_path)
+
+    def _discover(self, item: FrontierItem, page: AcquiredPage) -> None:
         if item.depth >= self.options.max_depth:
             return
-        links = extract_links_from_html(result.body or "", result.final_url)
+        links = extract_links_from_html(page.html, page.final_url)
         self.emit(
             f"Found {len(links)} links on {item.url}",
             item.url,
@@ -306,7 +311,7 @@ class SequentialCrawlEngine:
             return
 
         self.frontier.finish(item.url)
-        if not result.success or not result.body:
+        if not result.success:
             error = result.error or "Failed to fetch content"
             self.emit(
                 f"Failed to fetch content from {item.url}: {error}",
@@ -321,13 +326,13 @@ class SequentialCrawlEngine:
             self.scope.root_url = result.final_url
             self.checkpoints.set_scope(result.final_url)
 
-        output_file = self._persist(item, result)
+        page = self._acquired_page(item, result)
+        output_file = self._persist(item, page)
         self.url_mapping[item.url] = output_file
         self.emit(f"Saved markdown to: {output_file}", item.url, "saved")
         self.processed_count += 1
+        self._discover(item, page)
         self.checkpoints.succeeded(item.url, output_file, self.frontier)
-        self._discover(item, result)
-        self.checkpoints.sync(self.frontier)
 
     def run(self) -> CrawlRun:
         while self.frontier and self.processed_count < self.options.max_pages:

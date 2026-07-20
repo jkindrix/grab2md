@@ -273,8 +273,8 @@ class TestStateManager:
         assert cleaned == 1
         assert not state_file.exists()
 
-    def test_atomic_writes(self, state_manager, temp_state_dir):
-        """Test atomic write functionality."""
+    def test_backup_captures_the_previous_state(self, state_manager, temp_state_dir):
+        """A second save retains the previous complete document as backup."""
         state = state_manager.create_new_state(
             start_url="https://example.com", output_dir="/tmp/output", config={}
         )
