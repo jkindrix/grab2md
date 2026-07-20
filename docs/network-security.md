@@ -23,8 +23,8 @@ downloader:
   the next request, and strip explicit Cookie and cross-origin Authorization
   headers;
 - reject HTTPS-to-HTTP redirect downgrades;
-- apply IPv4 destination classification to addresses embedded in the
-  well-known `64:ff9b::/96` NAT64 prefix; and
+- apply IPv4 destination classification to IPv4-mapped, 6to4, deprecated
+  IPv4-compatible `::/96`, and well-known `64:ff9b::/96` NAT64 addresses; and
 - cap static page and crawl bodies at 10 MiB and robots files at 1 MiB.
 
 The supported Requests version is checked at runtime for the adapter hooks

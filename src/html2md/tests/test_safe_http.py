@@ -44,6 +44,25 @@ def test_policy_rejects_nat64_encoding_of_non_public_ipv4():
             DestinationPolicy().addresses_for("https://metadata.example/path")
 
 
+@pytest.mark.parametrize(
+    "address",
+    ["::127.0.0.1", "::10.0.0.1", "::169.254.169.254"],
+)
+def test_policy_rejects_ipv4_compatible_encoding_of_non_public_ipv4(address):
+    records = [(10, 1, 6, "", (address, 443))]
+    with patch("html2md.network.safe_http.socket.getaddrinfo", return_value=records):
+        with pytest.raises(UnsafeNetworkTarget, match="non-public"):
+            DestinationPolicy().addresses_for("https://compatible.example/path")
+
+
+def test_policy_allows_ipv4_compatible_encoding_of_public_ipv4():
+    records = [(10, 1, 6, "", ("::93.184.216.34", 443))]
+    with patch("html2md.network.safe_http.socket.getaddrinfo", return_value=records):
+        assert DestinationPolicy().addresses_for("https://compatible.example/path") == (
+            "::5db8:d822",
+        )
+
+
 def test_policy_allows_nat64_encoding_of_public_ipv4():
     records = [(10, 1, 6, "", ("64:ff9b::5db8:d822", 443))]
     with patch("html2md.network.safe_http.socket.getaddrinfo", return_value=records):
@@ -225,16 +244,16 @@ def test_cross_origin_redirect_strips_explicit_credentials():
                 "GET",
                 "https://one.example/start",
                 headers={
-                    "Authorization": "Bearer secret",
-                    "Cookie": "token=secret",
+                    "aUtHoRiZaTiOn": "Bearer secret",
+                    "cOoKiE": "token=secret",
                     "X-Custom-Secret": "secret",
                     "Accept": "text/html",
                 },
             )
 
     second_headers = client.session.request.call_args_list[1].kwargs["headers"]
-    assert "Authorization" not in second_headers
-    assert "Cookie" not in second_headers
+    assert not any(name.casefold() == "authorization" for name in second_headers)
+    assert not any(name.casefold() == "cookie" for name in second_headers)
     assert "X-Custom-Secret" not in second_headers
     assert second_headers["Accept"] == "text/html"
     assert "Authorization" not in client.session.headers

@@ -241,12 +241,12 @@ function handleConversion() {
         return;
       }
       
-      const htmlContent = Html2MdConversionUtils.normalizeExtractedHtml(extractedContent);
-
-      // Convert HTML to Markdown
-      const markdown = convertToMarkdown(htmlContent);
-
       try {
+        const htmlContent = Html2MdConversionUtils.normalizeExtractedHtml(extractedContent);
+
+        // Convert HTML to Markdown
+        const markdown = convertToMarkdown(htmlContent);
+
         // Await output so an asynchronous clipboard/download error remains the
         // terminal status instead of being overwritten by generic success.
         await handleOutput(markdown, outputAction, tab.title);
@@ -255,7 +255,7 @@ function handleConversion() {
         }
       } catch (err) {
         if (!statusMessage.classList.contains('error')) {
-          showStatus('Output failed: ' + err, 'error');
+          showStatus('Conversion failed: ' + err, 'error');
         }
       } finally {
         showSpinner(false);

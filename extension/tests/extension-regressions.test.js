@@ -89,6 +89,10 @@ test('popup exposes only implemented link and code formatting controls', () => {
   assert.match(converter, /options\.codeBlockStyle !== 'fenced'/);
   assert.match(converter, /linkStyle: 'inlined'/);
   assert.match(popupScript, /await handleOutput\(/);
+  assert.match(
+    popupScript,
+    /try\s*{\s*const htmlContent = Html2MdConversionUtils\.normalizeExtractedHtml\([\s\S]*?const markdown = convertToMarkdown\([\s\S]*?finally\s*{\s*showSpinner\(false\)/
+  );
   assert.match(popupScript, /func: extractPageContent/);
   assert.doesNotMatch(popupScript, /function: extractPageContent/);
   assert.doesNotMatch(popup, /include-tables|Format Tables/);

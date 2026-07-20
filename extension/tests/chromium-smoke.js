@@ -399,6 +399,35 @@ async function main() {
       /Injected Article/
     );
 
+    await evaluate(
+      fixtureClient,
+      `const whitespace = document.createElement('span');
+       whitespace.id = 'whitespace-selection';
+       whitespace.textContent = '   ';
+       document.body.appendChild(whitespace);
+       const emptyRange = document.createRange();
+       emptyRange.selectNodeContents(whitespace);
+       const emptySelection = window.getSelection();
+       emptySelection.removeAllRanges();
+       emptySelection.addRange(emptyRange);`
+    );
+    await fixtureClient.send('Page.bringToFront');
+    await evaluate(
+      popupClient,
+      `conversionModeSelect.value = 'selection'; outputActionSelect.value = 'show'; convertBtn.click()`
+    );
+    await waitFor(async () => {
+      const state = await evaluate(
+        popupClient,
+        `({ status: statusMessage.textContent, error: statusMessage.classList.contains('error'), spinner: spinner.style.display })`
+      );
+      return state.error && state.spinner === 'none';
+    }, 'whitespace selection terminal error');
+    assert.match(
+      await evaluate(popupClient, 'statusMessage.textContent'),
+      /non-empty string/
+    );
+
     const turndownSource = fs.readFileSync(path.join(extensionRoot, 'turndown.js'), 'utf8');
     await evaluate(fixtureClient, turndownSource);
     const injectedMarkdown = await evaluate(

@@ -75,6 +75,35 @@ def test_crawl_decodes_charsetless_utf8_from_raw_response_bytes(tmp_path):
     assert output.read_text(encoding="utf-8").strip() == "# café ☕"
 
 
+def test_discovery_failure_does_not_persist_or_double_count_page(tmp_path):
+    manager = StateManager(state_dir=tmp_path / "states")
+    with (
+        patch("html2md.markdown.crawler.fetch_html", return_value=fetch_result()),
+        patch(
+            "html2md.markdown.crawl_engine.extract_links_from_html",
+            side_effect=ValueError("malformed discovery fixture"),
+        ),
+    ):
+        result = crawl_website(
+            "https://example.com",
+            tmp_path / "output",
+            max_pages=1,
+            max_depth=1,
+            respect_robots=False,
+            state_manager=manager,
+        )
+
+    assert result.processed_count == 0
+    assert result.failed_count == 1
+    assert result.url_mapping == {}
+    assert not list((tmp_path / "output").rglob("*.md"))
+    assert manager.current_state is not None
+    assert manager.current_state.urls_visited == {}
+    assert manager.current_state.urls_failed == {
+        "https://example.com": "malformed discovery fixture"
+    }
+
+
 def test_frontier_deduplicates_fragments_but_preserves_query_resources():
     frontier = CrawlFrontier([("https://example.com/page#top", 0)])
 

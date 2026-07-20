@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, MutableMapping, Optional
+from typing import Callable, Iterable, MutableMapping, Optional
+
+import requests
 
 from html2md.markdown.archive import (
     ArtifactManifest,
+    ArtifactStore,
     OutputPlanner,
     canonical_url_identity,
 )
@@ -15,9 +18,13 @@ from html2md.markdown.archiving import ArchiveCoordinator
 from html2md.markdown.content_extractor import ContentMode
 from html2md.markdown.link_rewriter import rewrite_archived_files
 from html2md.markdown.pipeline import AcquiredPage, PagePipeline, acquired_http_page
+from html2md.network.header_manager import HeaderManager
 from html2md.network.request_handler import FetchResult
-from html2md.network.safe_http import UnsafeNetworkTarget
+from html2md.network.request_scheduler import SequentialRequestScheduler
+from html2md.network.robots_parser import RobotsChecker
+from html2md.network.safe_http import DestinationPolicy, UnsafeNetworkTarget
 from html2md.utils.parser import extract_links_from_html, should_follow_link
+from html2md.utils.state_manager import StateManager
 
 MAX_RATE_LIMIT_RETRIES = 2
 ProgressSink = Callable[[str, Optional[str], Optional[str]], None]
@@ -111,15 +118,16 @@ class CrawlScope:
 class CrawlCheckpointStore:
     """Adapter isolating crawl orchestration from the state-manager schema."""
 
-    def __init__(self, state_manager: Any, *, enabled: bool) -> None:
+    def __init__(self, state_manager: StateManager, *, enabled: bool) -> None:
         self.state_manager = state_manager
         self.enabled = enabled
 
     def sync(
         self, frontier: CrawlFrontier, active: Optional[FrontierItem] = None
     ) -> None:
-        if self.enabled:
-            self.state_manager.current_state.urls_queued = frontier.snapshot(active)
+        state = self.state_manager.current_state
+        if self.enabled and state is not None:
+            state.urls_queued = frontier.snapshot(active)
 
     def succeeded(self, url: str, output_file: str, frontier: CrawlFrontier) -> None:
         if self.enabled:
@@ -163,15 +171,15 @@ class SequentialCrawlEngine:
         *,
         frontier: CrawlFrontier,
         scope: CrawlScope,
-        robots: Any,
-        scheduler: Any,
+        robots: RobotsChecker | None,
+        scheduler: SequentialRequestScheduler,
         page_pipeline: PagePipeline,
-        artifact_store: Any,
+        artifact_store: type[ArtifactStore],
         checkpoint_store: CrawlCheckpointStore,
         event_sink: ProgressSink,
-        session: Any,
-        network_policy: Any,
-        header_manager: Any,
+        session: requests.Session,
+        network_policy: DestinationPolicy,
+        header_manager: HeaderManager,
         manifest: ArtifactManifest,
         output_planner: OutputPlanner,
         url_mapping: MutableMapping[str, str],
@@ -258,9 +266,10 @@ class SequentialCrawlEngine:
 
         return str(self.archiver.archive(item.url, page, convert).output_path)
 
-    def _discover(self, item: FrontierItem, page: AcquiredPage) -> None:
+    def _discover(self, item: FrontierItem, page: AcquiredPage) -> list[str]:
+        """Return allowed links without mutating the frontier."""
         if item.depth >= self.options.max_depth:
-            return
+            return []
         links = extract_links_from_html(page.html, page.final_url)
         self.emit(
             f"Found {len(links)} links on {item.url}",
@@ -277,7 +286,11 @@ class SequentialCrawlEngine:
                     item.url,
                     "filtered",
                 )
-        for link in allowed:
+        return allowed
+
+    def _enqueue_discovered(self, item: FrontierItem, links: Iterable[str]) -> None:
+        """Commit already-parsed discovery results to the frontier."""
+        for link in links:
             if self.frontier.enqueue(link, item.depth + 1):
                 self.emit(
                     f"Queued link (depth {item.depth + 1}): {link}",
@@ -310,7 +323,6 @@ class SequentialCrawlEngine:
             self.checkpoints.sync(self.frontier)
             return
 
-        self.frontier.finish(item.url)
         if not result.success:
             error = result.error or "Failed to fetch content"
             self.emit(
@@ -318,20 +330,24 @@ class SequentialCrawlEngine:
                 item.url,
                 "failed",
             )
+            self.frontier.finish(item.url)
             self.failed_count += 1
             self.checkpoints.failed(item.url, error, self.frontier)
             return
 
         if item.depth == 0 and item.url == self.scope.root_url:
             self.scope.root_url = result.final_url
-            self.checkpoints.set_scope(result.final_url)
 
         page = self._acquired_page(item, result)
+        discovered = self._discover(item, page)
         output_file = self._persist(item, page)
+        self._enqueue_discovered(item, discovered)
+        self.frontier.finish(item.url)
         self.url_mapping[item.url] = output_file
         self.emit(f"Saved markdown to: {output_file}", item.url, "saved")
         self.processed_count += 1
-        self._discover(item, page)
+        if item.depth == 0:
+            self.checkpoints.set_scope(self.scope.root_url)
         self.checkpoints.succeeded(item.url, output_file, self.frontier)
 
     def run(self) -> CrawlRun:

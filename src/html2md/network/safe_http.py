@@ -16,6 +16,7 @@ from typing import (
     Mapping,
     MutableMapping,
     Optional,
+    TypeVar,
     cast,
 )
 from urllib.parse import urljoin, urlsplit
@@ -38,6 +39,8 @@ SAFE_CROSS_ORIGIN_HEADERS = {
     "user-agent",
 }
 NAT64_WELL_KNOWN_PREFIX = ipaddress.ip_network("64:ff9b::/96")
+IPV4_COMPATIBLE_PREFIX = ipaddress.ip_network("::/96")
+_HeaderValue = TypeVar("_HeaderValue")
 
 
 class UnsafeNetworkTarget(requests.RequestException):
@@ -76,7 +79,17 @@ def _embedded_ipv4(
         return address.sixtofour
     if address in NAT64_WELL_KNOWN_PREFIX:
         return ipaddress.IPv4Address(address.packed[-4:])
+    if address in IPV4_COMPATIBLE_PREFIX:
+        return ipaddress.IPv4Address(address.packed[-4:])
     return None
+
+
+def _drop_headers(headers: MutableMapping[str, _HeaderValue], *names: str) -> None:
+    """Remove named headers without depending on mapping case semantics."""
+    rejected = {name.casefold() for name in names}
+    for header_name in list(headers):
+        if header_name.casefold() in rejected:
+            headers.pop(header_name, None)
 
 
 class _PinnedAddressAdapter(HTTPAdapter):
@@ -364,11 +377,15 @@ class PinnedHttpClient:
                 current_method = "GET"
             if current_method == "GET":
                 current_data = None
-                for name in ("Content-Length", "Content-Type", "Transfer-Encoding"):
-                    current_headers.pop(name, None)
+                _drop_headers(
+                    current_headers,
+                    "Content-Length",
+                    "Content-Type",
+                    "Transfer-Encoding",
+                )
 
-            current_headers.pop("Cookie", None)
-            self.session.headers.pop("Cookie", None)
+            _drop_headers(current_headers, "Cookie")
+            _drop_headers(self.session.headers, "Cookie")
             if cross_origin:
                 current_headers = {
                     name: value
@@ -383,8 +400,8 @@ class PinnedHttpClient:
                     }
                 )
             if self.session.should_strip_auth(current_url, next_url):
-                current_headers.pop("Authorization", None)
-                self.session.headers.pop("Authorization", None)
+                _drop_headers(current_headers, "Authorization")
+                _drop_headers(self.session.headers, "Authorization")
                 self.session.auth = None
             current_url = next_url
 
