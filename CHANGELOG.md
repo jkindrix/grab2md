@@ -62,6 +62,8 @@ The pending first public alpha uses `grab2md` consistently.
   traversal, and derive CLI option help from the canonical defaults and schema.
 - Updated Ruff and Poetry to their current verified releases, migrated package
   metadata to PEP 621, and added weekly Python and pre-commit update automation.
+- Refreshed the locked Python/tooling baseline after the first automated scan
+  and made coverage.py's subprocess patch explicit for pytest-cov 7.
 
 ### Fixed
 
