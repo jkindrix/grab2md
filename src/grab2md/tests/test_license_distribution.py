@@ -36,8 +36,7 @@ def test_package_metadata_and_readmes_point_to_mit_grant():
         for value in urls.values()
     )
     assert (
-        "Programming Language :: Python :: 3.13"
-        in metadata["project"]["classifiers"]
+        "Programming Language :: Python :: 3.13" in metadata["project"]["classifiers"]
     )
     assert "](./" not in root_readme
 
