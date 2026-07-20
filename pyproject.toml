@@ -1,13 +1,36 @@
 [tool.poetry]
 name = "html2md-cli"
 version = "0.3.0"
-description = "A Python package to convert web pages to markdown"
+description = "Local-first CLI for converting HTML, web pages, batches, and crawls to Markdown"
 authors = ["Justin Kindrix <jkindrix@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+keywords = ["html", "markdown", "converter", "crawler", "cli"]
 packages = [{ include = "html2md", from = "src" }]
 exclude = ["src/html2md/html2md", "src/html2md/tests"]
-classifiers = ["Development Status :: 3 - Alpha"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Documentation",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Text Processing :: Markup",
+]
+
+[tool.poetry.urls]
+Repository = "https://github.com/jkindrix/html2md"
+Issues = "https://github.com/jkindrix/html2md/issues"
+Changelog = "https://github.com/jkindrix/html2md/blob/main/CHANGELOG.md"
+Documentation = "https://github.com/jkindrix/html2md#readme"
 
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"
@@ -29,13 +52,16 @@ lxml-html-clean = "^0.4.5"
 render = ["playwright"]
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.3.5"
+pytest = "9.1.1"
 pytest-cov = "^6.1.1"
 pre-commit = "^4.2.0"
-black = "25.1.0"
+black = "26.5.1"
 mypy = "1.15.0"
 ruff = "0.11.2"
 types-requests = "^2.32.0.20250328"
+bandit = "1.8.3"
+twine = "6.2.0"
+pip-audit = "2.10.1"
 
 [tool.poetry.scripts]
 html2md = "html2md.cli.cli:entry_point"
@@ -49,7 +75,7 @@ source = ["html2md"]
 omit = ["*/html2md/tests/*"]
 
 [tool.coverage.report]
-fail_under = 75
+fail_under = 85
 show_missing = true
 skip_covered = true
 omit = ["*/html2md/tests/*"]

@@ -12,7 +12,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/psf/black
-    rev: 25.1.0
+    rev: 26.5.1
     hooks:
       - id: black
         files: ^(src/html2md/|tests/config/).*\.py$
@@ -34,7 +34,7 @@ repos:
         pass_filenames: false
 
   - repo: https://github.com/pypa/pip-audit
-    rev: v2.8.0
+    rev: v2.10.1
     hooks:
       - id: pip-audit
         args: ["--requirement", "requirements.txt"]
@@ -45,6 +45,14 @@ repos:
         name: run mypy
         entry: poetry run mypy
         args: ["src/html2md", "tests/config"]
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit, pre-push]
+
+      - id: mypy-production-bodies
+        name: check untyped production bodies
+        entry: poetry run mypy --check-untyped-defs --exclude src/html2md/tests/ src/html2md
         language: system
         pass_filenames: false
         always_run: true

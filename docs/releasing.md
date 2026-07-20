@@ -10,7 +10,7 @@ authorize publishing packages, creating remote releases, or pushing tags.
 2. Confirm `pyproject.toml`, `html2md --version`, `python -m html2md --version`,
    wheel metadata, and extension metadata have the intended versions.
 3. Recheck `html2md-cli` availability and ownership on TestPyPI and PyPI. The
-   name was unregistered when checked on 2026-07-16, but that is not a
+   name returned no registered project when checked on 2026-07-19, but that is not a
    reservation.
 4. Start from a clean checkout with only the intended release commit.
 
@@ -24,8 +24,9 @@ poetry run pre-commit run --all-files --hook-stage pre-push
 node --test extension/tests/*.test.js
 node extension/tests/chromium-smoke.js
 ./deploy.sh --dry-run
-python -m pip install twine
-python -m twine check dist/*
+poetry run twine check dist/*
+poetry run python scripts/release_smoke.py dist/*.whl \
+  --expected-version "$(poetry version --short)"
 sha256sum dist/* > dist/SHA256SUMS
 ```
 
@@ -34,7 +35,14 @@ test totals, and checksums in the release notes.
 
 ## Stage and publish
 
-1. Upload to TestPyPI and install the exact artifact in a fresh environment.
+1. Upload the already-checked artifacts to TestPyPI without rebuilding:
+
+   ```bash
+   poetry run twine upload --repository testpypi dist/*
+   ```
+
+   Install the exact uploaded version in a fresh environment. Do not pass a
+   token on the command line; use Twine's environment/keyring configuration.
 2. Exercise `html2md --help`, `html2md --version`, `python -m html2md --help`,
    local conversion, and a local-server URL conversion.
 3. Obtain explicit maintainer approval for the public release.

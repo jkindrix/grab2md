@@ -19,14 +19,18 @@ poetry check
 poetry run ruff check src/html2md tests/config
 poetry run black --check src/html2md tests/config
 poetry run mypy src/html2md tests/config
+poetry run mypy --check-untyped-defs --exclude 'src/html2md/tests/' src/html2md
 poetry run pytest src/html2md/tests tests/config
 
 echo "Building distributions..."
 rm -rf dist
 poetry build
 expected_version="$(poetry version --short)"
+poetry run twine check dist/*
 
 if [[ "$dry_run" == true ]]; then
+    poetry run python scripts/release_smoke.py dist/*.whl \
+        --expected-version "$expected_version"
     smoke_dir="$(mktemp -d)"
     trap 'rm -rf "$smoke_dir"' EXIT
     python -m venv "$smoke_dir/venv"

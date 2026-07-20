@@ -22,7 +22,16 @@ downloader:
 - follow redirects manually, validate and pin every new origin before sending
   the next request, and strip explicit Cookie and cross-origin Authorization
   headers;
+- reject HTTPS-to-HTTP redirect downgrades;
+- apply IPv4 destination classification to addresses embedded in the
+  well-known `64:ff9b::/96` NAT64 prefix; and
 - cap static page and crawl bodies at 10 MiB and robots files at 1 MiB.
+
+The supported Requests version is checked at runtime for the adapter hooks
+required by numeric-address pinning. An incompatible transport fails closed
+instead of silently falling back to ordinary hostname resolution. Arbitrary
+network-specific NAT64 prefixes cannot be identified from an IPv6 destination
+alone and remain an operator/network boundary.
 
 Image downloads use the same connection primitive plus their stricter media,
 aggregate-size, and output-path rules.

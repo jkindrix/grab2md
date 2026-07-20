@@ -43,7 +43,7 @@ python -m playwright install chromium
 html2md convert https://example.com/app --render-js
 ```
 
-See [`docs/browser-rendering.md`](./docs/browser-rendering.md) for its resource,
+See [`docs/browser-rendering.md`](https://github.com/jkindrix/html2md/blob/main/docs/browser-rendering.md) for its resource,
 network, and authentication boundaries.
 
 For an isolated non-development installation from a local checkout:
@@ -104,6 +104,16 @@ Run `html2md COMMAND --help` for the complete, configuration-aware option list.
 | `config` | Inspect, validate, back up, restore, and change configuration. |
 | `state` | List, inspect, export, import, clean, and resume crawl state. |
 
+### Python API support
+
+The supported pre-1.0 interface is the `html2md` command (and equivalent
+`python -m html2md` entry point). The installed Python modules are internal and
+may change between alpha releases; importing conversion, crawler, cookie, or
+transport implementation modules is not a supported compatibility contract.
+`html2md.__version__` is exposed for metadata inspection only. A library API
+will be considered separately if real use cases establish the required result,
+exception, and compatibility contract.
+
 Global options include `--log-level` (default `WARNING`), `--debug-log`,
 `--banner`, and metadata-backed `--version`.
 
@@ -114,7 +124,9 @@ Useful options include:
 - `--content full|main|selector` for explicit content selection (full is the
   lossless default), with `--selector` required by selector mode;
 - `--output/-o` to write a file instead of stdout;
-- `--browser-cookies` or `--cookie-json` for authenticated pages;
+- `--browser-cookies` for authenticated pages, optionally with a one-shot
+  `--cookie-path` that does not modify global configuration, or
+  `--cookie-json` for an owner-only portable export;
 - `--headers-file` for an owner-only JSON object of target request headers;
 - `--storage-state` with `--render-js` for owner-only Playwright session state;
 - `--enhanced-headers/--basic-headers` and `--user-agent-contact` for an honest,
@@ -125,9 +137,12 @@ Useful options include:
 - `--insecure` only for trusted hosts with invalid certificates; and
 - `--fancy` for decorated progress output.
 
-Automatic browser database extraction is implemented for Chrome and Firefox.
-Exported cookie JSON is the most
-portable explicit authentication path. Password submission is not supported.
+Automatic Firefox database extraction is supported on Windows, macOS, and
+Linux for recognized profile/database schemas. Automatic Chrome extraction is
+limited to Windows DPAPI-backed keys and rejects newer app-bound (`v20`)
+encryption explicitly. Chrome Keychain/keyring retrieval is not implemented on
+macOS or Linux. Exported, owner-private cookie JSON is the portable
+authentication path on every platform. Password submission is not supported.
 
 ### Batch output
 
@@ -194,7 +209,7 @@ The extension uses `activeTab`, `scripting`, `storage`, `downloads`, and
 batch, native CLI integration, background service-worker conversion, context
 menus, and keyboard shortcuts are not supported.
 
-See [`extension/README.md`](./extension/README.md) for installation and testing.
+See [`extension/README.md`](https://github.com/jkindrix/html2md/blob/main/extension/README.md) for installation and testing.
 
 ## Security boundaries
 
@@ -207,18 +222,21 @@ See [`extension/README.md`](./extension/README.md) for installation and testing.
 - Diagnostic logs redact credential-bearing headers, cookie values, and
   token-like data.
 - Target authentication accepts scoped browser cookies, an owner-only JSON
-  header file, or an owner-only Playwright storage-state file for rendered
+  cookie export, header file, or Playwright storage-state file for rendered
   conversion. Login flows remain outside html2md, and authentication files are
-  rejected when group- or world-readable on POSIX systems.
+  rejected when group- or world-readable or when supplied through symlinks on
+  POSIX systems.
 - Remote pages, crawl targets, robots files, and images
   allow only HTTP(S), resolve each origin once, connect only to validated
   numeric addresses, and manually revalidate redirects. Private, loopback,
-  link-local, and metadata destinations are blocked by default. Guarded traffic
+  link-local, metadata, and well-known NAT64 encodings of non-public IPv4
+  destinations are blocked by default. HTTPS redirects cannot downgrade to
+  HTTP. Guarded traffic
   bypasses configured and environment proxies because proxy-side DNS would
   defeat address pinning.
 - Static page/crawl responses are capped at 10 MiB and robots files at 1 MiB.
   Image acquisition additionally verifies MIME type and file signature, rejects
-  active SVG, and enforces 10 MiB per-image and 50 MiB per-conversion limits.
+  every SVG image, and enforces 10 MiB per-image and 50 MiB per-conversion limits.
 - `--allow-private-network` explicitly relaxes destination classification for
   trusted internal or development targets; DNS pinning, redirect validation,
   URL validation, response limits, and TLS verification remain active.
@@ -228,7 +246,7 @@ See [`extension/README.md`](./extension/README.md) for installation and testing.
   control. It exposes the connection to interception but does not authorize
   private-network access.
 
-See [`docs/network-security.md`](./docs/network-security.md) for the complete
+See [`docs/network-security.md`](https://github.com/jkindrix/html2md/blob/main/docs/network-security.md) for the complete
 outbound request contract and maintainer integration rule.
 
 Windows relies on the current account's directory ACLs because POSIX mode bits
@@ -240,7 +258,7 @@ Remote relative links and image references are resolved against the final URL
 and the document's valid `<base>` element. `--metadata` adds deterministic YAML
 front matter for available title, author/date, canonical URL, description, and
 language fields. Local references remain relative. See
-[`docs/output-contract.md`](./docs/output-contract.md) for the exact contract.
+[`docs/output-contract.md`](https://github.com/jkindrix/html2md/blob/main/docs/output-contract.md) for the exact contract.
 
 ## Known limitations
 
@@ -248,12 +266,15 @@ language fields. Local references remain relative. See
   authored boilerplate; opt-in main-content mode uses substantial semantic
   regions and a confidence-gated readability fallback, whose quality varies by
   document. The measured decision is recorded in
-  [`ADR 0002`](./docs/adr/0002-select-main-content-extraction.md).
+  [`ADR 0002`](https://github.com/jkindrix/html2md/blob/main/docs/adr/0002-select-main-content-extraction.md).
 - JavaScript rendering is opt-in for `convert`; batch and crawl remain static.
 - Metadata extraction intentionally uses declared HTML/meta fields rather than
   text inference or executable structured data.
 - Crawling is sequential; removed concurrency options are not advertised.
-- Browser cookie decryption varies across browser and operating-system versions.
+- Browser cookie support is deliberately bounded: Firefox database schemas can
+  change, and automatic Chrome decryption supports Windows DPAPI-backed keys
+  but not app-bound (`v20`), macOS Keychain, or Linux keyring formats. Use an
+  owner-private cookie JSON export outside those tested combinations.
 - The extension must be installed unpacked; no Web Store release exists.
 
 ## Development
@@ -271,18 +292,21 @@ node extension/tests/chromium-smoke.js
 ```
 
 Coverage uses the production package as its denominator and enforces the floor
-documented in [`docs/coverage.md`](./docs/coverage.md).
+documented in [`docs/coverage.md`](https://github.com/jkindrix/html2md/blob/main/docs/coverage.md).
 
 ## Project documentation
 
-- [`CHANGELOG.md`](./CHANGELOG.md): user-visible changes and changelog policy
-- [`docs/releasing.md`](./docs/releasing.md): reproducible release checklist
-- [`docs/deployment.md`](./docs/deployment.md): local deployment details
-- [`docs/configuration-example.md`](./docs/configuration-example.md): configuration example
-- [`docs/adr/0001-defer-scale-out-crawling.md`](./docs/adr/0001-defer-scale-out-crawling.md): scale-out architecture gate
-- [`docs/internal/`](./docs/internal/README.md): historical planning and review records
+- [`CHANGELOG.md`](https://github.com/jkindrix/html2md/blob/main/CHANGELOG.md): user-visible changes and changelog policy
+- [`CONTRIBUTING.md`](https://github.com/jkindrix/html2md/blob/main/CONTRIBUTING.md): development setup and contribution gates
+- [`SECURITY.md`](https://github.com/jkindrix/html2md/blob/main/SECURITY.md): private vulnerability-reporting route
+- [`SUPPORT.md`](https://github.com/jkindrix/html2md/blob/main/SUPPORT.md): alpha support and compatibility policy
+- [`docs/releasing.md`](https://github.com/jkindrix/html2md/blob/main/docs/releasing.md): reproducible release checklist
+- [`docs/deployment.md`](https://github.com/jkindrix/html2md/blob/main/docs/deployment.md): local deployment details
+- [`docs/configuration-example.md`](https://github.com/jkindrix/html2md/blob/main/docs/configuration-example.md): configuration example
+- [`docs/adr/0001-defer-scale-out-crawling.md`](https://github.com/jkindrix/html2md/blob/main/docs/adr/0001-defer-scale-out-crawling.md): scale-out architecture gate
+- [`docs/internal/`](https://github.com/jkindrix/html2md/tree/main/docs/internal): historical planning and review records
 
 ## License
 
 Copyright (c) 2025-2026 Justin Kindrix. Distributed under the
-[MIT License](./LICENSE).
+[MIT License](https://github.com/jkindrix/html2md/blob/main/LICENSE).

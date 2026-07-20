@@ -17,9 +17,25 @@ rewriting. Downloaded image references can therefore be replaced by local image
 paths, and successful crawl/batch targets can still be rewritten relative to
 the containing Markdown file.
 
+Crawl frontier identity excludes URL fragments because fragments identify a
+location within an already-fetched representation. Query strings remain part
+of identity because servers may return different resources for different
+queries.
+
 Local HTML references are not canonicalized. They remain source-relative so
 local links retain their meaning and the guarded local-image copier can resolve
 them beneath the source document directory.
+
+## Character decoding
+
+Static HTTP HTML in single-page, batch, and crawl paths is decoded through the
+same deterministic boundary. A valid HTTP `charset`
+declaration is authoritative, followed by a Unicode byte-order mark and an
+HTML `<meta charset>` or `content` declaration found near the start of the
+document. Undeclared content is decoded as UTF-8 when valid and otherwise uses
+the HTML-compatible Windows-1252 fallback. Unknown declared encodings and
+content that is invalid for its explicit encoding fail acquisition instead of
+silently returning corrupted text. Local HTML input remains explicitly UTF-8.
 
 ## Metadata
 

@@ -6,6 +6,74 @@ All notable changes are documented here. This project follows
 
 ## [Unreleased]
 
+### Added
+
+- Added hosted Bandit enforcement, immutable GitHub Action pins with weekly
+  update automation, and macOS/Windows package-contract jobs.
+- Added presentation-neutral command runtimes, typed batch-input and crawl-run
+  contexts, focused browser/presenter/platform tests, and an exact-wheel release
+  smoke rehearsal.
+- Added complete package metadata plus contribution, security-reporting, and
+  alpha support policies.
+
+### Changed
+
+- Declared the pre-1.0 distribution CLI-only: internal Python modules remain
+  importable but are not a supported compatibility surface; only version
+  metadata is exported from the package root.
+- Centralized streaming image acquisition on the guarded pinned HTTP transport,
+  decomposed the large CLI/batch/crawl coordinators, and made terminal batch and
+  crawl states explicit.
+- Centralized redirect and canonical archive finalization across batch and
+  crawl, unified command-failure classification, and made `--no-progress`
+  suppress crawler callbacks as documented.
+- Shared the browser-cookie database copy/connection lifecycle while retaining
+  format-specific Chrome and Firefox semantics, and modernized rate-limiter
+  annotations.
+- Limited automatic Chrome cookie extraction to supported Windows DPAPI keys;
+  macOS Keychain, Linux keyring, and app-bound v20 formats now fail closed with
+  portable-export guidance.
+- Made `--cookie-path` a one-shot conversion input instead of silently writing
+  it into global configuration, and made Firefox honor install-selected and
+  explicitly default profiles.
+- Removed dead batch path/filename helpers and their non-production tests.
+- Ratcheted the production coverage floor from 75% to 85% and added a stricter
+  mypy pass over untyped production function bodies.
+
+### Fixed
+
+- Fixed deterministic HTTP HTML decoding when no charset is declared, including
+  HTTP/BOM/meta precedence and explicit invalid-encoding failures across
+  single-page, batch, and crawl acquisition.
+- Removed the extension's undeclared startup control, made fenced-code behavior
+  honor its setting, and removed redundant inert link controls.
+- Made crawl frontier identity fragment-free while preserving distinct query
+  resources, and checkpointed discovered links with the page success transition.
+- Preserved caller-owned directory permissions during state export and closed
+  HTTP sessions when browser-cookie extraction fails.
+- Switched popup extraction to the documented `chrome.scripting` `func` key,
+  escaped authored Markdown punctuation, and made table conversion unconditional
+  instead of exposing an inert setting.
+
+### Security
+
+- Restored inert DOM parsing for extension conversion so hostile HTML cannot
+  trigger passive resource loads, script/custom-element execution, or
+  navigation in the privileged popup.
+- Process inert extension input as a parsed document body so page-controlled
+  closing tags cannot terminate an internal wrapper and omit trailing content.
+- Made asynchronous extension clipboard/download failures terminal instead of
+  overwriting them with generic success.
+- Corrected Windows Chrome Local State key decoding and made unsupported cookie
+  encryption variants fail before decryption.
+- Refreshed vulnerable development-tool dependencies and added a hosted audit
+  of the complete locked development environment alongside the runtime audit.
+- Applied private-file checks to exported cookie JSON, blocked non-public IPv4
+  destinations embedded in the well-known NAT64 prefix, rejected HTTPS-to-HTTP
+  redirects, and made incompatible Requests pinning adapters fail closed.
+- Fsynced parent directories after atomic JSON replacement so successful state
+  and configuration renames have a durable directory entry on POSIX.
+
 ## [0.3.0] - 2026-07-17
 
 Sixth source alpha, establishing one explicit acquisition, conversion, archive,
