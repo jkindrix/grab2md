@@ -11,8 +11,10 @@ import subprocess
 import tempfile
 import threading
 import venv
+from email.parser import BytesParser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from zipfile import ZipFile
 
 
 class FixtureHandler(BaseHTTPRequestHandler):
@@ -50,12 +52,30 @@ def run(
     return result
 
 
+def wheel_version(wheel: Path) -> str:
+    """Read the distribution version from the wheel's core metadata."""
+    with ZipFile(wheel) as archive:
+        metadata_names = [
+            name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
+        ]
+        if len(metadata_names) != 1:
+            raise RuntimeError(
+                f"Expected one wheel METADATA file, found {len(metadata_names)}"
+            )
+        metadata = BytesParser().parsebytes(archive.read(metadata_names[0]))
+    version = metadata.get("Version")
+    if not version:
+        raise RuntimeError("Wheel METADATA does not declare a Version")
+    return version
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("wheel", type=Path)
-    parser.add_argument("--expected-version", required=True)
+    parser.add_argument("--expected-version")
     arguments = parser.parse_args()
     wheel = arguments.wheel.resolve(strict=True)
+    expected_version = arguments.expected_version or wheel_version(wheel)
     digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
 
     with tempfile.TemporaryDirectory(prefix="html2md-release-smoke-") as temporary:
@@ -69,7 +89,7 @@ def main() -> int:
 
         assert (
             run([str(command), "--version"], cwd=root).stdout.strip()
-            == arguments.expected_version
+            == expected_version
         )
         run([str(command), "--help"], cwd=root)
         run([str(python), "-I", "-m", "html2md", "--help"], cwd=root)
@@ -123,7 +143,7 @@ def main() -> int:
             {
                 "wheel": wheel.name,
                 "sha256": digest,
-                "version": arguments.expected_version,
+                "version": expected_version,
                 "smokes": ["version", "help", "module", "local", "loopback", "failure"],
             },
             sort_keys=True,
