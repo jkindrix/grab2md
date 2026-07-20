@@ -59,9 +59,13 @@ BEARER_PATTERN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
 QUOTED_COOKIE_PATTERN = re.compile(
     r"(?i)(['\"](?:set-cookie|cookie)['\"]\s*:\s*['\"])(.*?)(['\"](?:\s*[,}]))"
 )
+QUOTED_HEADER_PATTERN = re.compile(
+    r"(?i)(['\"](?:authorization|proxy-authorization|x-api-key)['\"]"
+    r"\s*:\s*['\"])(.*?)(['\"](?:\s*[,}]))"
+)
 COOKIE_HEADER_PATTERN = re.compile(r"(?i)(\b(?:set-cookie|cookie)\s*[:=]\s*)([^\r\n]+)")
 HEADER_PATTERN = re.compile(
-    r"(?i)(authorization|proxy-authorization|x-api-key)" r"(\s*[:=]\s*)([^\s,;}]+)"
+    r"(?i)(\b(?:authorization|proxy-authorization|x-api-key)\s*[:=]\s*)([^\r\n]+)"
 )
 ASSIGNMENT_PATTERN = re.compile(
     r"(?i)(['\"]?(?:access[_-]?token|refresh[_-]?token|session[_-]?token|"
@@ -128,10 +132,11 @@ def redact_text(value: object) -> str:
     text = QUOTED_COOKIE_PATTERN.sub(
         lambda match: f"{match.group(1)}{REDACTED}{match.group(3)}", text
     )
-    text = COOKIE_HEADER_PATTERN.sub(lambda match: f"{match.group(1)}{REDACTED}", text)
-    text = HEADER_PATTERN.sub(
-        lambda match: f"{match.group(1)}{match.group(2)}{REDACTED}", text
+    text = QUOTED_HEADER_PATTERN.sub(
+        lambda match: f"{match.group(1)}{REDACTED}{match.group(3)}", text
     )
+    text = COOKIE_HEADER_PATTERN.sub(lambda match: f"{match.group(1)}{REDACTED}", text)
+    text = HEADER_PATTERN.sub(lambda match: f"{match.group(1)}{REDACTED}", text)
     text = ASSIGNMENT_PATTERN.sub(lambda match: f"{match.group(1)}{REDACTED}", text)
     return QUERY_PATTERN.sub(lambda match: f"{match.group(1)}{REDACTED}", text)
 

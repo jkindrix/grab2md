@@ -1,21 +1,79 @@
-"""
-Atomic configuration file writer.
+"""Durable atomic writers shared by configuration, state, and artifacts."""
 
-This module provides atomic write operations for configuration files,
-ensuring that either the entire write succeeds or the original file
-remains unchanged. This prevents partial writes and corruption.
-"""
+from __future__ import annotations
 
 import json
 import os
+import secrets
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
+
+
+def atomic_write_text(file_path: Path, content: str) -> None:
+    """Write UTF-8 text atomically, anchoring the destination directory on POSIX."""
+    if not isinstance(file_path, Path):
+        raise ValueError(f"file_path must be a Path object, got {type(file_path)}")
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if os.name != "posix":
+        descriptor, temporary = tempfile.mkstemp(
+            dir=file_path.parent, prefix=f".{file_path.name}.", suffix=".tmp"
+        )
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, file_path)
+        except BaseException:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
+        return
+
+    directory_flags = (
+        os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    )
+    directory_fd = os.open(file_path.parent, directory_flags)
+    temporary_name = f".{file_path.name}.{secrets.token_hex(8)}.tmp"
+    posix_descriptor: int | None = None
+    try:
+        posix_descriptor = os.open(
+            temporary_name,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            0o600,
+            dir_fd=directory_fd,
+        )
+        with os.fdopen(posix_descriptor, "w", encoding="utf-8") as handle:
+            posix_descriptor = None
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(
+            temporary_name,
+            file_path.name,
+            src_dir_fd=directory_fd,
+            dst_dir_fd=directory_fd,
+        )
+        os.fsync(directory_fd)
+    except BaseException:
+        if posix_descriptor is not None:
+            os.close(posix_descriptor)
+        try:
+            os.unlink(temporary_name, dir_fd=directory_fd)
+        except OSError:
+            pass
+        raise
+    finally:
+        os.close(directory_fd)
 
 
 def atomic_write_json(
     file_path: Path,
-    data: Dict[str, Any],
+    data: dict[str, Any],
     indent: int = 4,
     private: bool = False,
     private_parent: bool = False,

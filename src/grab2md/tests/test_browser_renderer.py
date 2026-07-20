@@ -144,6 +144,7 @@ def test_rendered_conversion_uses_browser_html_and_final_url():
         {"settle_ms": 5_001},
         {"max_html_bytes": 0},
         {"max_requests": 0},
+        {"max_transfer_bytes": 0},
         {"wait_until": "eventually"},
         {"wait_for_selector": ""},
     ],
@@ -162,7 +163,9 @@ class FakePlaywrightTimeout(FakePlaywrightError):
 
 
 class FakeRoute:
-    def __init__(self, url, resource_type="document", navigation=True):
+    def __init__(
+        self, url, resource_type="document", navigation=True, transfer_bytes=0
+    ):
         self.request = SimpleNamespace(
             url=url,
             resource_type=resource_type,
@@ -171,6 +174,7 @@ class FakeRoute:
         )
         self.aborted = False
         self.continued_headers = None
+        self.transfer_bytes = transfer_bytes
 
     def abort(self):
         self.aborted = True
@@ -190,6 +194,14 @@ class FakePage:
     def goto(self, url, **_kwargs):
         for route in self.context.routes:
             self.context.route_handler(route)
+            if not route.aborted and route.transfer_bytes:
+                self.context.cdp_session.emit(
+                    "Network.dataReceived",
+                    {
+                        "dataLength": route.transfer_bytes,
+                        "encodedDataLength": route.transfer_bytes,
+                    },
+                )
         return SimpleNamespace(status=self.status) if self.status is not None else None
 
     def wait_for_selector(self, selector, **_kwargs):
@@ -202,6 +214,21 @@ class FakePage:
         return self.html
 
 
+class FakeCdpSession:
+    def __init__(self):
+        self.handlers = {}
+        self.commands = []
+
+    def send(self, command):
+        self.commands.append(command)
+
+    def on(self, event, handler):
+        self.handlers[event] = handler
+
+    def emit(self, event, params):
+        self.handlers[event](params)
+
+
 class FakeBrowserContext:
     def __init__(self, routes, **options):
         self.routes = routes
@@ -209,6 +236,7 @@ class FakeBrowserContext:
         self.route_handler = None
         self.page = FakePage(self)
         self.timeouts = []
+        self.cdp_session = FakeCdpSession()
 
     def set_default_timeout(self, value):
         self.timeouts.append(value)
@@ -221,6 +249,9 @@ class FakeBrowserContext:
 
     def new_page(self):
         return self.page
+
+    def new_cdp_session(self, _page):
+        return self.cdp_session
 
 
 class FakeBrowser:
@@ -290,6 +321,7 @@ def test_browser_runtime_applies_policy_limits_and_closes_cleanly():
     assert browser.context.page.waited_for == "main"
     assert browser.context.timeouts == [30_000, 30_000]
     assert browser.context.options["storage_state"] == {"cookies": []}
+    assert browser.context.cdp_session.commands == ["Network.enable"]
     assert browser.closed is True
     assert "--no-proxy-server" in chromium.launch.call_args.kwargs["args"]
 
@@ -329,3 +361,27 @@ def test_browser_runtime_rejects_http_errors_and_request_budget(tmp_path):
                     "https://example.com", settle_ms=0, max_requests=max_requests
                 )
         assert browser.closed is True
+
+
+def test_browser_runtime_stops_when_transfer_budget_is_exceeded():
+    route = FakeRoute("https://example.com", transfer_bytes=101)
+    browser = FakeBrowser([route])
+    module, _chromium = fake_playwright_module(browser)
+    records = [(2, 1, 6, "", ("93.184.216.34", 443))]
+
+    with (
+        patch.dict(sys.modules, {"playwright.sync_api": module}),
+        patch("socket.getaddrinfo", return_value=records),
+        pytest.raises(RenderError, match="100-byte transfer limit"),
+    ):
+        render_html(
+            "https://example.com",
+            settle_ms=0,
+            max_transfer_bytes=100,
+        )
+
+    assert browser.context.cdp_session.commands == [
+        "Network.enable",
+        "Page.stopLoading",
+    ]
+    assert browser.closed is True

@@ -45,7 +45,8 @@ The context:
   cross-origin requests and top-level redirects;
 - fails all other Chromium DNS lookups and bypasses system proxy resolution;
 - rejects credential-bearing and non-HTTP(S) network URLs;
-- caps navigation at 30 seconds, post-load settling at 500 milliseconds, and
+- caps navigation at 30 seconds, post-load settling at 500 milliseconds,
+  aggregate decoded browser response data at 50 MiB, requests at 250, and
   serialized HTML at 10 MiB; and
 - closes the browser after one conversion.
 

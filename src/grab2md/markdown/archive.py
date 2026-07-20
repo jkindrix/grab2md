@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import hashlib
-import os
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+from grab2md.utils.atomic_writer import atomic_write_text
 from grab2md.utils.path_safety import contained_path, safe_path_segment
 
 
@@ -138,19 +137,4 @@ class ArtifactStore:
 
     @staticmethod
     def write_text(path: Path, content: str) -> None:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        descriptor, temporary = tempfile.mkstemp(
-            dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
-        )
-        try:
-            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                handle.write(content)
-                handle.flush()
-                os.fsync(handle.fileno())
-            os.replace(temporary, path)
-        except BaseException:
-            try:
-                os.unlink(temporary)
-            except OSError:
-                pass
-            raise
+        atomic_write_text(path, content)

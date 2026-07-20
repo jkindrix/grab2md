@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from http.cookiejar import DefaultCookiePolicy
 from typing import Any, Iterable, Mapping, Optional, cast
@@ -42,7 +42,7 @@ class CookieRecord:
     """One cookie with the complete scope needed for safe replay."""
 
     name: str
-    value: str
+    value: str = field(repr=False)
     domain: str
     path: str = "/"
     expires: Optional[int] = None

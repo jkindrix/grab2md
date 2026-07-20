@@ -61,7 +61,8 @@ Its pinning boundary depends on the supported Chromium runtime honoring
 service workers, and intercepts every browser request through the origin route
 policy. The adversarial Chromium gate verifies that runtime contract. These two
 pinning mechanisms are intentionally documented separately rather than treated
-as identical enforcement.
+as identical enforcement. Browser rendering also stops after 250 requests or
+50 MiB of aggregate decoded response data and caps serialized HTML at 10 MiB.
 
 ## Maintainer rule
 

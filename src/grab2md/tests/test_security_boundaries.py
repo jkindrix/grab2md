@@ -11,11 +11,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from grab2md.config.writer import atomic_write_json
 from grab2md.cookies import database, session_manager
-from grab2md.markdown.archive import OutputPlanner
+from grab2md.cookies.replay import CookieRecord
+from grab2md.markdown.archive import ArtifactStore, OutputPlanner
 from grab2md.markdown.crawler import crawl_website
 from grab2md.network.request_handler import FetchResult
+from grab2md.utils.atomic_writer import atomic_write_json
 from grab2md.utils.redaction import (
     REDACTED,
     get_redacting_logger,
@@ -78,8 +79,10 @@ def test_crawler_traversal_url_cannot_write_outside_root(tmp_path):
 def test_redaction_covers_headers_tokens_passwords_and_url_queries():
     secret = "super-secret-value"
     text = (
-        f"Authorization: Bearer {secret} password={secret} "
-        f"https://example.com/?token={secret} Cookie: session={secret}"
+        f"Authorization: Bearer {secret}\n"
+        f"password={secret}\n"
+        f"https://example.com/?token={secret}\n"
+        f"Cookie: session={secret}"
     )
 
     redacted = redact_text(text)
@@ -124,6 +127,51 @@ def test_redaction_covers_url_userinfo_presigned_keys_and_all_cookie_values():
     assert redacted.count(REDACTED) >= 6
 
 
+@pytest.mark.parametrize(
+    "header",
+    [
+        "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+        'Authorization: Digest username="user", response="digest-secret"',
+        "Proxy-Authorization: Basic proxy-secret",
+        "X-Api-Key: key-secret with-spaces",
+    ],
+)
+def test_redaction_removes_complete_authorization_header_values(header):
+    redacted = redact_text(header)
+
+    assert redacted.endswith(REDACTED)
+    assert not any(
+        secret in redacted
+        for secret in (
+            "dXNlcjpwYXNzd29yZA==",
+            "digest-secret",
+            "proxy-secret",
+            "key-secret",
+        )
+    )
+
+
+def test_redaction_handles_quoted_header_mappings_without_hiding_safe_fields():
+    rendered = (
+        "{'Authorization': 'Basic basic-secret', "
+        "'Proxy-Authorization': 'Digest proxy-secret', "
+        "'Accept': 'text/html'}"
+    )
+
+    redacted = redact_text(rendered)
+
+    assert "basic-secret" not in redacted
+    assert "proxy-secret" not in redacted
+    assert "'Accept': 'text/html'" in redacted
+
+
+def test_cookie_record_representation_never_contains_its_value():
+    record = CookieRecord("session", "cookie-secret", "example.com")
+
+    assert "cookie-secret" not in repr(record)
+    assert "session" in repr(record)
+
+
 @pytest.mark.skipif(os.name != "posix", reason="POSIX mode assertions")
 def test_rotating_diagnostic_logs_are_private_and_structurally_redacted(tmp_path):
     log_path = tmp_path / "logs" / "grab2md.log"
@@ -143,7 +191,7 @@ except RuntimeError:
     logger.exception("conversion exception")
 handler = next(item for item in logger.handlers if isinstance(item, RotatingFileHandler))
 handler.doRollover()
-logger.error("Authorization: Bearer bearer-secret")
+logger.error("Authorization: Basic basic-secret")
 for item in logger.handlers:
     item.flush()
 """
@@ -161,7 +209,7 @@ for item in logger.handlers:
         "user-password",
         "oauth-code",
         "api-secret",
-        "bearer-secret",
+        "basic-secret",
         "exception-secret",
     ):
         assert secret not in combined
@@ -390,7 +438,30 @@ def test_state_export_preserves_caller_parent_permissions(tmp_path):
 @pytest.mark.skipif(os.name != "posix", reason="POSIX durability contract")
 def test_atomic_writer_fsyncs_file_and_parent_directory(tmp_path):
     target = tmp_path / "state.json"
-    with patch("grab2md.config.writer.os.fsync", wraps=os.fsync) as fsync:
+    with patch("grab2md.utils.atomic_writer.os.fsync", wraps=os.fsync) as fsync:
         atomic_write_json(target, {"value": 1}, private=True)
 
     assert fsync.call_count == 2
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX dir-fd containment contract")
+def test_artifact_writer_anchors_parent_during_symlink_swap(tmp_path):
+    destination = tmp_path / "archive"
+    destination.mkdir()
+    detached = tmp_path / "detached-archive"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    real_replace = os.replace
+
+    def swap_parent_then_replace(source, target, **kwargs):
+        destination.rename(detached)
+        destination.symlink_to(outside, target_is_directory=True)
+        real_replace(source, target, **kwargs)
+
+    with patch(
+        "grab2md.utils.atomic_writer.os.replace", side_effect=swap_parent_then_replace
+    ):
+        ArtifactStore.write_text(destination / "page.md", "# Anchored\n")
+
+    assert not (outside / "page.md").exists()
+    assert (detached / "page.md").read_text(encoding="utf-8") == "# Anchored\n"

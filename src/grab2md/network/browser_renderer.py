@@ -147,6 +147,7 @@ def render_html(
     wait_until: str = "domcontentloaded",
     wait_for_selector: Optional[str] = None,
     max_requests: int = 250,
+    max_transfer_bytes: int = 50 * 1024 * 1024,
     blocked_resource_types: Iterable[str] = ("font", "image", "media"),
 ) -> RenderedPage:
     """Render one URL in a fresh non-persistent Chromium context."""
@@ -156,10 +157,12 @@ def render_html(
         or not 0 <= settle_ms <= 5_000
         or max_html_bytes <= 0
         or max_requests <= 0
+        or max_transfer_bytes <= 0
         or wait_until not in readiness_modes
         or wait_for_selector == ""
     ):
         raise ValueError("Invalid browser rendering resource limit")
+    transfer_limit_exceeded = False
     try:
         from playwright.sync_api import Error as PlaywrightError
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
@@ -250,26 +253,73 @@ def render_html(
 
                 context.route("**/*", handle_route)
                 page = context.new_page()
+                transfer_bytes = 0
+                cdp_session = context.new_cdp_session(page)
+                cdp_session.send("Network.enable")
+
+                def count_transfer(params: Mapping[str, Any]) -> None:
+                    nonlocal transfer_bytes, transfer_limit_exceeded
+                    chunk_bytes = max(
+                        int(params.get("dataLength", 0)),
+                        int(params.get("encodedDataLength", 0)),
+                    )
+                    transfer_bytes += chunk_bytes
+                    if (
+                        transfer_bytes > max_transfer_bytes
+                        and not transfer_limit_exceeded
+                    ):
+                        transfer_limit_exceeded = True
+                        try:
+                            cdp_session.send("Page.stopLoading")
+                        except PlaywrightError:
+                            pass
+
+                cdp_session.on("Network.dataReceived", count_transfer)
                 response = page.goto(url, wait_until=cast(Any, wait_until))
+                if transfer_limit_exceeded:
+                    raise RenderError(
+                        "Browser rendering exceeded the "
+                        f"{max_transfer_bytes}-byte transfer limit"
+                    )
                 if response is not None and response.status >= 400:
                     raise RenderError(f"Rendered page returned HTTP {response.status}")
                 if wait_for_selector:
                     page.wait_for_selector(wait_for_selector, state="attached")
                 if settle_ms:
                     page.wait_for_timeout(settle_ms)
+                if transfer_limit_exceeded:
+                    raise RenderError(
+                        "Browser rendering exceeded the "
+                        f"{max_transfer_bytes}-byte transfer limit"
+                    )
                 if request_limit_exceeded:
                     raise RenderError(
                         f"Browser rendering exceeded the {max_requests}-request limit"
                     )
                 html = page.content()
+                if transfer_limit_exceeded:
+                    raise RenderError(
+                        "Browser rendering exceeded the "
+                        f"{max_transfer_bytes}-byte transfer limit"
+                    )
                 if len(html.encode("utf-8")) > max_html_bytes:
                     raise RenderError("Rendered HTML exceeds the 10 MiB limit")
                 return RenderedPage(html=html, final_url=page.url)
             finally:
                 browser.close()
     except PlaywrightTimeoutError as error:
+        if transfer_limit_exceeded:
+            raise RenderError(
+                "Browser rendering exceeded the "
+                f"{max_transfer_bytes}-byte transfer limit"
+            ) from error
         raise RenderError(
             f"Browser rendering timed out after {timeout_ms} ms"
         ) from error
     except PlaywrightError as error:
+        if transfer_limit_exceeded:
+            raise RenderError(
+                "Browser rendering exceeded the "
+                f"{max_transfer_bytes}-byte transfer limit"
+            ) from error
         raise RenderError(f"Browser rendering failed: {error}") from error
