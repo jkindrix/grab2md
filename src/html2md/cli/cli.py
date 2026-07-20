@@ -154,7 +154,10 @@ def convert_command(
     browser_cookies: bool = typer.Option(
         get_cli_default("convert", "browser_cookies", False),
         "--browser-cookies/--no-browser-cookies",
-        help="Use cookies from the local browser to authenticate with websites.",
+        help=(
+            "Use a compatible Firefox database or legacy Windows Chrome "
+            "DPAPI database; current Chrome v20 cookies require --cookie-json."
+        ),
     ),
     browser: Optional[Browser] = typer.Option(
         get_cli_default("convert", "browser", None),
@@ -169,7 +172,7 @@ def convert_command(
     cookie_json: Optional[Path] = typer.Option(
         None,
         "--cookie-json",
-        help="Path to JSON file with exported cookies (from browser developer tools).",
+        help="Primary portable path to an owner-only browser cookie JSON export.",
     ),
     headers_file: Optional[Path] = typer.Option(
         None,

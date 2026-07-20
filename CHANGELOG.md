@@ -28,8 +28,12 @@ All notable changes are documented here. This project follows
   crawl, unified command-failure classification, and made `--no-progress`
   suppress crawler callbacks as documented.
 - Shared the browser-cookie database copy/connection lifecycle while retaining
-  format-specific Chrome and Firefox semantics, and modernized rate-limiter
-  annotations.
+  format-specific Chrome and Firefox semantics, then separated browser paths,
+  private database handling, and the two format implementations behind the
+  cookie-source adapters; modernized rate-limiter annotations.
+- Consolidated document-base and responsive-image reference parsing, removed
+  dead conversion/archive/request surfaces, and kept `Retry-After` parsing in
+  the sequential request scheduler as the single policy implementation.
 - Limited automatic Chrome cookie extraction to supported Windows DPAPI keys;
   macOS Keychain, Linux keyring, and app-bound v20 formats now fail closed with
   portable-export guidance.
@@ -56,6 +60,9 @@ All notable changes are documented here. This project follows
 - Switched popup extraction to the documented `chrome.scripting` `func` key,
   escaped authored Markdown punctuation, and made table conversion unconditional
   instead of exposing an inert setting.
+- Made crawl persistence/counting terminal only after successful link discovery,
+  isolated malformed Firefox cookie rows, and guaranteed popup conversion errors
+  restore terminal error and spinner state.
 
 ### Security
 
@@ -73,13 +80,16 @@ All notable changes are documented here. This project follows
 - Applied private-file checks to exported cookie JSON, blocked non-public IPv4
   destinations embedded in the well-known NAT64 prefix, rejected HTTPS-to-HTTP
   redirects, and made incompatible Requests pinning adapters fail closed.
+- Blocked non-public IPv4 destinations embedded in deprecated IPv4-compatible
+  IPv6 addresses and made redirect credential-header removal case-insensitive.
 - Fsynced parent directories after atomic JSON replacement so successful state
   and configuration renames have a durable directory entry on POSIX.
 
 ## [0.3.0] - 2026-07-17
 
-Sixth source alpha, establishing one explicit acquisition, conversion, archive,
-and persistence pipeline across single, batch, crawl, and extension workflows.
+Sixth source alpha, establishing shared typed acquisition and conversion
+contracts across the Python single, batch, and crawl workflows, plus common
+semantic fixtures for the extension's independent conversion engine.
 
 ### Added
 

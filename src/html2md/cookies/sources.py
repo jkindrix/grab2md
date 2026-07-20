@@ -53,9 +53,9 @@ class ChromeCookieSource:
     name: str = "chrome"
 
     def capability(self) -> CookieSourceCapability:
-        from html2md.cookies.session_manager import (
+        from html2md.cookies.browser_paths import get_browser_cookie_path
+        from html2md.cookies.chrome import (
             HAS_CRYPTO,
-            get_browser_cookie_path,
             get_chrome_encryption_key,
         )
 
@@ -87,7 +87,7 @@ class ChromeCookieSource:
         return CookieSourceCapability(self.name, available, detail)
 
     def load(self, url: str) -> list[CookieRecord]:
-        from html2md.cookies.session_manager import get_chrome_cookies
+        from html2md.cookies.chrome import get_chrome_cookies
         from html2md.cookies.replay import target_hostname
 
         capability = self.capability()
@@ -105,7 +105,7 @@ class FirefoxCookieSource:
     name: str = "firefox"
 
     def capability(self) -> CookieSourceCapability:
-        from html2md.cookies.session_manager import get_browser_cookie_path
+        from html2md.cookies.browser_paths import get_browser_cookie_path
 
         path = get_browser_cookie_path(self.name, self.path)
         available = bool(path and path.exists())
@@ -116,7 +116,7 @@ class FirefoxCookieSource:
         )
 
     def load(self, url: str) -> list[CookieRecord]:
-        from html2md.cookies.session_manager import get_firefox_cookies
+        from html2md.cookies.firefox import get_firefox_cookies
         from html2md.cookies.replay import target_hostname
 
         return get_firefox_cookies(target_hostname(url), cookie_path=self.path)

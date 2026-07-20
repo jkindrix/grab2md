@@ -124,9 +124,10 @@ Useful options include:
 - `--content full|main|selector` for explicit content selection (full is the
   lossless default), with `--selector` required by selector mode;
 - `--output/-o` to write a file instead of stdout;
-- `--browser-cookies` for authenticated pages, optionally with a one-shot
-  `--cookie-path` that does not modify global configuration, or
-  `--cookie-json` for an owner-only portable export;
+- `--cookie-json` for an owner-only portable cookie export on every platform;
+- `--browser-cookies` for compatible Firefox databases or the narrow legacy
+  Windows Chrome DPAPI path, optionally with a one-shot `--cookie-path` that
+  does not modify global configuration;
 - `--headers-file` for an owner-only JSON object of target request headers;
 - `--storage-state` with `--render-js` for owner-only Playwright session state;
 - `--enhanced-headers/--basic-headers` and `--user-agent-contact` for an honest,
@@ -138,11 +139,13 @@ Useful options include:
 - `--fancy` for decorated progress output.
 
 Automatic Firefox database extraction is supported on Windows, macOS, and
-Linux for recognized profile/database schemas. Automatic Chrome extraction is
-limited to Windows DPAPI-backed keys and rejects newer app-bound (`v20`)
-encryption explicitly. Chrome Keychain/keyring retrieval is not implemented on
-macOS or Linux. Exported, owner-private cookie JSON is the portable
-authentication path on every platform. Password submission is not supported.
+Linux for recognized profile/database schemas. Current Chrome normally uses
+app-bound (`v20`) encryption, so direct database extraction is generally
+unavailable and fails closed with export guidance. Only legacy Windows
+DPAPI-backed Chrome keys are supported; Chrome Keychain/keyring retrieval is
+not implemented on macOS or Linux. Exported, owner-private cookie JSON is the
+primary portable authentication path on every platform. Password submission is
+not supported.
 
 ### Batch output
 
@@ -229,9 +232,9 @@ See [`extension/README.md`](https://github.com/jkindrix/html2md/blob/main/extens
 - Remote pages, crawl targets, robots files, and images
   allow only HTTP(S), resolve each origin once, connect only to validated
   numeric addresses, and manually revalidate redirects. Private, loopback,
-  link-local, metadata, and well-known NAT64 encodings of non-public IPv4
-  destinations are blocked by default. HTTPS redirects cannot downgrade to
-  HTTP. Guarded traffic
+  link-local, metadata, IPv4-mapped, 6to4, IPv4-compatible, and well-known
+  NAT64 encodings of non-public IPv4 destinations are blocked by default.
+  HTTPS redirects cannot downgrade to HTTP. Guarded traffic
   bypasses configured and environment proxies because proxy-side DNS would
   defeat address pinning.
 - Static page/crawl responses are capped at 10 MiB and robots files at 1 MiB.
@@ -272,9 +275,10 @@ language fields. Local references remain relative. See
   text inference or executable structured data.
 - Crawling is sequential; removed concurrency options are not advertised.
 - Browser cookie support is deliberately bounded: Firefox database schemas can
-  change, and automatic Chrome decryption supports Windows DPAPI-backed keys
-  but not app-bound (`v20`), macOS Keychain, or Linux keyring formats. Use an
-  owner-private cookie JSON export outside those tested combinations.
+  change, while current Chrome's app-bound (`v20`) cookies are not available to
+  automatic extraction. The Chrome database path is limited to legacy Windows
+  DPAPI-backed keys and excludes macOS Keychain and Linux keyring formats. Use
+  an owner-private cookie JSON export as the primary portable path.
 - The extension must be installed unpacked; no Web Store release exists.
 
 ## Development
