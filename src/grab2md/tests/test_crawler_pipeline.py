@@ -37,14 +37,17 @@ def fetch_result(status=200, body=HTML, headers=None):
 
 
 def crawl(tmp_path, **kwargs):
+    options = {
+        "max_pages": 1,
+        "max_depth": 0,
+        "respect_robots": False,
+    }
+    options.update(kwargs)
     return crawl_website(
         "https://example.com",
         tmp_path / "output",
-        max_pages=1,
-        max_depth=0,
-        respect_robots=False,
         state_manager=StateManager(state_dir=tmp_path / "states"),
-        **kwargs,
+        **options,
     )
 
 
@@ -267,10 +270,49 @@ def test_429_response_is_requeued_and_retried(tmp_path):
         "grab2md.markdown.crawler.fetch_html",
         side_effect=[throttled, fetch_result()],
     ) as fetch:
-        result = crawl(tmp_path)
+        result = crawl(tmp_path, max_pages=2)
 
     assert result.processed_count == 1
     assert fetch.call_count == 2
+
+
+def test_max_pages_is_a_hard_attempt_budget_including_failures(tmp_path):
+    manager = StateManager(state_dir=tmp_path / "states")
+    state = manager.create_new_state(
+        "https://example.com/one",
+        str(tmp_path / "output"),
+        {"scope_url": "https://example.com/one"},
+    )
+    state.urls_queued = [
+        ("https://example.com/one", 0),
+        ("https://example.com/two", 0),
+        ("https://example.com/three", 0),
+    ]
+    manager.save_state()
+    failure = FetchResult(
+        requested_url="https://example.com/one",
+        final_url="https://example.com/one",
+        error="offline",
+    )
+
+    with patch("grab2md.markdown.crawler.fetch_html", return_value=failure) as fetch:
+        result = crawl_website(
+            state.start_url,
+            tmp_path / "output",
+            max_pages=1,
+            respect_robots=False,
+            state_manager=manager,
+            resume_crawl_id=state.crawl_id,
+        )
+
+    assert fetch.call_count == 1
+    assert result.processed_count == 0
+    assert result.failed_count == 1
+    assert manager.current_state is not None
+    assert manager.current_state.urls_queued == [
+        ("https://example.com/two", 0),
+        ("https://example.com/three", 0),
+    ]
 
 
 def test_disabled_checkpoints_do_not_mutate_resume_scope(tmp_path):

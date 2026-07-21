@@ -18,6 +18,14 @@ def test_crawl_help_exposes_sequential_policy_not_concurrency_controls():
     assert "sequential" in result.stdout
 
 
+def test_polite_mode_has_a_nonzero_floor_and_doubles_larger_delays():
+    floor = SequentialRequestScheduler(minimum_delay=0.0, polite=True)
+    doubled = SequentialRequestScheduler(minimum_delay=1.5, polite=True)
+
+    assert floor.minimum_delay == 1.0
+    assert doubled.minimum_delay == 3.0
+
+
 def test_adaptive_rate_delay_is_applied_before_request():
     limiter = MagicMock()
     limiter.can_make_request.return_value = (True, 2.5)

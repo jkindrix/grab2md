@@ -573,7 +573,10 @@ def crawl_command(
     max_pages: int = typer.Option(
         get_cli_default("crawl", "max_pages", 100),
         "--max-pages",
-        help="Maximum number of pages to crawl.",
+        help=(
+            "Maximum page attempts per starting URL, including failures and "
+            "explicit retries."
+        ),
     ),
     delay: float = typer.Option(
         get_cli_default("crawl", "delay", 0.0),
@@ -588,7 +591,7 @@ def crawl_command(
     rate_limit: Optional[int] = typer.Option(
         get_cli_default("crawl", "rate_limit", None),
         "--rate-limit",
-        help="Maximum requests per minute (e.g., 30). Includes circuit breaker and adaptive limiting.",
+        help="Hard maximum requests per minute (e.g., 30), plus adaptive slowing.",
     ),
     enhanced_headers: bool = typer.Option(
         get_cli_default("crawl", "enhanced_headers", True),
@@ -615,7 +618,7 @@ def crawl_command(
     polite: bool = typer.Option(
         get_cli_default("crawl", "polite", False),
         "--polite/--standard-policy",
-        help="Enable conservative sequential crawling with slower adaptive delays.",
+        help="Use at least one second between sequential requests and double larger delays.",
     ),
     show_progress: bool = typer.Option(
         get_cli_default("crawl", "show_progress", True),

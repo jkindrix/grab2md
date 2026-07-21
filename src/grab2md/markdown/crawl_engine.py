@@ -161,6 +161,7 @@ class CrawlRun:
     processed_count: int
     failed_count: int
     terminal_count: int
+    attempted_count: int
 
 
 class SequentialCrawlEngine:
@@ -208,6 +209,10 @@ class SequentialCrawlEngine:
         self.options = options
         self.processed_count = initial_processed
         self.failed_count = 0
+        # Terminal URLs were already attempted in a previous resumable run.
+        # Count every new dequeue, including failures and explicit retries, so
+        # max_pages is a hard page-attempt budget instead of a success target.
+        self.attempted_count = frontier.terminal_count
 
     def _redirect_validator(self, item: FrontierItem) -> Callable[[str, str], None]:
         starting_navigation = item.url == self.scope.root_url and item.depth == 0
@@ -307,7 +312,7 @@ class SequentialCrawlEngine:
             return
 
         self.emit(
-            f"Processing URL {self.processed_count + 1}/{self.options.max_pages} "
+            f"Processing page attempt {self.attempted_count}/{self.options.max_pages} "
             f"(depth {item.depth}/{self.options.max_depth}): {item.url}",
             item.url,
             "processing",
@@ -352,10 +357,11 @@ class SequentialCrawlEngine:
         self.checkpoints.succeeded(item.url, output_file, self.frontier)
 
     def run(self) -> CrawlRun:
-        while self.frontier and self.processed_count < self.options.max_pages:
+        while self.frontier and self.attempted_count < self.options.max_pages:
             item = self.frontier.pop()
             if item is None:
                 break
+            self.attempted_count += 1
             self.checkpoints.sync(self.frontier, item)
             try:
                 self._process(item)
@@ -373,4 +379,5 @@ class SequentialCrawlEngine:
             self.processed_count,
             self.failed_count,
             self.frontier.terminal_count,
+            self.attempted_count,
         )

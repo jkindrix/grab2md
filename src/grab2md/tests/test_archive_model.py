@@ -2,6 +2,8 @@
 
 from unittest.mock import Mock, patch
 
+import pytest
+
 from grab2md.markdown.archive import (
     ArtifactManifest,
     ArtifactRecord,
@@ -100,6 +102,38 @@ def test_archive_coordinator_reuses_final_identity_without_reconversion(tmp_path
     assert manifest.resolve(second_page.requested_url) is manifest.resolve(
         first_page.final_url
     )
+
+
+def test_archive_coordinator_validates_all_identities_before_writing(tmp_path):
+    manifest = ArtifactManifest()
+    store = Mock()
+    archiver = ArchiveCoordinator(
+        manifest=manifest,
+        planner=OutputPlanner(tmp_path),
+        write_text=store.write_text,
+    )
+    page = AcquiredPage(
+        "https://example.com/requested",
+        "https://example.com/final",
+        "<h1>Final</h1>",
+        200,
+        {},
+        "text/html",
+        "utf-8",
+    )
+    document = ConvertedDocument(
+        page,
+        "# Final",
+        page.html,
+        DocumentMetadata(canonical_url="javascript:alert(1)"),
+    )
+
+    with pytest.raises(ValueError, match=r"HTTP\(S\) URL"):
+        archiver.archive(page.requested_url, page, lambda _output: document)
+
+    store.write_text.assert_not_called()
+    assert not list(tmp_path.rglob("*.md"))
+    assert manifest.records == ()
 
 
 def test_structural_rewriter_handles_parentheses_titles_and_fenced_code(tmp_path):

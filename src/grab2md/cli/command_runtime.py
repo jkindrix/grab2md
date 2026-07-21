@@ -97,6 +97,10 @@ def prepare_convert_options(
 ) -> None:
     """Validate one conversion request without mutating persistent settings."""
     validate_content_request(options.content_mode, options.selector)
+    if options.output is not None and len(options.sources) > 1:
+        raise CommandUsageError(
+            "--output accepts exactly one source; omit it for multiple sources"
+        )
     if options.cookie_path is not None and not options.browser_cookies:
         raise CommandUsageError("--cookie-path requires --browser-cookies")
     if options.cookie_path is not None and options.cookie_json is not None:

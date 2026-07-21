@@ -11,6 +11,8 @@ from urllib.parse import urlsplit
 
 from grab2md.network.rate_limiter import GlobalRateLimiter, RateLimitConfig
 
+POLITE_MINIMUM_DELAY_SECONDS = 1.0
+
 
 def _parse_retry_after(value: str | None, *, now: float) -> int | None:
     """Return Retry-After seconds for either delta-seconds or an HTTP date."""
@@ -49,7 +51,11 @@ class SequentialRequestScheduler:
             raise ValueError("requests_per_minute must be positive")
         if minimum_delay < 0 or not 0 <= jitter <= 1:
             raise ValueError("Invalid scheduler delay configuration")
-        self.minimum_delay = minimum_delay * (2.0 if polite else 1.0)
+        self.minimum_delay = (
+            max(minimum_delay * 2.0, POLITE_MINIMUM_DELAY_SECONDS)
+            if polite
+            else minimum_delay
+        )
         self.jitter = jitter
         self.sleep = sleep
         self.clock = clock

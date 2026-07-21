@@ -127,6 +127,20 @@ def test_convert_preparation_keeps_cookie_path_one_shot(tmp_path):
         )
 
 
+def test_convert_preparation_rejects_multiple_sources_with_one_output(tmp_path):
+    with pytest.raises(CommandUsageError, match="exactly one source"):
+        prepare_convert_options(
+            convert_options(
+                sources=["first.html", "second.html"],
+                output=tmp_path / "combined.md",
+            )
+        )
+
+    prepare_convert_options(
+        convert_options(sources=["first.html", "second.html"], output=None)
+    )
+
+
 def test_command_failure_classifier_distinguishes_usage_from_runtime():
     usage = classify_command_failure("Batch processing", CommandUsageError("bad input"))
     runtime = classify_command_failure("Crawling", OSError("disk full"))

@@ -56,12 +56,17 @@ class ArtifactManifest:
     def records(self) -> tuple[ArtifactRecord, ...]:
         return tuple(self._records)
 
-    def register(self, record: ArtifactRecord) -> None:
+    def validate(self, record: ArtifactRecord) -> tuple[str, ...]:
+        """Preflight every identity and collision before artifact persistence."""
         identities = [canonical_url_identity(alias) for alias in record.aliases]
         for identity in identities:
             existing = self._aliases.get(identity)
             if existing is not None and existing.output_path != record.output_path:
                 raise ValueError(f"URL identity already maps to {existing.output_path}")
+        return tuple(identities)
+
+    def register(self, record: ArtifactRecord) -> None:
+        identities = self.validate(record)
         self._records.append(record)
         for identity in identities:
             self._aliases[identity] = record

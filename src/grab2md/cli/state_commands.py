@@ -38,13 +38,16 @@ def list_states():
     for crawl in crawls:
         progress = f"{crawl['urls_processed']}/{crawl['urls_processed'] + crawl['urls_queued']}"
         table.add_row(
-            crawl["crawl_id"][:8],
+            crawl["crawl_id"],
             crawl["start_url"],
             crawl["created_at"][:19],
             crawl["last_checkpoint"][:19],
             progress,
         )
     console.print(table)
+    console.print("\nFull IDs (unique prefixes of 8+ characters are also accepted):")
+    for crawl in crawls:
+        console.print(crawl["crawl_id"], markup=False, highlight=False)
 
 
 @state_app.command(name="resume")
@@ -56,7 +59,11 @@ def resume_crawl(
 ):
     """Resume an interrupted crawl."""
     state_manager = StateManager()
-    crawl_state = state_manager.load_state(crawl_id)
+    try:
+        crawl_state = state_manager.load_state(crawl_id)
+    except ValueError as error:
+        console.print(f"[red]Invalid crawl ID: {error}[/red]")
+        raise typer.Exit(2) from error
     if not crawl_state:
         console.print(f"[red]Crawl {crawl_id} not found.[/red]")
         raise typer.Exit(1)
@@ -144,7 +151,11 @@ def show_state_info(
     crawl_id: str = typer.Argument(..., help="ID of the crawl to show info for")
 ):
     """Show detailed information about a crawl state."""
-    crawl_state = StateManager().load_state(crawl_id)
+    try:
+        crawl_state = StateManager().load_state(crawl_id)
+    except ValueError as error:
+        console.print(f"[red]Invalid crawl ID: {error}[/red]")
+        raise typer.Exit(2) from error
     if not crawl_state:
         console.print(f"[red]Crawl {crawl_id} not found.[/red]")
         raise typer.Exit(1)

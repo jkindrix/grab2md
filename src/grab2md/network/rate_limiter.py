@@ -49,7 +49,7 @@ class RateLimitConfig:
     """Configuration for rate limiting."""
 
     requests_per_minute: int = 30
-    burst_allowance: int = 5
+    burst_allowance: int = 0
     circuit_failure_threshold: int = 5
     circuit_recovery_timeout: float = 300.0  # 5 minutes
     circuit_test_requests: int = 3
@@ -191,7 +191,8 @@ class DomainRateLimiter:
             # Check rate limit
             current_count = self.counter.get_request_count(current_time)
 
-            # Allow burst up to the limit + burst allowance
+            # The public crawl rate is a literal maximum. Callers that use the
+            # lower-level limiter may opt into a separately declared burst.
             max_requests = self.config.requests_per_minute + self.config.burst_allowance
 
             if current_count >= max_requests:

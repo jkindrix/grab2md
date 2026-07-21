@@ -101,3 +101,16 @@ def test_remote_document_without_canonical_uses_final_source_url():
     )
 
     assert metadata.canonical_url == "https://example.com/final"
+
+
+def test_non_http_or_credentialed_canonical_is_treated_as_absent():
+    for canonical in (
+        "javascript:alert(1)",
+        "https://user:secret@example.com/private",
+    ):
+        _, metadata = prepare_document(
+            f'<html><head><link rel="canonical" href="{canonical}"></head></html>',
+            "https://example.com/final",
+        )
+
+        assert metadata.canonical_url == "https://example.com/final"

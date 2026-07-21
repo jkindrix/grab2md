@@ -145,10 +145,10 @@ class TestStateIntegration:
         )
 
     @patch("grab2md.markdown.crawler.fetch_html")
-    def test_resume_page_budget_counts_only_prior_successes(
+    def test_resume_page_budget_counts_prior_successes_and_failures(
         self, mock_fetch, temp_dirs, mock_html_response
     ):
-        """Prior failures must not consume the resumed crawl's success budget."""
+        """Prior terminal attempts consume the cumulative page-attempt budget."""
         state_dir, output_dir = temp_dirs
         mock_fetch.return_value = FetchResult(
             "https://example.com/resumed",
@@ -172,18 +172,24 @@ class TestStateIntegration:
         state.statistics.urls_failed = 1
         manager.save_state()
 
+        resumed_manager = StateManager(state_dir=state_dir)
         result = crawl_website(
             start_url="https://ignored.example",
             output_dir=str(output_dir),
             max_pages=2,
             respect_robots=False,
-            state_manager=StateManager(state_dir=state_dir),
+            state_manager=resumed_manager,
             resume_crawl_id=state.crawl_id,
         )
 
         assert result.success is True
-        assert result.processed_count == 2
-        assert "https://example.com/resumed" in result.url_mapping
+        assert result.processed_count == 1
+        assert "https://example.com/resumed" not in result.url_mapping
+        assert resumed_manager.current_state is not None
+        assert resumed_manager.current_state.urls_queued == [
+            ("https://example.com/resumed", 1)
+        ]
+        mock_fetch.assert_not_called()
 
     def test_state_manager_cli_integration(self, temp_dirs):
         """Test state manager CLI commands."""

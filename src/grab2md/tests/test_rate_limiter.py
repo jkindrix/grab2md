@@ -143,12 +143,25 @@ class TestDomainRateLimiter:
         assert delay >= 0
 
         # Record many requests quickly
-        for _ in range(65):  # More than limit + burst
+        for _ in range(60):
             limiter.record_request_start()
 
         # Should now be rate limited
         can_proceed, delay = limiter.can_make_request()
         assert can_proceed is False
+        assert delay > 0
+
+    def test_default_configuration_has_no_undisclosed_burst(self):
+        limiter = DomainRateLimiter(
+            "example.com", RateLimitConfig(requests_per_minute=1)
+        )
+
+        allowed, _ = limiter.can_make_request()
+        assert allowed is True
+        limiter.record_request_start()
+
+        allowed, delay = limiter.can_make_request()
+        assert allowed is False
         assert delay > 0
 
     def test_success_failure_tracking(self):

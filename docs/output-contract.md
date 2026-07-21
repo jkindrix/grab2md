@@ -58,7 +58,9 @@ fields are omitted. Extraction uses standard HTML title, meta, canonical-link,
 and language attributes. Open Graph/Twitter title and description fields and
 article publication fields are recognized. For a remote document without an
 explicit canonical link, `canonical_url` is the final response URL. Local files
-do not receive a fabricated canonical URL.
+do not receive a fabricated canonical URL. Invalid, credential-bearing, and
+non-HTTP(S) canonical links are treated as absent, so they cannot make archive
+registration fail after an output has been written.
 
 The contract deliberately does not infer missing authors or dates from page
 text and does not execute JSON-LD. This keeps output deterministic and avoids

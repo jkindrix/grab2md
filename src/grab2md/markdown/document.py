@@ -84,6 +84,25 @@ def _canonicalize(value: str, base_url: str) -> str:
     return candidate if _is_remote(candidate) else value
 
 
+def _validated_canonical(value: str, base_url: str) -> str | None:
+    """Return a usable HTTP(S) canonical or treat hostile metadata as absent."""
+    candidate = urljoin(base_url, value.strip())
+    parts = urlsplit(candidate)
+    if (
+        parts.scheme.casefold() not in {"http", "https"}
+        or not parts.hostname
+        or parts.username is not None
+        or parts.password is not None
+    ):
+        return None
+    try:
+        parts.hostname.encode("idna")
+        parts.port
+    except (UnicodeError, ValueError):
+        return None
+    return candidate
+
+
 def _canonicalize_srcset(value: str, base_url: str) -> str:
     return serialize_srcset(
         [
@@ -133,7 +152,7 @@ def prepare_document(
     if isinstance(canonical_tag, Tag):
         canonical = _attribute(canonical_tag, "href")
         if canonical and remote:
-            canonical = _canonicalize(canonical, document_base)
+            canonical = _validated_canonical(canonical, document_base)
     if canonical is None and remote:
         canonical = source_url
 

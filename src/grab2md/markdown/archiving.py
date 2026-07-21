@@ -59,13 +59,13 @@ class ArchiveCoordinator:
             self.manifest.register_alias(page.final_url, canonical_record)
             return ArchiveOutcome(canonical_record.output_path, reused=True)
 
-        self.write_text(output_path, document.markdown)
-        self.manifest.register(
-            ArtifactRecord(
-                requested_url=requested_url,
-                final_url=page.final_url,
-                canonical_url=canonical_url,
-                output_path=output_path,
-            )
+        record = ArtifactRecord(
+            requested_url=requested_url,
+            final_url=page.final_url,
+            canonical_url=canonical_url,
+            output_path=output_path,
         )
+        self.manifest.validate(record)
+        self.write_text(output_path, document.markdown)
+        self.manifest.register(record)
         return ArchiveOutcome(output_path, reused=False)

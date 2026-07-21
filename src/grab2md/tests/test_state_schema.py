@@ -66,3 +66,45 @@ def test_manager_loads_legacy_fixture_through_store_migration(tmp_path):
     assert state is not None
     assert state.version == CURRENT_STATE_VERSION
     assert state.urls_visited == {"https://example.com": "page.md"}
+
+
+def test_store_rejects_traversal_and_external_state_symlinks(tmp_path):
+    state_dir = tmp_path / "states"
+    state_dir.mkdir()
+    outside = tmp_path / "outside.json"
+    outside.write_text(
+        json.dumps(
+            CrawlState(
+                crawl_id="outside", start_url="https://outside.example"
+            ).to_dict()
+        ),
+        encoding="utf-8",
+    )
+    store = CrawlStateStore(state_dir)
+
+    with pytest.raises(ValueError, match="Invalid crawl ID"):
+        store.load("../outside")
+
+    linked = state_dir / "linked.json"
+    try:
+        linked.symlink_to(outside)
+    except OSError:
+        pytest.skip("Symlinks are unavailable on this platform")
+    with pytest.raises(ValueError, match="escapes configured root"):
+        store.load("linked")
+
+
+def test_store_resolves_only_unambiguous_displayed_id_prefixes(tmp_path):
+    store = CrawlStateStore(tmp_path)
+    first_id = "12345678-1111-4111-8111-111111111111"
+    second_id = "12345678-2222-4222-8222-222222222222"
+    unique_id = "abcdef12-3333-4333-8333-333333333333"
+    for crawl_id in (first_id, second_id, unique_id):
+        store.save(CrawlState(crawl_id=crawl_id, start_url="https://example.com"))
+
+    loaded = store.load("abcdef12")
+
+    assert loaded is not None
+    assert loaded.crawl_id == unique_id
+    with pytest.raises(ValueError, match="ambiguous"):
+        store.load("12345678")

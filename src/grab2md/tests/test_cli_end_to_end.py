@@ -135,6 +135,28 @@ def test_local_conversion_subprocess_writes_markdown(tmp_path):
     assert "# Local page" in output.read_text(encoding="utf-8")
 
 
+def test_multiple_sources_cannot_share_one_output_file(tmp_path):
+    first = tmp_path / "first.html"
+    second = tmp_path / "second.html"
+    output = tmp_path / "result.md"
+    first.write_text("<h1>First marker</h1>", encoding="utf-8")
+    second.write_text("<h1>Second marker</h1>", encoding="utf-8")
+
+    result = run_cli(
+        tmp_path,
+        "convert",
+        first,
+        second,
+        "--local",
+        "--output",
+        output,
+    )
+
+    assert result.returncode == 2
+    assert "--output accepts exactly one source" in result.stdout
+    assert not output.exists()
+
+
 def test_direct_source_is_primary_and_accepts_root_options(tmp_path):
     source = tmp_path / "direct.html"
     output = tmp_path / "direct.md"
@@ -403,9 +425,9 @@ def test_crawl_state_resume_and_traversal_containment_in_subprocess(
 
     listed = run_cli(tmp_path, "state", "list")
     assert listed.returncode == 0
-    assert crawl_id[:8] in listed.stdout
+    assert crawl_id in listed.stdout
 
-    resumed = run_cli(tmp_path, "state", "resume", crawl_id)
+    resumed = run_cli(tmp_path, "state", "resume", crawl_id[:8])
     assert resumed.returncode == 0, resumed.stderr
     assert "resumed successfully" in resumed.stdout
 
