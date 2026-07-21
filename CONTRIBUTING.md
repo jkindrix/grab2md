@@ -34,6 +34,9 @@ poetry run pytest src/grab2md/tests tests/config \
 poetry run ruff check src/grab2md tests/config
 poetry run black --check src/grab2md tests/config
 poetry run mypy src/grab2md tests/config
+poetry run mypy --check-untyped-defs \
+  --exclude 'src/grab2md/tests/' src/grab2md
+python scripts/check_requirement_exports.py
 poetry run bandit -r src/grab2md -x src/grab2md/tests -ll
 poetry export --only main --extras render --without-hashes \
   --format requirements.txt --output .tmp/render-requirements.txt
@@ -46,6 +49,11 @@ CHROME_BIN=/usr/bin/chromium node extension/tests/chromium-smoke.js
 The Chromium command may use a platform-specific binary path. Browser-render
 end-to-end tests additionally require the `render` extra and
 `GRAB2MD_RUN_RENDER_E2E=1`.
+
+`poetry.lock` is the source for the committed `requirements.txt` and
+`requirements-dev.txt` snapshots. After any lock change, regenerate them with
+the pinned Poetry/export-plugin versions; the requirement-export gate prints an
+exact diff when either snapshot is stale.
 
 ## Pull requests
 

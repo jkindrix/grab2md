@@ -17,7 +17,7 @@ Validate the complete release path without changing the global environment:
 ```
 
 This script will:
-1. Run metadata, lint, format, type, and test gates
+1. Run metadata, requirement-export, lint, format, type, and test gates
 2. Build the package using Poetry
 3. Install the package globally using pipx (or into a temporary environment in dry-run mode)
 4. Verify command, module, and package-metadata versions agree

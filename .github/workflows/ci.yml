@@ -94,6 +94,8 @@ jobs:
           "poetry-plugin-export==${{ env.POETRY_EXPORT_VERSION }}"
       - name: Install locked dependencies
         run: poetry sync --with dev
+      - name: Verify committed requirement exports
+        run: python scripts/check_requirement_exports.py
       - name: Ruff
         run: poetry run ruff check src/grab2md tests/config
       - name: Black

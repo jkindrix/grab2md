@@ -16,6 +16,7 @@ fi
 
 echo "Running release gates..."
 poetry check --lock
+python scripts/check_requirement_exports.py
 poetry run ruff check src/grab2md tests/config
 poetry run black --check src/grab2md tests/config
 poetry run mypy src/grab2md tests/config

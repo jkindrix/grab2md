@@ -41,6 +41,14 @@ repos:
 
   - repo: local
     hooks:
+      - id: requirement-export-drift
+        name: verify requirement exports match poetry.lock
+        entry: python scripts/check_requirement_exports.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit, pre-push]
+
       - id: mypy
         name: run mypy
         entry: poetry run mypy
