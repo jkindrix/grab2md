@@ -38,6 +38,7 @@ def _target_value(match: re.Match[str]) -> str:
 def documentation_files(root: Path) -> list[Path]:
     """Return maintained Markdown files whose local links must resolve."""
     paths = [*root.glob("*.md"), *(root / "docs").rglob("*.md")]
+    paths.extend((root / "benchmarks").rglob("*.md"))
     paths.extend((root / "extension").glob("*.md"))
     return sorted(path for path in paths if path.is_file())
 
