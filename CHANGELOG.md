@@ -10,6 +10,15 @@ Version `0.4.2` is the first public alpha under the `grab2md` identity.
 
 ## [Unreleased]
 
+### Added
+
+- Added deterministic release-note and distribution-checksum rendering, a
+  draft-first immutable GitHub release procedure, and explicit pre-1.0
+  version/tag-signing policy.
+- Added a sanitized conversion-fidelity issue form, evidence-corpus admission
+  guidance, and a retainable manual extension interaction/accessibility
+  checklist.
+
 ## [0.4.2] - 2026-07-24
 
 ### Added

@@ -1,0 +1,84 @@
+name: Conversion fidelity report
+description: Report missing, altered, or unexpectedly retained page content.
+title: "fidelity: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for helping improve conversion quality. Prefer a minimal synthetic reproducer over a complete page dump.
+
+        Never submit credentials, cookies, authorization headers, browser databases, private URLs, private page content, or unredacted logs. Only attach content you created or are permitted to redistribute. Use the private process in SECURITY.md for security concerns.
+
+  - type: input
+    id: version
+    attributes:
+      label: grab2md version
+      description: Run `grab2md --version`, or provide the exact commit SHA.
+      placeholder: "0.4.2"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: interface
+    attributes:
+      label: Interface
+      options:
+        - CLI — direct conversion
+        - CLI — batch
+        - CLI — crawl
+        - Chrome extension — full page
+        - Chrome extension — selection
+        - Chrome extension — main article
+    validations:
+      required: true
+
+  - type: textarea
+    id: invocation
+    attributes:
+      label: Command or extension settings
+      description: Remove credentials, private paths, and sensitive URL components.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: Identify the content or formatting that should be present or absent.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: Include the smallest relevant Markdown excerpt.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproducer
+    attributes:
+      label: Minimal sanitized reproducer
+      description: |
+        Paste synthetic HTML or link a small public fixture. Do not paste an entire third-party page.
+      render: html
+
+  - type: input
+    id: public_url
+    attributes:
+      label: Public source URL (optional)
+      description: Include only a public, non-sensitive URL with all credential query parameters removed.
+
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Submission safety
+      options:
+        - label: I removed credentials, cookies, private URLs, private content, personal data, and unredacted diagnostics.
+          required: true
+        - label: I created or am permitted to redistribute every attached fixture or excerpt.
+          required: true
+        - label: The maintainers may minimize an attached synthetic fixture into the repository's regression corpus.
+          required: false

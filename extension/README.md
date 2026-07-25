@@ -89,6 +89,7 @@ extension/
 ├── READABILITY_LICENSE.md # Vendored Readability license
 ├── THIRD_PARTY_NOTICES.md # Upstream copyright, license, and provenance
 ├── VENDORING.md        # Upstream comparison and derivative-update procedure
+├── MANUAL_RELEASE_CHECKLIST.md # Retainable pre-Web-Store manual test record
 └── images/             # Extension icons and images
 ```
 
@@ -116,11 +117,13 @@ loopback fixture origin; the committed manifest is separately asserted to have
 no persistent host permissions, and the runtime test proves another origin is
 denied.
 
-Before any Chrome Web Store submission, perform and record a manual pass for
-keyboard-only popup traversal, visible focus, control labels, conversion status
-and error announcements, all three extraction modes, preview scrolling, and
-clipboard/download completion. This is a release checklist, not a claim of
-formal accessibility conformance.
+Before any Chrome Web Store submission, perform and retain the
+[manual interaction and accessibility checklist](./MANUAL_RELEASE_CHECKLIST.md).
+It covers keyboard-only popup traversal, visible focus, control labels,
+conversion status and error announcements, all three extraction modes, preview
+scrolling, and clipboard/download completion. The committed checklist is a
+template, not completed evidence or a claim of formal accessibility
+conformance.
 
 ## License
 
