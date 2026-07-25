@@ -534,3 +534,29 @@ def test_success_checkpoint_contains_links_discovered_from_completed_page(tmp_pa
     engine.run()
 
     assert snapshots == [[(child, 1)]]
+
+
+def test_progress_messages_do_not_duplicate_the_url(tmp_path):
+    # The console presenter appends " ({url})" to every progress line, so the
+    # message text itself must not also embed that url or it renders twice.
+    body = '<a href="https://example.com/next">next</a>'
+    events = []
+
+    with patch(
+        "grab2md.markdown.crawler.fetch_html", return_value=fetch_result(body=body)
+    ):
+        crawl(
+            tmp_path,
+            max_pages=1,
+            max_depth=1,
+            show_progress=True,
+            progress_callback=lambda message, url=None, status=None: events.append(
+                (message, url, status)
+            ),
+        )
+
+    printed = {"queued", "processing", "failed", "error", "saved", "blocked"}
+    relevant = [event for event in events if event[2] in printed and event[1]]
+    assert relevant, "expected printed progress events that carry a url"
+    for message, url, status in relevant:
+        assert url not in message, f"{status} message embeds its url: {message!r}"
