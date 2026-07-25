@@ -22,6 +22,12 @@ This extension contains the following third-party code.
   and conversion rules
 - Integrity model: maintained and regression-tested as a local derivative; it
   is not represented as an unmodified, upstream-hash-pinned asset
+- Upstream review: releases through 7.2.4 were compared on 2026-07-24. Relevant
+  destination/title escaping, ordered-list indentation, and safe trimming
+  changes are incorporated; the 7.2.3 `<pre>` normalization was reverted
+  upstream in 7.2.4 and is superseded locally by authored-whitespace runtime
+  tests.
+- Maintenance procedure: [`VENDORING.md`](./VENDORING.md)
 
 MIT License
 
@@ -47,7 +53,7 @@ SOFTWARE.
 
 ## Vendored-asset review
 
-As reviewed on 2026-07-17, Mozilla Readability and the Turndown derivative are
+As reviewed on 2026-07-24, Mozilla Readability and the Turndown derivative are
 the only third-party source assets declared or identified in the extension
 tree. The remaining JavaScript, HTML, CSS, and image assets are project-authored
 assets. If another third-party asset is added, its copyright, version, source,

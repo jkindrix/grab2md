@@ -18,7 +18,7 @@ var TurndownService = (function () {
     for (var i = 1; i < arguments.length; i++) {
       var source = arguments[i];
       for (var key in source) {
-        if (source.hasOwnProperty(key)) destination[key] = source[key];
+        if (Object.prototype.hasOwnProperty.call(source, key)) destination[key] = source[key];
       }
     }
     return destination;
@@ -36,7 +36,9 @@ var TurndownService = (function () {
 
   // Trim trailing newlines from a string
   function trimTrailingNewlines(string) {
-    return string.replace(/\n*$/, '');
+    var indexEnd = string.length;
+    while (indexEnd > 0 && string[indexEnd - 1] === '\n') indexEnd--;
+    return string.substring(0, indexEnd);
   }
 
   // Preserve authored Markdown punctuation as literal text. Line-leading
@@ -54,6 +56,19 @@ var TurndownService = (function () {
       .replace(/^(\s*)(#{1,6}) /gm, '$1\\$2 ')
       .replace(/^(\s*)> /gm, '$1\\> ')
       .replace(/^(\s*)(\d+)\. /gm, '$1$2\\. ');
+  }
+
+  function cleanAttribute(attribute) {
+    return attribute ? attribute.replace(/(\n+\s*)+/g, '\n') : '';
+  }
+
+  function escapeLinkDestination(destination) {
+    var escaped = destination.replace(/([<>()])/g, '\\$1');
+    return escaped.indexOf(' ') >= 0 ? '<' + escaped + '>' : escaped;
+  }
+
+  function escapeLinkTitle(title) {
+    return title.replace(/"/g, '\\"');
   }
   
   // Detect if string content appears to be code for proper code fence handling
@@ -197,8 +212,7 @@ var TurndownService = (function () {
     replacement: function (content, node, options) {
       content = content
         .replace(/^\n+/, '')
-        .replace(/\n+$/, '\n')
-        .replace(/\n/gm, '\n    ');
+        .replace(/\n+$/, '\n');
 
       // Remove extra blank lines
       content = content.replace(/^\s*\n\s*\n/gm, '\n');
@@ -212,6 +226,8 @@ var TurndownService = (function () {
         prefix = (start ? Number(start) + index : index + 1) + '. ';
       }
 
+      var indentation = repeat(' ', Math.max(4, prefix.length));
+      content = content.replace(/\n/gm, '\n' + indentation);
       return prefix + content + (node.nextSibling && !/\n$/.test(content) ? '\n' : '');
     }
   };
@@ -298,10 +314,10 @@ var TurndownService = (function () {
   rules.image = {
     filter: 'img',
     replacement: function (content, node) {
-      var alt = node.alt || '';
-      var src = node.getAttribute('src') || '';
-      var title = node.title || '';
-      var titlePart = title ? ' "' + title + '"' : '';
+      var alt = escapeMarkdown(cleanAttribute(node.getAttribute('alt')));
+      var src = escapeLinkDestination(node.getAttribute('src') || '');
+      var title = cleanAttribute(node.getAttribute('title'));
+      var titlePart = title ? ' "' + escapeLinkTitle(title) + '"' : '';
 
       // Handle missing src attribute
       if (!src) return '';
@@ -326,11 +342,11 @@ var TurndownService = (function () {
              node.getAttribute('href');
     },
     replacement: function (content, node) {
-      var href = node.getAttribute('href');
-      var title = node.title ? ' "' + node.title + '"' : '';
+      var href = cleanAttribute(node.getAttribute('href'));
+      var title = cleanAttribute(node.getAttribute('title'));
 
       // Skip empty links or anchors that don't point anywhere
-      if (!href || href === '#' || href.startsWith('javascript:')) {
+      if (!href || href === '#' || /^\s*javascript:/i.test(href)) {
         return content;
       }
 
@@ -339,6 +355,8 @@ var TurndownService = (function () {
         return '';
       }
 
+      href = escapeLinkDestination(href);
+      title = title ? ' "' + escapeLinkTitle(title) + '"' : '';
       return '[' + content + '](' + href + title + ')';
     }
   };
