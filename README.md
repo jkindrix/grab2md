@@ -60,7 +60,7 @@ grab2md https://example.com/app --render-js
 See [`docs/browser-rendering.md`](https://github.com/jkindrix/grab2md/blob/main/docs/browser-rendering.md) for its resource,
 network, and authentication boundaries.
 
-The production `grab2md` PyPI endpoint still returned 404 on 2026-07-22. A
+The production `grab2md` PyPI endpoint still returned 404 on 2026-07-24. A
 matching pending Trusted Publisher is configured, but that does not reserve the
 name. TestPyPI contains staging-only `0.4.0` and `0.4.1` rehearsals; neither is
 a production release. Production availability must be checked again
@@ -77,7 +77,8 @@ grab2md page.html --output page.md
 
 The hidden compatibility alias `grab2md convert SOURCE` remains accepted for
 pre-release scripts. Direct sources are the primary interface and the alias is
-deliberately omitted from normal command help.
+deliberately omitted from the command table. Run `grab2md help` to inspect every
+direct-conversion option without promoting that alias.
 
 Process Markdown files or plain URL lists and rewrite links between successful
 local outputs:
@@ -104,13 +105,16 @@ grab2md state info CRAWL_ID
 grab2md state resume CRAWL_ID
 ```
 
-Run `grab2md COMMAND --help` for the complete, configuration-aware option list.
+Run `grab2md help` for the complete, configuration-aware direct-conversion
+option list. Run `grab2md COMMAND --help` for batch, crawl, configuration, and
+state workflows.
 
 ## Commands
 
 | Command | Purpose |
 |---|---|
 | `grab2md SOURCE...` | Convert one or more HTTP(S) URLs or local HTML files. |
+| `help` | Show every option accepted by the primary direct-conversion form. |
 | `batch` | Extract links from input files, convert them, and rewrite successful local links. |
 | `crawl` | Recursively fetch and convert pages using a sequential, robots-aware policy. |
 | `config` | Inspect, validate, back up, restore, and change configuration. |
@@ -182,6 +186,13 @@ Crawls are intentionally sequential. Available controls include:
 - `--polite` for at least one second between sequential requests and twice any
   larger explicit delay;
 - content selection, progress, output layout, visualization, and quiet-mode switches.
+
+Robots access rules follow RFC 9309 semantics: duplicate exact product-token
+groups are combined case-insensitively, wildcard groups apply only when no exact
+group exists, the longest matching rule wins, equivalent `Allow` rules win
+ties, URI octets are normalized for comparison, and `*`/`$` patterns are
+supported. A missing (4xx) robots file permits access; a network error or 5xx
+response fails closed. `Crawl-delay` is honored as a non-standard extension.
 
 `Ctrl+C` or termination checkpoints the active crawl and then preserves normal
 signal behavior. Deferred URLs remain queued instead of being silently lost.

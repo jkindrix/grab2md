@@ -33,6 +33,7 @@ def _write_contract(root: Path, *, version: str = "1.2.3") -> None:
 - Development/release-candidate version: `{version}`
 
 The hidden compatibility alias `grab2md convert SOURCE` remains accepted.
+Run `grab2md help` for direct-conversion options.
 
 ## Commands
 
@@ -99,6 +100,6 @@ def test_documentation_check_rejects_broken_local_link(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert (
-        "README.md:15: local Markdown link does not exist: docs/guide.md"
+        "README.md:16: local Markdown link does not exist: docs/guide.md"
         in result.stderr
     )

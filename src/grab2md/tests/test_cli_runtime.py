@@ -53,10 +53,21 @@ def test_root_help_presents_direct_sources_and_deemphasizes_convert_alias():
     assert "grab2md page.html -o page.md" in normalized_output
     assert "grab2md page.html --local" not in normalized_output
     assert "\n│ convert" not in result.output
+    assert "help" in result.output
+    assert "complete option list for primary direct conversion" in normalized_output
 
-    alias_help = CliRunner().invoke(cli.app, ["convert", "--help"])
-    assert alias_help.exit_code == 0
-    assert "URLs or local HTML files to convert" in alias_help.output
+    direct_help = CliRunner().invoke(cli.app, ["help"])
+    assert direct_help.exit_code == 0
+    assert "URLs or local HTML files to convert" in direct_help.output
+    assert "--output" in direct_help.output
+    assert "--content" in direct_help.output
+    assert "--download-images" in direct_help.output
+    assert "--render-js" in direct_help.output
+    assert "grab2md convert" not in direct_help.output
+
+    compatibility_help = CliRunner().invoke(cli.app, ["convert", "--help"])
+    assert compatibility_help.exit_code == 0
+    assert "URLs or local HTML files to convert" in compatibility_help.output
 
 
 def test_package_root_exports_only_version_metadata():
