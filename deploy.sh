@@ -19,9 +19,9 @@ poetry check --lock
 python scripts/check_requirement_exports.py
 python scripts/check_documentation.py
 python scripts/check_package_readme.py README.md
-poetry run ruff check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py
-poetry run black --check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py
-poetry run mypy src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py
+poetry run ruff check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py scripts/render_release_notes.py
+poetry run black --check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py scripts/render_release_notes.py
+poetry run mypy src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py scripts/render_release_notes.py
 poetry run mypy --check-untyped-defs --exclude 'src/grab2md/tests/' src/grab2md
 poetry run pytest src/grab2md/tests tests/config tests/scripts
 
@@ -30,6 +30,8 @@ rm -rf dist
 poetry build
 expected_version="$(poetry version --short)"
 poetry run twine check dist/*
+poetry run python scripts/render_release_notes.py \
+    --version "$expected_version" dist/*.whl dist/*.tar.gz >/dev/null
 
 if [[ "$dry_run" == true ]]; then
     poetry run python scripts/release_smoke.py dist/*.whl \

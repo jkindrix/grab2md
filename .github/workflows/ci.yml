@@ -61,6 +61,9 @@ jobs:
           poetry run twine check dist/*
           poetry run python scripts/check_documentation.py
           poetry run python scripts/check_package_readme.py README.md
+          poetry run python scripts/render_release_notes.py \
+            --version "$(poetry version --short)" \
+            dist/*.whl dist/*.tar.gz > "$RUNNER_TEMP/RELEASE_NOTES.md"
       - name: Verify wheel contents
         run: |
           python - <<'PY'
@@ -114,12 +117,12 @@ jobs:
       - name: Verify committed requirement exports
         run: python scripts/check_requirement_exports.py
       - name: Ruff
-        run: poetry run ruff check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py
+        run: poetry run ruff check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py scripts/render_release_notes.py
       - name: Black
-        run: poetry run black --check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py
+        run: poetry run black --check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py scripts/render_release_notes.py
       - name: Mypy
         run: |
-          poetry run mypy src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py
+          poetry run mypy src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py scripts/render_release_notes.py
           poetry run mypy --check-untyped-defs \
             --exclude 'src/grab2md/tests/' src/grab2md
       - name: Bandit

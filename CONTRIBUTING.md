@@ -31,9 +31,9 @@ Run these before opening a pull request:
 ```bash
 poetry run pytest src/grab2md/tests tests/config tests/scripts \
   --cov=grab2md --cov-report=term-missing:skip-covered
-poetry run ruff check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py
-poetry run black --check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py
-poetry run mypy src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py
+poetry run ruff check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py scripts/render_release_notes.py
+poetry run black --check src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py scripts/render_release_notes.py
+poetry run mypy src/grab2md tests/config tests/scripts scripts/check_documentation.py scripts/check_package_readme.py scripts/render_release_notes.py
 poetry run mypy --check-untyped-defs \
   --exclude 'src/grab2md/tests/' src/grab2md
 python scripts/check_requirement_exports.py
