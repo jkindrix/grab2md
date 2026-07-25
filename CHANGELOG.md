@@ -25,6 +25,8 @@ The pending first public `0.4.2` alpha uses `grab2md` consistently.
   distributions retained by a successful protected-main CI run, verifies their
   identity, and publishes with PEP 740 attestations through protected TestPyPI
   and PyPI environments.
+- Added a reproducible upstream-comparison and update procedure for the
+  extension's pinned and derivative third-party assets.
 
 ### Changed
 
@@ -88,6 +90,9 @@ The pending first public `0.4.2` alpha uses `grab2md` consistently.
   duplicate conversion.
 - Made the source-install path independent of Poetry while retaining Poetry
   2.4.1 as the pinned contributor and release toolchain.
+- Added a visible `grab2md help` route that derives and displays every option
+  accepted by primary bare-source conversion while keeping `convert` hidden as
+  a compatibility alias.
 
 ### Fixed
 
@@ -128,6 +133,15 @@ The pending first public `0.4.2` alpha uses `grab2md` consistently.
   extension table cells.
 - Removed an unused legacy configuration file from wheel and source artifacts
   and enforced a package-data allowlist in hosted CI.
+- Replaced the standard-library robots access matcher with RFC 9309 group
+  merging, wildcard/end-anchor, longest-match, tie-break, and percent-encoding
+  semantics and forced the standard's UTF-8 decoding for charset-less files;
+  duplicate matching groups can no longer silently permit a disallowed path.
+- Skipped state entries rejected by path containment without crashing the
+  complete state listing.
+- Ported reviewed Turndown fixes for Markdown-safe link/image destinations and
+  titles, long ordered-list continuation indentation, and linear trailing-line
+  trimming while retaining inert parsing and authored code whitespace.
 
 ### Security
 
