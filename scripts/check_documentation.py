@@ -100,6 +100,14 @@ def contract_findings(root: Path) -> list[str]:
         )
     if "Run `grab2md help`" not in readme:
         findings.append("README must expose the primary direct-conversion help route")
+    if "whole-document default" not in readme or "lossless default" in readme:
+        findings.append(
+            "README must describe full mode as whole-document, not lossless"
+        )
+    if "stable caller-owned output-root hierarchy" not in readme:
+        findings.append(
+            "README must disclose the caller-owned output-root trust boundary"
+        )
     return findings
 
 

@@ -17,6 +17,13 @@ rewriting. Downloaded image references can therefore be replaced by local image
 paths, and successful crawl/batch targets can still be rewritten relative to
 the containing Markdown file.
 
+Archive link rewriting is isolated per Markdown artifact. If a file disappears,
+becomes unreadable, or cannot be atomically replaced, other artifacts continue
+to be attempted, the typed batch/crawl result records the failed path and
+reason, and the command exits nonzero as a partial failure. Successfully
+converted artifacts are retained; links in an artifact that could not be
+updated may remain remote.
+
 Crawl frontier identity excludes URL fragments because fragments identify a
 location within an already-fetched representation. Query strings remain part
 of identity because servers may return different resources for different
@@ -25,6 +32,21 @@ queries.
 Local HTML references are not canonicalized. They remain source-relative so
 local links retain their meaning and the guarded local-image copier can resolve
 them beneath the source document directory.
+
+## Output containment
+
+For batch and crawl output, page-derived directory and filename components are
+sanitized and resolved beneath the selected output root. Final Markdown and
+image replacements anchor their immediate destination directory on POSIX, so a
+late replacement of that opened directory cannot redirect an in-progress
+commit.
+
+The selected output root and its caller-owned ancestors must remain stable for
+the operation. A concurrent local process with permission to rename or replace
+that hierarchy can redirect later path-based planning or directory opening and
+is outside grab2md's containment boundary. Use an output hierarchy that is not
+writable by untrusted local accounts. This boundary does not weaken rejection
+of paths, symlinks, or filenames derived from untrusted page content.
 
 ## Character decoding
 

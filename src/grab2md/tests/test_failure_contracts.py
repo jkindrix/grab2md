@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 from grab2md.cli.cli import app
 from grab2md.markdown.batch_processor import BatchItemResult, BatchResult
 from grab2md.markdown.crawler import CrawlResult, crawl_website
+from grab2md.markdown.link_rewriter import LinkRewriteFailure, LinkRewriteResult
 from grab2md.network.request_handler import FetchResult
 from grab2md.utils.state_manager import StateManager
 
@@ -71,6 +72,30 @@ def test_batch_partial_failure_exits_nonzero_and_reports_durable_output(tmp_path
 
     assert result.exit_code == 1
     assert "1 URL(s) failed; 1 succeeded" in result.output
+
+
+def test_batch_rewrite_failure_exits_nonzero_without_false_completion(tmp_path):
+    source = tmp_path / "links.md"
+    source.write_text("fixture", encoding="utf-8")
+    output = tmp_path / "output" / "page.md"
+    output.parent.mkdir()
+    output.write_text("page", encoding="utf-8")
+    failure = LinkRewriteFailure(output, "https://example.com", "read-only")
+    partial = BatchResult(
+        items=[BatchItemResult("https://example.com", output_file=str(output))],
+        url_mapping={"https://example.com": str(output)},
+        error="Local-link rewriting failed for 1 archived file(s)",
+        link_rewrite=LinkRewriteResult(failures=(failure,)),
+    )
+    with patch("grab2md.cli.cli.process_markdown_links", return_value=partial):
+        result = runner.invoke(
+            app,
+            ["batch", str(source), "--output-dir", str(output.parent), "--quiet"],
+        )
+
+    assert result.exit_code == 1
+    assert "Local-link rewriting failed for 1 archived file" in result.output
+    assert "Batch processing complete" not in result.output
 
 
 def test_state_export_import_and_missing_info_fail_nonzero(tmp_path):
@@ -163,3 +188,24 @@ def test_crawl_success_reports_completion(tmp_path):
 
     assert result.exit_code == 0
     assert "Website crawling complete" in result.output
+
+
+def test_crawl_rewrite_failure_exits_nonzero_without_false_completion(tmp_path):
+    output = tmp_path / "page.md"
+    failure = LinkRewriteFailure(output, "https://example.com", "read-only")
+    partial = CrawlResult(
+        processed_count=1,
+        url_mapping={"https://example.com": str(output)},
+        success=False,
+        error="Local-link rewriting failed for 1 archived file(s)",
+        link_rewrite=LinkRewriteResult(failures=(failure,)),
+    )
+    with patch("grab2md.cli.cli.crawl_website", return_value=partial):
+        result = runner.invoke(
+            app,
+            ["crawl", "https://example.com", "--output-dir", str(tmp_path), "--quiet"],
+        )
+
+    assert result.exit_code == 1
+    assert "Local-link rewriting failed for 1 archived file" in result.output
+    assert "Website crawling complete" not in result.output

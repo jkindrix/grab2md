@@ -176,7 +176,7 @@ def test_direct_source_is_primary_and_accepts_root_options(tmp_path):
     assert "# Direct source" in output.read_text(encoding="utf-8")
 
 
-def test_local_content_modes_are_explicit_lossless_and_fail_honestly(tmp_path):
+def test_local_content_modes_are_explicit_whole_document_and_fail_honestly(tmp_path):
     fixtures = Path(__file__).parents[3] / "tests" / "fixtures" / "extraction"
     article = tmp_path / "article.html"
     article.write_text(

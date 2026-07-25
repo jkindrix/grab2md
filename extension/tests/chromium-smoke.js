@@ -270,6 +270,18 @@ async function main() {
     assert.match(markdown, /Search indexing uses a model\./);
     assert.match(markdown, /```text\nmodel Search API\n```/);
 
+    const sharedFixture = JSON.parse(fs.readFileSync(
+      path.join(extensionRoot, '..', 'tests', 'fixtures', 'generic-conversion.json'),
+      'utf8'
+    ));
+    const sharedMarkdown = await evaluate(
+      popupClient,
+      `convertToMarkdown(${JSON.stringify(sharedFixture.html)})`
+    );
+    for (const phrase of sharedFixture.required_phrases) {
+      assert.ok(sharedMarkdown.includes(phrase), sharedMarkdown);
+    }
+
     const escapedMarkdown = await evaluate(
       popupClient,
       `convertToMarkdown('<p>*literal* _underscored_ [brackets] and 1. list text</p><pre><code>*code*</code></pre>')`

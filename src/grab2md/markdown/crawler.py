@@ -18,6 +18,7 @@ from grab2md.markdown.crawl_engine import (
     CrawlScope,
     SequentialCrawlEngine,
 )
+from grab2md.markdown.link_rewriter import LinkRewriteResult
 from grab2md.markdown.pipeline import PagePipeline
 from grab2md.network.header_manager import HeaderConfig, HeaderManager
 from grab2md.network.request_handler import fetch_html
@@ -44,6 +45,7 @@ class CrawlResult:
     success: bool = True
     failed_count: int = 0
     error: Optional[str] = None
+    link_rewrite: LinkRewriteResult = field(default_factory=LinkRewriteResult)
 
 
 @dataclass(frozen=True)
@@ -315,21 +317,27 @@ def _terminal_result(
     context: CrawlRunContext,
     processed_count: int,
     failed_count: int,
+    link_rewrite: LinkRewriteResult,
 ) -> CrawlResult:
-    success = processed_count > 0 and failed_count == 0
+    success = processed_count > 0 and failed_count == 0 and link_rewrite.success
+    errors: list[str] = []
     if failed_count:
-        error = f"Crawl completed with {failed_count} failed URLs"
-    elif not processed_count:
-        error = "Crawl completed without producing any pages"
-    else:
-        error = None
+        errors.append(f"Crawl completed with {failed_count} failed URLs")
+    if not link_rewrite.success:
+        errors.append(
+            "Local-link rewriting failed for "
+            f"{link_rewrite.failed_count} archived file(s)"
+        )
+    if not processed_count and not errors:
+        errors.append("Crawl completed without producing any pages")
     return CrawlResult(
         processed_count=processed_count,
         url_mapping=context.url_mapping,
         crawl_id=context.state.crawl_id,
         success=success,
         failed_count=failed_count,
-        error=error,
+        error="; ".join(errors) or None,
+        link_rewrite=link_rewrite,
     )
 
 
@@ -370,7 +378,10 @@ def run_crawl(request: CrawlRequest, state_manager: StateManager) -> CrawlResult
                 "stats",
             )
     result = _terminal_result(
-        context, engine_run.processed_count, engine_run.failed_count
+        context,
+        engine_run.processed_count,
+        engine_run.failed_count,
+        engine_run.link_rewrite,
     )
     emit(
         f"Completed crawling. Processed {result.processed_count} pages, "

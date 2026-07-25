@@ -102,6 +102,9 @@ class DefaultSourceGroup(TyperGroup):
     """Treat an unrecognized first operand as a conversion source."""
 
     def parse_args(self, ctx: TyperContext, args: list[str]) -> list[str]:
+        # TyperGroup's override contract uses the vendored base Context; the
+        # public typer.Context is a narrower subclass and violates the base
+        # signature here. Keep this exact type pinned with Typer itself.
         return super().parse_args(ctx, route_default_source(args))
 
 
@@ -380,7 +383,7 @@ def direct_help(ctx: typer.Context) -> None:
     direct_command = parent.command.get_command(parent, "convert")
     if direct_command is None:
         raise RuntimeError("Direct-conversion command is unavailable")
-    help_context = TyperContext(
+    help_context = typer.Context(
         direct_command,
         info_name="grab2md",
         terminal_width=120,
@@ -529,9 +532,7 @@ def batch_command(
             )
             progress.update(
                 task,
-                description=(
-                    f"✅ Completed processing {execution.result.processed_count} URLs"
-                ),
+                description=(f"Converted {execution.result.processed_count} URLs"),
             )
     except COMMAND_ERRORS as error:
         fail_command("Batch processing", error)
@@ -543,7 +544,7 @@ def batch_command(
         os.path.relpath(path, output_dir) for path in result.url_mapping.values()
     ]
     console.print(
-        f"\n✨ [bold green]Successfully processed {result.processed_count} URLs[/bold green]"
+        f"\n✨ [bold green]Converted {result.processed_count} URLs[/bold green]"
     )
     if not quiet:
         for relative_path in created_files[:10]:
@@ -558,6 +559,7 @@ def batch_command(
             "## Summary",
             f"- **Total URLs Processed:** {result.processed_count}",
             f"- **Failed URLs:** {result.failed_count}",
+            f"- **Link Rewrite Failures:** {result.link_rewrite.failed_count}",
             f"- **Processing Time:** {elapsed:.2f} seconds",
             f"- **Output Directory:** {output_dir}",
             "",

@@ -7,6 +7,7 @@ from grab2md.markdown.batch_processor import process_markdown_links
 from grab2md.markdown.crawler import crawl_website
 from grab2md.markdown.document import DocumentMetadata
 from grab2md.markdown.link_rewriter import rewrite_archived_files, rewrite_links
+from grab2md.markdown.link_rewriter import LinkRewriteFailure, LinkRewriteResult
 from grab2md.markdown.pipeline import AcquiredPage, ConvertedDocument, ConversionFailure
 from grab2md.network.request_handler import FetchResult
 from grab2md.utils.state_manager import StateManager
@@ -57,11 +58,12 @@ def test_rewrite_archived_files_updates_all_files_and_reports_progress(tmp_path)
     }
     progress = []
 
-    updated = rewrite_archived_files(
+    result = rewrite_archived_files(
         mapping, lambda message, url, status: progress.append((message, url, status))
     )
 
-    assert updated == 2
+    assert result == LinkRewriteResult(updated_count=2)
+    assert result.success is True
     assert first.read_text(encoding="utf-8") == "[Second](nested/second.md)"
     assert second.read_text(encoding="utf-8") == "[First](../first.md)"
     assert [event[2] for event in progress].count("updated") == 2
@@ -77,12 +79,98 @@ def test_rewrite_archived_files_isolates_missing_file_failure(tmp_path):
     }
     progress = []
 
-    updated = rewrite_archived_files(
+    result = rewrite_archived_files(
         mapping, lambda message, url, status: progress.append((message, url, status))
     )
 
-    assert updated == 1
+    assert result.updated_count == 1
+    assert result.success is False
+    assert result.failed_count == 1
+    assert result.failures[0].output_path == missing
+    assert result.failures[0].requested_url == "https://example.com/missing"
+    assert result.failures[0].error
     assert any(status == "error" for _, _, status in progress)
+
+
+def test_batch_link_rewrite_failure_makes_aggregate_partial(tmp_path):
+    source = tmp_path / "links.md"
+    source.write_text("https://example.com/page\n", encoding="utf-8")
+    page = AcquiredPage(
+        "https://example.com/page",
+        "https://example.com/page",
+        "<h1>Page</h1>",
+        200,
+        {},
+        "text/html",
+        "utf-8",
+    )
+    pipeline = Mock()
+    pipeline.convert.return_value = ConvertedDocument(
+        page,
+        "# Page",
+        page.html,
+        DocumentMetadata(),
+    )
+    failure = LinkRewriteFailure(
+        output_path=tmp_path / "output" / "page.md",
+        requested_url=page.requested_url,
+        error="read-only",
+    )
+
+    with (
+        patch("grab2md.markdown.batch_processor.acquire_http_page", return_value=page),
+        patch(
+            "grab2md.markdown.batch_processor.rewrite_archived_files",
+            return_value=LinkRewriteResult(failures=(failure,)),
+        ),
+    ):
+        result = process_markdown_links(
+            [source], tmp_path / "output", page_pipeline=pipeline
+        )
+
+    assert result.processed_count == 1
+    assert result.failed_count == 0
+    assert result.success is False
+    assert result.link_rewrite.failures == (failure,)
+    assert result.error == "Local-link rewriting failed for 1 archived file(s)"
+
+
+def test_crawl_link_rewrite_failure_makes_aggregate_partial(tmp_path):
+    start = "https://example.com/start"
+    response = FetchResult(
+        start,
+        start,
+        status_code=200,
+        body="<html><body><h1>Start</h1></body></html>",
+    )
+    failure = LinkRewriteFailure(
+        output_path=tmp_path / "output" / "start.md",
+        requested_url=start,
+        error="read-only",
+    )
+    manager = StateManager(state_dir=tmp_path / "states")
+
+    with (
+        patch("grab2md.markdown.crawler.fetch_html", return_value=response),
+        patch(
+            "grab2md.markdown.crawl_engine.rewrite_archived_files",
+            return_value=LinkRewriteResult(failures=(failure,)),
+        ),
+    ):
+        result = crawl_website(
+            start,
+            tmp_path / "output",
+            max_pages=1,
+            max_depth=0,
+            respect_robots=False,
+            state_manager=manager,
+        )
+
+    assert result.processed_count == 1
+    assert result.failed_count == 0
+    assert result.success is False
+    assert result.link_rewrite.failures == (failure,)
+    assert result.error == "Local-link rewriting failed for 1 archived file(s)"
 
 
 def test_batch_mapping_and_rewrites_exclude_failed_outputs(tmp_path):
