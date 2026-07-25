@@ -66,3 +66,63 @@ def test_content_request_rejects_invalid_mode_selector_combinations():
         validate_content_request(ContentMode.MAIN, ".article")
     with pytest.raises(ContentExtractionError, match="Invalid CSS selector"):
         extract_content_html("<main>body</main>", mode="selector", selector="[")
+
+
+def test_main_mode_prunes_navigation_chrome_inside_the_region():
+    body = "Genuine article body sentence. " * 12
+    html = (
+        "<html><body><main>"
+        "<nav aria-label='Contents'>Jump to Alpha Deutsch Francais</nav>"
+        f"<h1>Real Heading</h1><p>{body}</p>"
+        "</main></body></html>"
+    )
+    extracted = extract_content_html(html, mode=ContentMode.MAIN)
+
+    assert "Real Heading" in extracted
+    assert "Genuine article body" in extracted
+    assert "Jump to Alpha" not in extracted
+
+
+def test_main_mode_selects_role_main_and_prunes_inner_navigation():
+    body = "Reference documentation paragraph. " * 12
+    html = (
+        "<html><body>"
+        "<div class='sphinxsidebar' role='navigation'>SIDEBAR NAV</div>"
+        "<div class='body' role='main'>"
+        "<div role='navigation'>ON THIS PAGE</div>"
+        f"<h1>Documentation Title</h1><p>{body}</p>"
+        "</div></body></html>"
+    )
+    extracted = extract_content_html(html, mode=ContentMode.MAIN)
+
+    assert "Documentation Title" in extracted
+    assert "Reference documentation paragraph" in extracted
+    assert "SIDEBAR NAV" not in extracted  # outside role=main: never selected
+    assert "ON THIS PAGE" not in extracted  # role=navigation inside: pruned
+
+
+def test_main_mode_prunes_hidden_and_aria_hidden_within_region():
+    body = "Visible content sentence here. " * 12
+    html = (
+        "<html><body><main>"
+        "<span aria-hidden='true'>DECORATIVE ICON</span>"
+        "<div hidden>COLLAPSED PANEL</div>"
+        f"<h1>Kept Heading</h1><p>{body}</p>"
+        "</main></body></html>"
+    )
+    extracted = extract_content_html(html, mode=ContentMode.MAIN)
+
+    assert "Kept Heading" in extracted
+    assert "DECORATIVE ICON" not in extracted
+    assert "COLLAPSED PANEL" not in extracted
+
+
+def test_main_mode_keeps_unpruned_region_when_pruning_would_empty_it():
+    # A region that is almost entirely chrome must not be reduced to nothing;
+    # the unpruned form is preferred over a near-empty result.
+    nav_text = "Only navigation text here. " * 12
+    html = f"<html><body><main><nav>{nav_text}</nav></main></body></html>"
+
+    extracted = extract_content_html(html, mode=ContentMode.MAIN)
+
+    assert "Only navigation text here" in extracted
