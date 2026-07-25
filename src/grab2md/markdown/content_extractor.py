@@ -40,14 +40,61 @@ def _substantial_text(element: Tag) -> bool:
     return len(element.get_text(" ", strip=True)) >= 200
 
 
-def _semantic_main(soup: BeautifulSoup) -> Optional[str]:
+# Structural chrome that is never primary content and is pruned from an
+# already-selected main region. Content-bearing wrappers (``header``/``footer``
+# can carry a title or byline) are deliberately excluded from this list.
+_BOILERPLATE_TAGS = ("nav", "aside", "script", "style", "noscript", "template")
+# ARIA roles that mark structural chrome rather than primary content, plus
+# explicitly hidden elements. ``~=`` matches whitespace-separated role tokens,
+# so an element carrying several roles is still recognized.
+_BOILERPLATE_SELECTOR = (
+    '[role~="navigation"], [role~="complementary"], [role~="banner"], '
+    '[role~="contentinfo"], [role~="search"], [aria-hidden="true"], [hidden]'
+)
+
+
+def _prune_boilerplate(region: Tag) -> None:
+    """Remove structural chrome from a selected main region, in place."""
+    removals: list[Tag] = list(region.find_all(_BOILERPLATE_TAGS))
+    removals.extend(region.select(_BOILERPLATE_SELECTOR))
+    for element in removals:
+        if not element.decomposed:
+            element.decompose()
+
+
+def _select_main_region(soup: BeautifulSoup) -> Optional[Tag]:
+    """Return the single unambiguous main region, or ``None`` when undecided."""
     articles = [
         element for element in soup.find_all("article") if _substantial_text(element)
     ]
     if len(articles) == 1:
-        return str(articles[0])
+        return articles[0]
+    # A lone ``<main>`` element is authoritative; failing that, a single
+    # ``role="main"`` container (used by many documentation generators that
+    # never emit ``<main>``) is treated the same way.
     mains = soup.find_all("main")
-    return str(mains[0]) if len(mains) == 1 else None
+    if len(mains) == 1:
+        return mains[0]
+    role_mains = soup.select('[role~="main"]')
+    if len(role_mains) == 1:
+        return role_mains[0]
+    return None
+
+
+def _semantic_main(soup: BeautifulSoup) -> Optional[str]:
+    region = _select_main_region(soup)
+    if region is None:
+        return None
+    # Prune on a detached copy so a shared soup (reused by selector mode) is
+    # never mutated.
+    region_copy = BeautifulSoup(str(region), "html.parser")
+    _prune_boilerplate(region_copy)
+    # Pruning must only ever help: if it drops a substantial region below the
+    # selection bar (a region that was almost entirely chrome), keep the
+    # unpruned form rather than returning a near-empty result.
+    if len(region_copy.get_text(" ", strip=True)) >= 200:
+        return str(region_copy)
+    return str(region)
 
 
 def _readability_main(html_content: str) -> str:
