@@ -200,9 +200,12 @@ def get_chrome_cookies(
                             )
                         )
                 except CookieSourceError:
+                    # Decryption failures fail closed: surface, never mask.
                     raise
                 except Exception as error:
-                    logger.debug("Error processing cookie %s: %s", name, error)
+                    # Non-decryption row anomalies (malformed timestamp, record
+                    # construction) skip the row but must not be silent.
+                    logger.warning("Skipping unreadable cookie %s: %s", name, error)
     except Exception as error:
         logger.error("Error reading Chrome cookies: %s", error)
         if isinstance(error, CookieSourceError):
