@@ -465,3 +465,48 @@ def test_artifact_writer_anchors_parent_during_symlink_swap(tmp_path):
 
     assert not (outside / "page.md").exists()
     assert (detached / "page.md").read_text(encoding="utf-8") == "# Anchored\n"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX dir-fd containment contract")
+def test_json_writer_anchors_parent_during_symlink_swap(tmp_path):
+    destination = tmp_path / "state"
+    destination.mkdir()
+    detached = tmp_path / "detached-state"
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    real_replace = os.replace
+
+    def swap_parent_then_replace(source, target, **kwargs):
+        destination.rename(detached)
+        destination.symlink_to(outside, target_is_directory=True)
+        real_replace(source, target, **kwargs)
+
+    with patch(
+        "grab2md.utils.atomic_writer.os.replace", side_effect=swap_parent_then_replace
+    ):
+        atomic_write_json(destination / "crawl.json", {"value": 1}, private=True)
+
+    assert not (outside / "crawl.json").exists()
+    assert (detached / "crawl.json").read_text(
+        encoding="utf-8"
+    ) == '{\n    "value": 1\n}'
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission contract")
+def test_json_writer_is_owner_only_by_default(tmp_path):
+    # Secure by default: omitting ``private`` must still restrict the file to
+    # its owner, so a sensitive payload cannot be written world-readable by
+    # omission.
+    secure = tmp_path / "secure.json"
+    atomic_write_json(secure, {"value": 1})
+    assert secure.stat().st_mode & 0o777 == 0o600
+
+    # Opting out (``private=False``) publishes an intentionally shared file,
+    # subject only to the process umask.
+    shared = tmp_path / "shared.json"
+    previous_umask = os.umask(0o022)
+    try:
+        atomic_write_json(shared, {"value": 1}, private=False)
+    finally:
+        os.umask(previous_umask)
+    assert shared.stat().st_mode & 0o077 != 0
