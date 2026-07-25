@@ -10,7 +10,7 @@ poetry run pytest src/grab2md/tests tests/config tests/scripts \
 
 On 2026-07-24, Python 3.11.2 measured **5,420 production statements, 621
 missed, and 88.54% total coverage** (`557 passed, 4 skipped`) at
-`1e9ece022fa78c85f9a5cb9bd32c9798bc1c76a2`. The enforced floor is 85%,
+`33f2132b020667e1faddb4a79d67ba992ab38c8c`. The enforced floor is 85%,
 preserving an interpreter-dependent buffer without allowing coverage to fall
 far below the earlier stabilization baseline. The floor must not be lowered
 merely to make a change pass.
