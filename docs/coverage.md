@@ -8,9 +8,9 @@ poetry run pytest src/grab2md/tests tests/config tests/scripts \
   --cov=grab2md --cov-report=term-missing:skip-covered
 ```
 
-On 2026-07-24, Python 3.11.2 measured **5,393 production statements, 621
-missed, and 88.49% total coverage** (`552 passed, 4 skipped`) at
-`9952b3549a1ef28020ba903f5e47e89693672d00`. The enforced floor is 85%,
+On 2026-07-24, Python 3.11.2 measured **5,420 production statements, 621
+missed, and 88.54% total coverage** (`557 passed, 4 skipped`) at
+`1e9ece022fa78c85f9a5cb9bd32c9798bc1c76a2`. The enforced floor is 85%,
 preserving an interpreter-dependent buffer without allowing coverage to fall
 far below the earlier stabilization baseline. The floor must not be lowered
 merely to make a change pass.
@@ -27,13 +27,15 @@ contract; shared crawl-policy preflight added an explicit no-side-effect usage
 boundary. Production modules remain the measured denominator.
 
 The RFC 9309 robots matcher and its group, pattern, and octet-normalization
-contracts account for most of the latest denominator increase.
+contracts account for most of the latest denominator increase. Typed
+archive-link rewrite results, partial-failure propagation, and mechanically
+guarded output-boundary documentation account for the current increment.
 
 The largest gaps are concentrated in:
 
 | Module | Statements | Missed | Coverage | Tracked work |
 |---|---:|---:|---:|---|
-| `cli/cli.py` | 252 | 67 | 73% | Keep callbacks limited to dispatch, option translation, rendering, and exit status |
+| `cli/cli.py` | 251 | 67 | 73% | Keep callbacks limited to dispatch, option translation, rendering, and exit status |
 | `cli/command_runtime.py` | 161 | 4 | 98% | Preserve direct presentation-neutral command tests |
 | `cli/state_commands.py` | 96 | 31 | 68% | Add remaining interactive/error presentation fixtures without duplicating store tests |
 | `cli/conversion_presenter.py` | 53 | 10 | 81% | Preserve success/failure/output presentation fixtures |
