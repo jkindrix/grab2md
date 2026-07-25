@@ -30,12 +30,13 @@ def _write_contract(root: Path, *, version: str = "1.2.3") -> None:
         f"""\
 # Example
 
-- Development/release-candidate version: `{version}`
+- Release version: `{version}`
 
 The hidden compatibility alias `grab2md convert SOURCE` remains accepted.
 Run `grab2md help` for direct-conversion options.
 Full mode is the whole-document default.
 Use a stable caller-owned output-root hierarchy.
+Install with `python -m pip install grab2md`.
 
 ## Commands
 
@@ -50,7 +51,7 @@ Use a stable caller-owned output-root hierarchy.
         encoding="utf-8",
     )
     (root / "CHANGELOG.md").write_text(
-        f"The pending first public `{version}` alpha is next.\n", encoding="utf-8"
+        f"## [Unreleased]\n\n## [{version}] - 2026-07-24\n", encoding="utf-8"
     )
     (root / "docs" / "guide.md").write_text("# Guide\n", encoding="utf-8")
 
@@ -102,7 +103,7 @@ def test_documentation_check_rejects_broken_local_link(tmp_path: Path) -> None:
 
     assert result.returncode == 1
     assert (
-        "README.md:18: local Markdown link does not exist: docs/guide.md"
+        "README.md:19: local Markdown link does not exist: docs/guide.md"
         in result.stderr
     )
 
@@ -124,3 +125,23 @@ def test_documentation_check_rejects_lossless_and_ambiguous_output_claims(
     assert result.returncode == 1
     assert "whole-document, not lossless" in result.stderr
     assert "output-root trust boundary" in result.stderr
+
+
+def test_documentation_check_rejects_stale_prepublication_contract(
+    tmp_path: Path,
+) -> None:
+    _write_contract(tmp_path)
+    readme = tmp_path / "README.md"
+    readme.write_text(
+        readme.read_text(encoding="utf-8").replace(
+            "Install with `python -m pip install grab2md`.",
+            "No production package has been published.",
+        ),
+        encoding="utf-8",
+    )
+
+    result = _run_check(tmp_path)
+
+    assert result.returncode == 1
+    assert "README must include the production PyPI install command" in result.stderr
+    assert "stale pre-publication language: no production package" in result.stderr

@@ -16,11 +16,18 @@ REFERENCE_LINK = re.compile(
 )
 REMOTE_SCHEMES = frozenset({"http", "https", "mailto"})
 README_VERSION = re.compile(
-    r"^- Development/release-candidate version: `(?P<version>[^`]+)`$",
+    r"^- Release version: `(?P<version>[^`]+)`$",
     re.MULTILINE,
 )
-PENDING_VERSION = re.compile(
-    r"pending first public `(?P<version>[^`]+)` alpha", re.IGNORECASE
+CHANGELOG_RELEASE_VERSION = re.compile(
+    r"^## \[(?P<version>[^\]]+)\] - \d{4}-\d{2}-\d{2}$", re.MULTILINE
+)
+PRODUCTION_INSTALL = "python -m pip install grab2md"
+STALE_PREPUBLICATION_LANGUAGE = (
+    "no production package",
+    "no production pypi release",
+    "pending first authorized release",
+    "pending first public",
 )
 
 
@@ -75,13 +82,13 @@ def contract_findings(root: Path) -> list[str]:
 
     readme_match = README_VERSION.search(readme)
     readme_version = readme_match.group("version") if readme_match else None
-    pending_match = PENDING_VERSION.search(changelog)
-    pending_version = pending_match.group("version") if pending_match else None
+    release_match = CHANGELOG_RELEASE_VERSION.search(changelog)
+    release_version = release_match.group("version") if release_match else None
     versions = {
         "pyproject.toml project version": project_version,
         "extension/manifest.json version": manifest_version,
-        "README development version": readme_version,
-        "CHANGELOG pending-public version": pending_version,
+        "README release version": readme_version,
+        "CHANGELOG latest release version": release_version,
     }
     for label, version in versions.items():
         if version != project_version:
@@ -108,6 +115,14 @@ def contract_findings(root: Path) -> list[str]:
         findings.append(
             "README must disclose the caller-owned output-root trust boundary"
         )
+    if PRODUCTION_INSTALL not in readme:
+        findings.append("README must include the production PyPI install command")
+    lowered_readme = readme.lower()
+    for phrase in STALE_PREPUBLICATION_LANGUAGE:
+        if phrase in lowered_readme:
+            findings.append(
+                f"README must not retain stale pre-publication language: {phrase}"
+            )
     return findings
 
 

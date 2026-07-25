@@ -6,24 +6,25 @@ bounded site crawls. Its unpacked Chrome extension converts the active page,
 main article, or current selection.
 
 > [!IMPORTANT]
-> This is an alpha-stage, pre-1.0 project. The primary workflows are covered by
-> end-to-end tests, but no production package or extension release has been
-> published. TestPyPI artifacts are staging rehearsals, not supported releases.
-> Review the limitations and security boundaries before using it on sensitive
-> or unattended workloads.
+> This is an alpha-stage, pre-1.0 release. The primary workflows are covered by
+> end-to-end tests, but compatibility and real-world extraction quality remain
+> under evaluation. The Python CLI release channel is PyPI; the Chrome extension
+> remains an unpacked development release and is not published in the Chrome Web
+> Store. Review the limitations and security boundaries before using either
+> interface on sensitive or unattended workloads.
 
 ## Status and support
 
-- Development/release-candidate version: `0.4.2`
-- Latest historical source tag: `v0.3.0` (before the `grab2md` rename)
+- Release version: `0.4.2`
+- Release channel: public PyPI alpha
 - Tested Python versions: 3.11, 3.12, and 3.13
-- Production PyPI distribution: `grab2md` (pending first authorized release)
+- Production PyPI distribution: `grab2md`
 - Installed command and Python import: `grab2md`
 - Required gates: tests and production coverage, Ruff, Black, mypy, requirement
   export consistency, wheel smoke, extension runtime tests, Bandit, and
   dependency audit
-- TestPyPI rehearsals exist; no production PyPI release, Web Store release, or
-  stable API compatibility promise exists yet
+- TestPyPI artifacts are staging-only; no Web Store release or stable Python API
+  compatibility promise exists yet
 
 The primary tested paths are local conversion, URL conversion, batch link
 processing, sequential crawling, interruption/resume, configuration recovery,
@@ -31,8 +32,17 @@ and the extension's full-page/article/selection conversion modes.
 
 ## Installation
 
-No production PyPI release has been authorized. Install from source during
-stabilization:
+Create an isolated environment and install the CLI from PyPI:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+python -m pip install --upgrade pip
+python -m pip install grab2md
+grab2md --help
+```
+
+To install the current source tree instead:
 
 ```bash
 git clone https://github.com/jkindrix/grab2md.git
@@ -60,11 +70,9 @@ grab2md https://example.com/app --render-js
 See [`docs/browser-rendering.md`](https://github.com/jkindrix/grab2md/blob/main/docs/browser-rendering.md) for its resource,
 network, and authentication boundaries.
 
-The production `grab2md` PyPI endpoint still returned 404 on 2026-07-24. A
-matching pending Trusted Publisher is configured, but that does not reserve the
-name. TestPyPI contains staging-only `0.4.0` and `0.4.1` rehearsals; neither is
-a production release. Production availability must be checked again
-immediately before publication.
+The production distribution is
+[`grab2md` on PyPI](https://pypi.org/project/grab2md/). TestPyPI artifacts are
+release rehearsals and are not supported production releases.
 
 ## Quick start
 
