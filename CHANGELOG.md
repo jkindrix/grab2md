@@ -6,9 +6,11 @@ All notable changes are documented here. This project follows
 
 Versions through `0.3.0` were developed under the former `html2md` identity.
 Versions `0.4.0` and `0.4.1` were used only for TestPyPI release rehearsals.
-The pending first public `0.4.2` alpha uses `grab2md` consistently.
+Version `0.4.2` is the first public alpha under the `grab2md` identity.
 
 ## [Unreleased]
+
+## [0.4.2] - 2026-07-24
 
 ### Added
 
@@ -367,7 +369,8 @@ First alpha release after the stabilization and integrity remediation cycle.
   formats, oversized files, and output-root escapes.
 - The extension uses least-privilege permissions and exposes only tested modes.
 
-[Unreleased]: https://github.com/jkindrix/grab2md/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jkindrix/grab2md/compare/v0.4.2...HEAD
+[0.4.2]: https://github.com/jkindrix/grab2md/compare/v0.3.0...v0.4.2
 [0.3.0]: https://github.com/jkindrix/grab2md/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jkindrix/grab2md/compare/v0.1.3...v0.2.0
 [0.1.3]: https://github.com/jkindrix/grab2md/compare/v0.1.2...v0.1.3
