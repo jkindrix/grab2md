@@ -255,7 +255,7 @@ class SequentialCrawlEngine:
         return validate
 
     def _fetch(self, item: FrontierItem) -> FetchResult:
-        self.emit(f"Fetching content from {item.url}", item.url, "fetching")
+        self.emit("Fetching content", item.url, "fetching")
         return self.fetch_page(
             item.url,
             self.session,
@@ -303,7 +303,7 @@ class SequentialCrawlEngine:
             return []
         links = extract_links_from_html(page.html, page.final_url)
         self.emit(
-            f"Found {len(links)} links on {item.url}",
+            f"Found {len(links)} links",
             item.url,
             "extracting_links",
         )
@@ -324,21 +324,21 @@ class SequentialCrawlEngine:
         for link in links:
             if self.frontier.enqueue(link, item.depth + 1):
                 self.emit(
-                    f"Queued link (depth {item.depth + 1}): {link}",
+                    f"Queued link (depth {item.depth + 1})",
                     link,
                     "queued",
                 )
 
     def _process(self, item: FrontierItem) -> None:
         if self.robots and not self.robots.can_fetch(item.url):
-            self.emit(f"URL disallowed by robots.txt: {item.url}", item.url, "blocked")
+            self.emit("URL disallowed by robots.txt", item.url, "blocked")
             self.frontier.finish(item.url)
             self.checkpoints.sync(self.frontier)
             return
 
         self.emit(
             f"Processing page attempt {self.attempted_count}/{self.options.max_pages} "
-            f"(depth {item.depth}/{self.options.max_depth}): {item.url}",
+            f"(depth {item.depth}/{self.options.max_depth})",
             item.url,
             "processing",
         )
@@ -346,7 +346,7 @@ class SequentialCrawlEngine:
         if result.status_code == 429 and self.frontier.can_retry(item.url):
             attempt = self.frontier.retry(item)
             self.emit(
-                f"Server rate limited {item.url}; queueing retry "
+                "Server rate limited; queueing retry "
                 f"{attempt}/{MAX_RATE_LIMIT_RETRIES}",
                 item.url,
                 "queued",
@@ -357,7 +357,7 @@ class SequentialCrawlEngine:
         if not result.success:
             error = result.error or "Failed to fetch content"
             self.emit(
-                f"Failed to fetch content from {item.url}: {error}",
+                f"Failed to fetch content: {error}",
                 item.url,
                 "failed",
             )
@@ -395,9 +395,7 @@ class SequentialCrawlEngine:
             except Exception as error:
                 self.frontier.finish(item.url)
                 self.failed_count += 1
-                self.emit(
-                    f"Error processing URL {item.url}: {error}", item.url, "error"
-                )
+                self.emit(f"Error processing URL: {error}", item.url, "error")
                 self.checkpoints.failed(item.url, str(error), self.frontier)
 
         link_rewrite = LinkRewriteResult()
