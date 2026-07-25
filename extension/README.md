@@ -88,6 +88,7 @@ extension/
 ├── turndown.js         # Maintained derivative of Turndown 7.1.1
 ├── READABILITY_LICENSE.md # Vendored Readability license
 ├── THIRD_PARTY_NOTICES.md # Upstream copyright, license, and provenance
+├── VENDORING.md        # Upstream comparison and derivative-update procedure
 └── images/             # Extension icons and images
 ```
 
@@ -131,4 +132,5 @@ Copyright (c) 2025-2026 Justin Kindrix. Distributed under the [MIT License](../L
 - Uses [Turndown](https://github.com/mixmark-io/turndown) for HTML to Markdown conversion
 - Uses [Mozilla Readability](https://github.com/mozilla/readability) 0.6.0 for explicit article extraction
 - Retains Turndown v7.1.1 copyright, MIT terms, provenance, and modification notes in [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)
+- Reviews later Turndown releases through the documented [vendored-asset maintenance procedure](./VENDORING.md)
 - Inspired by the [GRAB2MD](https://github.com/jkindrix/grab2md) command-line tool

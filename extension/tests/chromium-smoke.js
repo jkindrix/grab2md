@@ -279,6 +279,36 @@ async function main() {
     assert.match(escapedMarkdown, /\\\[brackets\\\]/);
     assert.match(escapedMarkdown, /```\n\*code\*\n```/);
 
+    const escapedDestinations = await evaluate(
+      popupClient,
+      `convertToMarkdown(${JSON.stringify(
+        '<p><a href="https://example.com/a b(c)" title=\'say "hello"\'>destination</a></p>' +
+        '<img src="https://example.com/image (1).png" alt="*logo*" title=\'say "hello"\'>'
+      )})`
+    );
+    assert.ok(
+      escapedDestinations.includes(
+        '[destination](<https://example.com/a b\\(c\\)> "say \\"hello\\"")'
+      ),
+      escapedDestinations
+    );
+    assert.ok(
+      escapedDestinations.includes(
+        '![\\*logo\\*](<https://example.com/image \\(1\\).png> "say \\"hello\\"")'
+      ),
+      escapedDestinations
+    );
+    const unsafeDestination = await evaluate(
+      popupClient,
+      `convertToMarkdown('<a href="JaVaScRiPt:alert(1)">safe label</a>')`
+    );
+    assert.equal(unsafeDestination, 'safe label');
+    const orderedContinuation = await evaluate(
+      popupClient,
+      `convertToMarkdown('<ol start="100"><li>first<br>second</li></ol>')`
+    );
+    assert.match(orderedContinuation, /^100\. first {2}\n {5}second$/);
+
     const tableMarkdown = await evaluate(
       popupClient,
       `convertToMarkdown('<table><tr><th>Name</th><th>Value</th></tr><tr><td>one</td><td>**literal** [x](y) _word_ | pipe\\nnext</td></tr></table>')`
