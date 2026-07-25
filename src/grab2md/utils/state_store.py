@@ -119,7 +119,11 @@ class CrawlStateStore:
                     }
                 )
             except Exception as error:
-                logger.error("Failed to read state file %s: %s", state_file, error)
+                logger.error(
+                    "Failed to read state file %s: %s",
+                    unresolved_state_file,
+                    error,
+                )
         crawls.sort(key=lambda item: str(item["last_checkpoint"]), reverse=True)
         return crawls
 

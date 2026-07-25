@@ -8,12 +8,14 @@ This module provides functionality to:
 - Cache robots.txt content for efficiency
 """
 
+from __future__ import annotations
+
+import re
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
-from urllib.parse import urlparse
-from urllib.robotparser import RobotFileParser
+from typing import Any, Optional
+from urllib.parse import urlsplit
 
 import requests
 
@@ -22,6 +24,15 @@ from grab2md.utils.redaction import get_redacting_logger
 
 logger = get_redacting_logger(__name__)
 
+# RFC 9309's formal identifier omits digits, but product names containing digits
+# are common. Accept them as a conservative parsing extension so such groups are
+# honored rather than silently ignored.
+_PRODUCT_TOKEN = re.compile(r"[A-Za-z0-9_-]+\Z")
+_HEX_DIGITS = frozenset("0123456789abcdefABCDEF")
+_UNRESERVED = frozenset(
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+)
+
 
 @dataclass(frozen=True)
 class RobotsFetchResult:
@@ -29,6 +40,216 @@ class RobotsFetchResult:
 
     content: Optional[str]
     status_code: Optional[int]
+
+
+def _normalize_octets(value: str, *, encode_pattern_literals: bool = False) -> str:
+    """Normalize URI octets for RFC 9309 rule comparison."""
+    normalized: list[str] = []
+    index = 0
+    while index < len(value):
+        character = value[index]
+        if (
+            character == "%"
+            and index + 2 < len(value)
+            and value[index + 1] in _HEX_DIGITS
+            and value[index + 2] in _HEX_DIGITS
+        ):
+            octet = int(value[index + 1 : index + 3], 16)
+            decoded = chr(octet)
+            normalized.append(decoded if decoded in _UNRESERVED else f"%{octet:02X}")
+            index += 3
+            continue
+        if encode_pattern_literals and character in {"*", "$"}:
+            normalized.append(f"%{ord(character):02X}")
+        elif ord(character) < 128:
+            normalized.append(character)
+        else:
+            normalized.extend(f"%{octet:02X}" for octet in character.encode("utf-8"))
+        index += 1
+    return "".join(normalized)
+
+
+def _octet_length(value: str) -> int:
+    """Count normalized comparison octets rather than display characters."""
+    length = 0
+    index = 0
+    while index < len(value):
+        if (
+            value[index] == "%"
+            and index + 2 < len(value)
+            and value[index + 1] in _HEX_DIGITS
+            and value[index + 2] in _HEX_DIGITS
+        ):
+            index += 3
+        else:
+            index += 1
+        length += 1
+    return length
+
+
+@dataclass(frozen=True)
+class _RobotsRule:
+    allow: bool
+    specificity: int
+    parts: tuple[str, ...]
+    anchored: bool
+
+    @classmethod
+    def parse(cls, pattern: str, *, allow: bool) -> Optional["_RobotsRule"]:
+        """Compile one non-empty Allow/Disallow path pattern."""
+        if not pattern:
+            return None
+        anchored = pattern.endswith("$")
+        comparable_pattern = pattern[:-1] if anchored else pattern
+        parts = comparable_pattern.split("*")
+        normalized_parts = [
+            _normalize_octets(part, encode_pattern_literals=True) for part in parts
+        ]
+        return cls(
+            allow=allow,
+            specificity=sum(_octet_length(part) for part in normalized_parts),
+            parts=tuple(normalized_parts),
+            anchored=anchored,
+        )
+
+    def matches(self, path: str) -> bool:
+        if len(self.parts) == 1:
+            literal = self.parts[0]
+            return path == literal if self.anchored else path.startswith(literal)
+
+        position = 0
+        first = self.parts[0]
+        if first:
+            if not path.startswith(first):
+                return False
+            position = len(first)
+
+        for part in self.parts[1:-1]:
+            match_at = path.find(part, position)
+            if match_at < 0:
+                return False
+            position = match_at + len(part)
+
+        last = self.parts[-1]
+        if not last:
+            return True
+        if self.anchored:
+            match_at = path.rfind(last, position)
+            return match_at >= position and match_at + len(last) == len(path)
+        return path.find(last, position) >= 0
+
+
+@dataclass(frozen=True)
+class _RobotsGroup:
+    agents: tuple[str, ...]
+    rules: tuple[_RobotsRule, ...]
+    crawl_delays: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class _RobotsPolicy:
+    """Parsed RFC 9309 access rules plus the crawl-delay extension."""
+
+    groups: tuple[_RobotsGroup, ...] = ()
+    allow_everything: bool = False
+    disallow_everything: bool = False
+
+    @classmethod
+    def parse(cls, content: str) -> "_RobotsPolicy":
+        groups: list[_RobotsGroup] = []
+        agents: list[str] = []
+        rules: list[_RobotsRule] = []
+        crawl_delays: list[str] = []
+        seen_record = False
+
+        def finish_group() -> None:
+            if agents:
+                groups.append(
+                    _RobotsGroup(
+                        agents=tuple(agents),
+                        rules=tuple(rules),
+                        crawl_delays=tuple(crawl_delays),
+                    )
+                )
+
+        for raw_line in content.splitlines():
+            line = raw_line.split("#", 1)[0].strip()
+            if not line or ":" not in line:
+                continue
+            field, value = (part.strip() for part in line.split(":", 1))
+            field = field.lower()
+            if field == "user-agent":
+                if seen_record:
+                    finish_group()
+                    agents.clear()
+                    rules.clear()
+                    crawl_delays.clear()
+                    seen_record = False
+                normalized_agent = value.lower()
+                if normalized_agent == "*" or _PRODUCT_TOKEN.fullmatch(value):
+                    agents.append(normalized_agent)
+                continue
+            if not agents:
+                continue
+            seen_record = True
+            if field in {"allow", "disallow"}:
+                rule = _RobotsRule.parse(value, allow=field == "allow")
+                if rule is not None:
+                    rules.append(rule)
+            elif field == "crawl-delay":
+                crawl_delays.append(value)
+        finish_group()
+        return cls(groups=tuple(groups))
+
+    def _matching_groups(self, product_token: str) -> tuple[_RobotsGroup, ...]:
+        exact = tuple(
+            group for group in self.groups if product_token.lower() in group.agents
+        )
+        if exact:
+            return exact
+        return tuple(group for group in self.groups if "*" in group.agents)
+
+    def can_fetch(self, product_token: str, url: str) -> bool:
+        if self.allow_everything:
+            return True
+        if self.disallow_everything:
+            return False
+
+        parsed = urlsplit(url)
+        if parsed.path == "/robots.txt":
+            return True
+        target = parsed.path or "/"
+        if parsed.query:
+            target = f"{target}?{parsed.query}"
+        normalized_target = _normalize_octets(
+            target,
+            encode_pattern_literals=True,
+        )
+        matches = [
+            rule
+            for group in self._matching_groups(product_token)
+            for rule in group.rules
+            if rule.matches(normalized_target)
+        ]
+        if not matches:
+            return True
+        best_specificity = max(rule.specificity for rule in matches)
+        return any(
+            rule.allow for rule in matches if rule.specificity == best_specificity
+        )
+
+    def crawl_delay(self, product_token: str) -> Optional[float]:
+        for group in self._matching_groups(product_token):
+            for value in group.crawl_delays:
+                try:
+                    delay = float(value)
+                except ValueError:
+                    logger.warning("Invalid crawl-delay value: %s", value)
+                    continue
+                if delay >= 0:
+                    return delay
+                logger.warning("Invalid crawl-delay value: %s", value)
+        return None
 
 
 class RobotsChecker:
@@ -64,13 +285,13 @@ class RobotsChecker:
             allow_private=allow_private_network
         )
         self.scheduler = scheduler
-        self._cache: Dict[str, Tuple[RobotFileParser, Optional[float], float]] = {}
+        self._cache: dict[str, tuple[_RobotsPolicy, Optional[float], float]] = {}
         self._cache_duration = 3600  # Cache robots.txt for 1 hour
         self._lock = threading.RLock()
 
     def _get_robots_url(self, url: str) -> str:
         """Get the robots.txt URL for a given URL."""
-        parsed = urlparse(url)
+        parsed = urlsplit(url)
         return f"{parsed.scheme}://{parsed.netloc}/robots.txt"
 
     def _fetch_robots_txt(self, robots_url: str) -> RobotsFetchResult:
@@ -92,6 +313,9 @@ class RobotsChecker:
                 request_scheduler=self.scheduler,
             )
             if 200 <= response.status_code < 300:
+                # RFC 9309 defines robots.txt as UTF-8. Do not inherit Requests'
+                # ISO-8859-1 fallback for charset-less text/plain responses.
+                response.encoding = "utf-8"
                 return RobotsFetchResult(response.text, response.status_code)
             if 400 <= response.status_code < 500:
                 logger.debug(
@@ -117,59 +341,14 @@ class RobotsChecker:
         Returns:
             Crawl delay in seconds, or None if not specified
         """
-        if not content:
-            return None
+        return _RobotsPolicy.parse(content).crawl_delay(self._product_token)
 
-        # Group consecutive User-agent fields and apply the product-token group
-        # in preference to the wildcard group.
-        groups: list[tuple[list[str], list[tuple[str, str]]]] = []
-        agents: list[str] = []
-        directives: list[tuple[str, str]] = []
-        seen_directive = False
-
-        def finish_group():
-            if agents:
-                groups.append((list(agents), list(directives)))
-
-        for raw_line in content.splitlines():
-            line = raw_line.split("#", 1)[0].strip()
-            if not line or ":" not in line:
-                continue
-            field, value = (part.strip() for part in line.split(":", 1))
-            field = field.lower()
-            if field == "user-agent":
-                if seen_directive:
-                    finish_group()
-                    agents.clear()
-                    directives.clear()
-                    seen_directive = False
-                agents.append(value.lower())
-            elif agents:
-                seen_directive = True
-                directives.append((field, value))
-        finish_group()
-
-        def delay_for(agent_name):
-            for group_agents, group_directives in groups:
-                if agent_name not in group_agents:
-                    continue
-                for field, value in group_directives:
-                    if field == "crawl-delay":
-                        try:
-                            return float(value)
-                        except ValueError:
-                            logger.warning("Invalid crawl-delay value: %s", value)
-            return None
-
-        specific_delay = delay_for(self._product_token)
-        return specific_delay if specific_delay is not None else delay_for("*")
-
-    def _get_cached_or_fetch(self, url: str) -> Tuple[RobotFileParser, Optional[float]]:
+    def _get_cached_or_fetch(self, url: str) -> tuple[_RobotsPolicy, Optional[float]]:
         """
         Get robots.txt parser from cache or fetch if needed.
 
         Returns:
-            Tuple of (RobotFileParser, crawl_delay)
+            Tuple of (parsed robots policy, crawl_delay)
         """
         robots_url = self._get_robots_url(url)
         with self._lock:
@@ -181,25 +360,22 @@ class RobotsChecker:
             fetch_result = self._fetch_robots_txt(robots_url)
             content = fetch_result.content
 
-            parser = RobotFileParser()
-            parser.set_url(robots_url)
-
             if (
                 fetch_result.status_code is not None
                 and 400 <= fetch_result.status_code < 500
             ):
                 # RFC 9309: an unavailable robots.txt permits access.
-                setattr(parser, "allow_all", True)
+                policy = _RobotsPolicy(allow_everything=True)
             elif content is not None:
-                parser.parse(content.split("\n"))
+                policy = _RobotsPolicy.parse(content)
             else:
                 # RFC 9309: unreachable or 5xx robots.txt is temporarily unavailable;
                 # crawlers must assume complete disallow.
-                setattr(parser, "disallow_all", True)
+                policy = _RobotsPolicy(disallow_everything=True)
 
-            crawl_delay = self._parse_crawl_delay(content) if content else None
-            self._cache[robots_url] = (parser, crawl_delay, time.time())
-            return parser, crawl_delay
+            crawl_delay = policy.crawl_delay(self._product_token)
+            self._cache[robots_url] = (policy, crawl_delay, time.time())
+            return policy, crawl_delay
 
     def can_fetch(self, url: str) -> bool:
         """
@@ -212,8 +388,8 @@ class RobotsChecker:
             True if the URL can be fetched, False otherwise
         """
         try:
-            parser, _ = self._get_cached_or_fetch(url)
-            return parser.can_fetch(self._product_token, url)
+            policy, _ = self._get_cached_or_fetch(url)
+            return policy.can_fetch(self._product_token, url)
         except Exception as e:
             logger.error(f"Error checking robots.txt for {url}: {e}")
             return False

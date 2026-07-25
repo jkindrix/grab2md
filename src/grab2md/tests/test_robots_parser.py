@@ -3,6 +3,7 @@ Comprehensive tests for robots.txt parser functionality.
 """
 
 import pytest
+import requests
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import Mock, patch
 import time
@@ -64,6 +65,18 @@ class TestRobotsChecker:
         assert result.content == "User-agent: *\nDisallow: /private/"
         assert result.status_code == 200
         mock_get.assert_called_once()
+
+    @patch("requests.Session.get")
+    def test_fetch_robots_txt_decodes_charsetless_content_as_utf8(self, mock_get):
+        response = requests.Response()
+        response.status_code = 200
+        response.headers["Content-Type"] = "text/plain"
+        response._content = "User-agent: *\nDisallow: /café".encode()
+        mock_get.return_value = response
+
+        checker = RobotsChecker()
+
+        assert checker.can_fetch("https://example.com/café") is False
 
     @patch("requests.Session.get")
     def test_fetch_robots_txt_404(self, mock_get):
@@ -330,6 +343,144 @@ Crawl-delay: 5.0
             checker2.can_fetch("https://example.com/restricted/page") is True
         )  # Not restricted for GoodBot
         assert checker2.get_crawl_delay("https://example.com/") == 5.0  # Uses * rule
+
+    @pytest.mark.parametrize("path", ["/first", "/second"])
+    @patch("requests.Session.get")
+    def test_duplicate_product_groups_are_combined(self, mock_get, path):
+        mock_get.return_value = Mock(
+            status_code=200,
+            text="""
+User-agent: grab2md
+Disallow: /first
+
+User-agent: grab2md
+Disallow: /second
+""",
+        )
+
+        assert RobotsChecker().can_fetch(f"https://example.com{path}") is False
+
+    @patch("requests.Session.get")
+    def test_exact_product_group_replaces_combined_wildcard_groups(self, mock_get):
+        mock_get.return_value = Mock(
+            status_code=200,
+            text="""
+User-agent: *
+Disallow: /wild-one
+
+User-agent: *
+Disallow: /wild-two
+
+User-agent: grab2md
+Disallow: /specific
+""",
+        )
+        checker = RobotsChecker()
+
+        assert checker.can_fetch("https://example.com/wild-one") is True
+        assert checker.can_fetch("https://example.com/wild-two") is True
+        assert checker.can_fetch("https://example.com/specific") is False
+
+    @pytest.mark.parametrize("path", ["/wild-one", "/wild-two"])
+    @patch("requests.Session.get")
+    def test_duplicate_wildcard_groups_are_combined_without_exact_group(
+        self, mock_get, path
+    ):
+        mock_get.return_value = Mock(
+            status_code=200,
+            text="""
+User-agent: *
+Disallow: /wild-one
+
+User-agent: *
+Disallow: /wild-two
+""",
+        )
+
+        assert RobotsChecker().can_fetch(f"https://example.com{path}") is False
+
+    @patch("requests.Session.get")
+    def test_product_token_matching_is_exact_and_case_insensitive(self, mock_get):
+        mock_get.return_value = Mock(
+            status_code=200,
+            text="""
+User-agent: not-grab2md
+Disallow: /wrong
+
+User-agent: GRAB2MD
+Disallow: /right
+""",
+        )
+        checker = RobotsChecker(user_agent="grab2md/0.4.2")
+
+        assert checker.can_fetch("https://example.com/wrong") is True
+        assert checker.can_fetch("https://example.com/right") is False
+
+    @patch("requests.Session.get")
+    def test_wildcards_end_anchors_and_queries_follow_rfc_9309(self, mock_get):
+        mock_get.return_value = Mock(
+            status_code=200,
+            text="""
+User-agent: *
+Disallow: /*.pdf$
+Disallow: /private/*/draft
+""",
+        )
+        checker = RobotsChecker()
+
+        assert checker.can_fetch("https://example.com/report.pdf") is False
+        assert checker.can_fetch("https://example.com/report.pdf?download=1") is True
+        assert checker.can_fetch("https://example.com/report.pdfx") is True
+        assert checker.can_fetch("https://example.com/private/a/b/draft") is False
+
+    @patch("requests.Session.get")
+    def test_longest_rule_wins_and_allow_wins_equivalent_tie(self, mock_get):
+        mock_get.return_value = Mock(
+            status_code=200,
+            text="""
+User-agent: *
+Disallow: /documents/
+Allow: /documents/public/
+Disallow: /same
+Allow: /same
+""",
+        )
+        checker = RobotsChecker()
+
+        assert checker.can_fetch("https://example.com/documents/private") is False
+        assert checker.can_fetch("https://example.com/documents/public/page") is True
+        assert checker.can_fetch("https://example.com/same") is True
+
+    @patch("requests.Session.get")
+    def test_percent_encoded_octets_are_normalized_for_matching(self, mock_get):
+        mock_get.return_value = Mock(
+            status_code=200,
+            text="""
+User-agent: *
+Disallow: /users/%7Eprivate
+Disallow: /caf%C3%A9
+Disallow: /literal-%2A
+Disallow: /literal-%24
+Disallow: /encoded%2Fslash
+""",
+        )
+        checker = RobotsChecker()
+
+        assert checker.can_fetch("https://example.com/users/~private") is False
+        assert checker.can_fetch("https://example.com/café") is False
+        assert checker.can_fetch("https://example.com/literal-*") is False
+        assert checker.can_fetch("https://example.com/literal-$") is False
+        assert checker.can_fetch("https://example.com/encoded%2fslash") is False
+        assert checker.can_fetch("https://example.com/encoded/slash") is True
+
+    @patch("requests.Session.get")
+    def test_robots_txt_path_is_implicitly_allowed(self, mock_get):
+        mock_get.return_value = Mock(
+            status_code=200,
+            text="User-agent: *\nDisallow: /",
+        )
+
+        assert RobotsChecker().can_fetch("https://example.com/robots.txt") is True
 
 
 if __name__ == "__main__":

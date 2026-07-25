@@ -92,6 +92,9 @@ def main() -> int:
             == expected_version
         )
         run([str(command), "--help"], cwd=root)
+        direct_help = run([str(command), "help"], cwd=root).stdout
+        for option in ("--output", "--content", "--download-images", "--render-js"):
+            assert option in direct_help
         run([str(python), "-I", "-m", "grab2md", "--help"], cwd=root)
 
         source = root / "source.html"
@@ -100,7 +103,6 @@ def main() -> int:
         run(
             [
                 str(command),
-                "convert",
                 str(source),
                 "--local",
                 "--output",
@@ -118,7 +120,6 @@ def main() -> int:
             run(
                 [
                     str(command),
-                    "convert",
                     f"http://127.0.0.1:{server.server_port}/page",
                     "--allow-private-network",
                     "--output",
@@ -133,7 +134,7 @@ def main() -> int:
             thread.join(timeout=5)
 
         run(
-            [str(command), "convert", str(root / "missing.html"), "--local"],
+            [str(command), str(root / "missing.html"), "--local"],
             cwd=root,
             expected=1,
         )
@@ -144,7 +145,15 @@ def main() -> int:
                 "wheel": wheel.name,
                 "sha256": digest,
                 "version": expected_version,
-                "smokes": ["version", "help", "module", "local", "loopback", "failure"],
+                "smokes": [
+                    "version",
+                    "help",
+                    "direct-help",
+                    "module",
+                    "local",
+                    "loopback",
+                    "failure",
+                ],
             },
             sort_keys=True,
         )

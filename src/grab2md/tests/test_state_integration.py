@@ -229,6 +229,20 @@ class TestStateIntegration:
         crawls = state_manager.list_resumable_crawls()
         assert len(crawls) == 0
 
+    def test_state_listing_skips_symlink_outside_state_directory(self, temp_dirs):
+        state_dir, output_dir = temp_dirs
+        external_state = output_dir / "outside.json"
+        external_state.write_text("{}", encoding="utf-8")
+        state_link = state_dir / "external.json"
+        try:
+            state_link.symlink_to(external_state)
+        except (NotImplementedError, OSError):
+            pytest.skip("symlinks are unavailable on this platform")
+
+        crawls = StateManager(state_dir=state_dir).list_resumable_crawls()
+
+        assert crawls == []
+
     def test_checkpoint_triggers(self, temp_dirs):
         """Test different checkpoint triggers."""
         state_dir, output_dir = temp_dirs

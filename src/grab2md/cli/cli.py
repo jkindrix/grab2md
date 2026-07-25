@@ -21,7 +21,7 @@ from rich.progress import (
     TextColumn,
 )
 from typer._click.core import Context as TyperContext
-from typer.core import TyperGroup
+from typer.core import TyperGroup, TyperOption
 
 from grab2md.config.loader import load_config
 from grab2md.markdown.batch_processor import process_markdown_links
@@ -64,7 +64,7 @@ logger = setup_logging(console_output=False)
 console = Console(theme=GRAB2MD_THEME)
 
 
-_COMMANDS = frozenset({"batch", "config", "convert", "crawl", "state"})
+_COMMANDS = frozenset({"batch", "config", "convert", "crawl", "help", "state"})
 _ROOT_VALUE_OPTIONS = frozenset({"--debug-log", "--log-level"})
 _ROOT_FLAG_OPTIONS = frozenset({"--banner"})
 _ROOT_TERMINAL_OPTIONS = frozenset({"--help", "-h", "--version"})
@@ -369,6 +369,33 @@ def convert_command(
                 successes += 1
     if successes < len(sources):
         raise typer.Exit(1)
+
+
+@app.command(name="help")
+def direct_help(ctx: typer.Context) -> None:
+    """Show the complete option list for primary direct conversion."""
+    parent = ctx.parent
+    if parent is None or not isinstance(parent.command, TyperGroup):
+        raise RuntimeError("Direct-conversion help requires the root command")
+    direct_command = parent.command.get_command(parent, "convert")
+    if direct_command is None:
+        raise RuntimeError("Direct-conversion command is unavailable")
+    help_context = TyperContext(
+        direct_command,
+        info_name="grab2md",
+        terminal_width=120,
+        max_content_width=120,
+    )
+    option_names = [
+        " / ".join([*parameter.opts, *parameter.secondary_opts])
+        for parameter in direct_command.params
+        if isinstance(parameter, TyperOption)
+    ]
+    typer.echo("Direct option names: " + "; ".join(option_names))
+    typer.echo()
+    rendered_help = direct_command.get_help(help_context)
+    if rendered_help:
+        typer.echo(rendered_help)
 
 
 @app.command(name="batch")

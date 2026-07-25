@@ -98,6 +98,8 @@ def contract_findings(root: Path) -> list[str]:
         findings.append(
             "README must identify `convert` as a hidden compatibility alias"
         )
+    if "Run `grab2md help`" not in readme:
+        findings.append("README must expose the primary direct-conversion help route")
     return findings
 
 
