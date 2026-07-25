@@ -138,7 +138,7 @@ Global options include `--log-level` (default `WARNING`), `--debug-log`,
 Useful options include:
 
 - `--content full|main|selector` for explicit content selection (full is the
-  lossless default), with `--selector` required by selector mode;
+  whole-document default), with `--selector` required by selector mode;
 - `--output/-o` to write one source to a file instead of stdout (multiple
   sources cannot share one output path);
 - `--cookie-json` for an owner-only portable cookie export on every platform;
@@ -169,7 +169,9 @@ not supported.
 Batch mode supports preserved paths, flattened domain output, a single flat
 directory, hierarchical domain folders, optional visualization, quiet output,
 and a Markdown report. Only successfully written files enter the local-link
-mapping; failed URLs remain remote links.
+mapping; failed URLs remain remote links. Link rewriting is isolated per
+artifact, but any read or atomic-write failure makes the overall batch result
+partial and exits nonzero while preserving successfully converted files.
 
 ### Crawl policy
 
@@ -196,6 +198,9 @@ response fails closed. `Crawl-delay` is honored as a non-standard extension.
 
 `Ctrl+C` or termination checkpoints the active crawl and then preserves normal
 signal behavior. Deferred URLs remain queued instead of being silently lost.
+Final local-link rewriting is isolated per artifact, but any rewrite failure
+makes the crawl or resume result partial and exits nonzero without deleting
+successfully archived pages.
 
 ## Configuration and state
 
@@ -253,8 +258,11 @@ See [`extension/README.md`](https://github.com/jkindrix/grab2md/blob/main/extens
 
 ## Security boundaries
 
-- Crawl and batch outputs are contained beneath the selected output root;
-  traversal and symlink escapes are rejected or sanitized.
+- With a stable caller-owned output-root hierarchy, crawl and batch reject or
+  sanitize page-derived traversal and symlink escapes. A concurrent local
+  process that can rename or replace the selected root or one of its ancestor
+  directories is outside this containment boundary; do not place output under
+  a directory hierarchy writable by an untrusted local account.
 - Browser cookie databases are copied into unpredictable owner-private
   temporary directories and removed after success, failure, or interruption.
 - Configuration and crawl states are atomically replaced using
@@ -269,8 +277,8 @@ See [`extension/README.md`](https://github.com/jkindrix/grab2md/blob/main/extens
   cookie export, header file, or Playwright storage-state file for rendered
   conversion. Login flows remain outside grab2md, and authentication files are
   rejected when group- or world-readable or when the supplied final path is a
-  symlink on POSIX systems. Resolution of caller-owned ancestor directories
-  remains an operating-system/filesystem trust boundary.
+  symlink on POSIX systems. Resolution of caller-owned authentication-file
+  ancestor directories remains an operating-system/filesystem trust boundary.
 - Remote pages, crawl targets, robots files, and images
   allow only HTTP(S), resolve each origin once, connect only to validated
   numeric addresses, and manually revalidate redirects. Private, loopback,

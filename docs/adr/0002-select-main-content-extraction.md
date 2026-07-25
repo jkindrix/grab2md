@@ -7,7 +7,7 @@
 
 ## Context
 
-Full-document conversion must remain lossless and the default. The former
+Full-document conversion must remain the whole-document default. The former
 `--trim` path instead truncated generated Markdown using domain names, heading
 positions, and footer words. It could delete legitimate sections such as
 References and License, and its packaged site rules aged independently of the
@@ -89,8 +89,9 @@ this note when readability-lxml replaces the extra with a direct dependency.
 Main mode is heuristic and can fail on unusual pages, but failure is explicit
 and recoverable. Semantic pages retain their original link, image, table, code,
 and section markup. Generic article pages gain a maintained extraction
-algorithm without introducing a second Markdown renderer. Full mode remains
-unaffected.
+algorithm without introducing a second Markdown renderer. Full mode continues
+to select the whole document but, like every HTML-to-Markdown transformation,
+does not claim byte- or presentation-lossless conversion.
 
 The committed benchmark is a selection record, not a claim of universal
 extractor quality. New extractor versions or strategies must beat or match the

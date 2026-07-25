@@ -16,7 +16,7 @@ from grab2md.markdown.archive import (
 )
 from grab2md.markdown.archiving import ArchiveCoordinator
 from grab2md.markdown.content_extractor import ContentMode
-from grab2md.markdown.link_rewriter import rewrite_archived_files
+from grab2md.markdown.link_rewriter import LinkRewriteResult, rewrite_archived_files
 from grab2md.markdown.pipeline import AcquiredPage, PagePipeline, acquired_http_page
 from grab2md.network.header_manager import HeaderManager
 from grab2md.network.request_handler import FetchResult
@@ -185,6 +185,7 @@ class CrawlRun:
     failed_count: int
     terminal_count: int
     attempted_count: int
+    link_rewrite: LinkRewriteResult = field(default_factory=LinkRewriteResult)
 
 
 class SequentialCrawlEngine:
@@ -399,11 +400,13 @@ class SequentialCrawlEngine:
                 )
                 self.checkpoints.failed(item.url, str(error), self.frontier)
 
+        link_rewrite = LinkRewriteResult()
         if self.processed_count > 0:
-            rewrite_archived_files(self.manifest, self.emit)
+            link_rewrite = rewrite_archived_files(self.manifest, self.emit)
         return CrawlRun(
             self.processed_count,
             self.failed_count,
             self.frontier.terminal_count,
             self.attempted_count,
+            link_rewrite,
         )

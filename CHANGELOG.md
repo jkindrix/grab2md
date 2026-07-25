@@ -93,6 +93,13 @@ The pending first public `0.4.2` alpha uses `grab2md` consistently.
 - Added a visible `grab2md help` route that derives and displays every option
   accepted by primary bare-source conversion while keeping `convert` hidden as
   a compatibility alias.
+- Defined full mode as whole-document conversion rather than lossless
+  conversion, documented the stable caller-owned output-root boundary, and
+  enforce both claims in the documentation consistency gate.
+- Used Typer's public context for direct-help construction while documenting
+  why its group override still requires Typer's narrower pinned vendored type,
+  and made the shared Python/extension semantics fixture assert actual Chromium
+  conversion output.
 
 ### Fixed
 
@@ -142,6 +149,9 @@ The pending first public `0.4.2` alpha uses `grab2md` consistently.
 - Ported reviewed Turndown fixes for Markdown-safe link/image destinations and
   titles, long ordered-list continuation indentation, and linear trailing-line
   trimming while retaining inert parsing and authored code whitespace.
+- Made isolated archive link-rewrite failures typed batch/crawl results that
+  produce partial failure, nonzero CLI status, and honest resume/report output
+  instead of being discarded after otherwise successful conversions.
 
 ### Security
 

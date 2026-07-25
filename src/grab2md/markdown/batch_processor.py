@@ -11,7 +11,7 @@ from grab2md.markdown.archive import (
     canonical_url_identity,
 )
 from grab2md.markdown.archiving import ArchiveCoordinator
-from grab2md.markdown.link_rewriter import rewrite_archived_files
+from grab2md.markdown.link_rewriter import LinkRewriteResult, rewrite_archived_files
 from grab2md.markdown.pipeline import PagePipeline, acquire_http_page
 from grab2md.network.header_manager import HeaderManager
 from grab2md.utils.parser import extract_urls_from_markdown
@@ -42,6 +42,7 @@ class BatchResult:
     error: str | None = None
     manifest: ArtifactManifest | None = None
     input_errors: list[str] = field(default_factory=list)
+    link_rewrite: LinkRewriteResult = field(default_factory=LinkRewriteResult)
 
     @property
     def processed_count(self) -> int:
@@ -57,6 +58,7 @@ class BatchResult:
             bool(self.items)
             and self.failed_count == 0
             and not self.input_errors
+            and self.link_rewrite.success
             and self.error is None
         )
 
@@ -259,10 +261,16 @@ def process_markdown_links(
         if item.success and item.output_file is not None:
             url_to_file_mapping[url] = item.output_file
 
-    rewrite_archived_files(manifest, update_progress)
+    link_rewrite = rewrite_archived_files(manifest, update_progress)
     processed_count = sum(item.success for item in item_results)
     update_progress(f"Completed processing {processed_count} URLs")
-    result_error = "; ".join(input_errors) if input_errors else None
+    result_errors = list(input_errors)
+    if not link_rewrite.success:
+        result_errors.append(
+            "Local-link rewriting failed for "
+            f"{link_rewrite.failed_count} archived file(s)"
+        )
+    result_error = "; ".join(result_errors) if result_errors else None
     if not item_results and result_error is None:
         result_error = "No URLs were found in the batch inputs"
     return BatchResult(
@@ -271,4 +279,5 @@ def process_markdown_links(
         error=result_error,
         manifest=manifest,
         input_errors=input_errors,
+        link_rewrite=link_rewrite,
     )

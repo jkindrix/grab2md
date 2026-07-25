@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Optional
 from urllib.parse import urlsplit, urlunsplit
@@ -12,6 +13,31 @@ from grab2md.utils.markdown_links import scan_inline_links
 
 OutputPath = str | os.PathLike
 ProgressCallback = Callable[[str, Optional[str], Optional[str]], None]
+
+
+@dataclass(frozen=True)
+class LinkRewriteFailure:
+    """One archived artifact whose local-link update could not be committed."""
+
+    output_path: Path
+    requested_url: str
+    error: str
+
+
+@dataclass(frozen=True)
+class LinkRewriteResult:
+    """Aggregate link-rewrite outcome without hiding isolated file failures."""
+
+    updated_count: int = 0
+    failures: tuple[LinkRewriteFailure, ...] = ()
+
+    @property
+    def success(self) -> bool:
+        return not self.failures
+
+    @property
+    def failed_count(self) -> int:
+        return len(self.failures)
 
 
 def _manifest(value) -> ArtifactManifest:
@@ -58,12 +84,13 @@ def rewrite_links(content, archive, source_file):
 def rewrite_archived_files(
     archive: ArtifactManifest | Mapping[str, OutputPath],
     update_progress: ProgressCallback,
-) -> int:
+) -> LinkRewriteResult:
     """Rewrite each unique durable artifact, isolating per-file failures."""
     manifest = _manifest(archive)
     records = manifest.records
     update_progress(f"Rewriting links between {len(records)} files...", None, None)
     updated_count = 0
+    failures: list[LinkRewriteFailure] = []
     for index, record in enumerate(records, start=1):
         path = record.output_path
         update_progress(
@@ -79,9 +106,16 @@ def rewrite_archived_files(
             )
             updated_count += 1
         except (OSError, UnicodeError) as error:
+            failures.append(
+                LinkRewriteFailure(
+                    output_path=path,
+                    requested_url=record.requested_url,
+                    error=str(error),
+                )
+            )
             update_progress(
                 f"Error updating links in file {path}: {error}",
                 record.requested_url,
                 "error",
             )
-    return updated_count
+    return LinkRewriteResult(updated_count, tuple(failures))

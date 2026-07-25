@@ -119,14 +119,22 @@ test('vendored Turndown uses an inert parser for untrusted HTML strings', () => 
   assert.doesNotMatch(turndown, /x-turndown|turndown-root/);
 });
 
-test('shared generic semantics fixture preserves authored phrases', () => {
+test('shared generic semantics fixture defines portable output properties', () => {
   const fixture = JSON.parse(fs.readFileSync(
     path.join(extensionRoot, '..', 'tests', 'fixtures', 'generic-conversion.json'),
     'utf8'
   ));
   const popupScript = fs.readFileSync(path.join(extensionRoot, 'popup.js'), 'utf8');
+  const chromiumSmoke = fs.readFileSync(
+    path.join(extensionRoot, 'tests', 'chromium-smoke.js'),
+    'utf8'
+  );
+  assert.equal(typeof fixture.html, 'string');
+  assert.ok(Array.isArray(fixture.required_phrases));
+  assert.ok(fixture.required_phrases.length > 0);
   assert.doesNotMatch(popupScript, /replace\([^\n]+(?:Copy code|Search API|model)/);
-  for (const phrase of fixture.required_phrases) assert.ok(fixture.html.includes(phrase));
+  assert.match(chromiumSmoke, /generic-conversion\.json/);
+  assert.match(chromiumSmoke, /sharedFixture\.required_phrases/);
 });
 
 test('article mode uses the pinned packaged Mozilla Readability asset', () => {
