@@ -32,7 +32,19 @@ and the extension's full-page/article/selection conversion modes.
 
 ## Installation
 
-Create an isolated environment and install the CLI from PyPI:
+`grab2md` is used as a command-line tool, so the shortest supported installation
+places that command on `PATH` in a managed isolated environment:
+
+```bash
+pipx install grab2md
+grab2md --help
+```
+
+`uv tool install grab2md` is equivalent. `uvx grab2md --help` runs the current
+release without installing it.
+
+To own the environment directly, which the JavaScript rendering commands below
+assume, create a virtual environment and install from PyPI:
 
 ```bash
 python -m venv .venv
@@ -59,7 +71,8 @@ Contributors running the complete development and release gates need Poetry
 for that pinned
 toolchain and its canonical commands.
 
-JavaScript rendering is an isolated optional installation:
+JavaScript rendering is an isolated optional installation. Inside an activated
+virtual environment:
 
 ```bash
 python -m pip install "grab2md[render]"
@@ -67,8 +80,11 @@ python -m playwright install chromium
 grab2md https://example.com/app --render-js
 ```
 
-See [`docs/browser-rendering.md`](https://github.com/jkindrix/grab2md/blob/main/docs/browser-rendering.md) for its resource,
-network, and authentication boundaries.
+A `pipx` or `uv` installation exposes only the `grab2md` command. Playwright's
+downloader is not resolvable there, so the browser step requires different
+commands. See
+[`docs/browser-rendering.md`](https://github.com/jkindrix/grab2md/blob/main/docs/browser-rendering.md)
+for those steps and for the resource, network, and authentication boundaries.
 
 The production distribution is
 [`grab2md` on PyPI](https://pypi.org/project/grab2md/). TestPyPI artifacts are
