@@ -6,12 +6,28 @@ meaningful DOM is created by JavaScript.
 
 ## Installation
 
-Browser automation is isolated from the base package:
+Browser automation is isolated from the base package. Inside an activated
+virtual environment:
 
 ```bash
 python -m pip install "grab2md[render]"
 python -m playwright install chromium
 grab2md https://example.com/app --render-js --output app.md
+```
+
+`pipx` and `uv` expose only the installed distribution's own commands, so
+Playwright's browser downloader is not on `PATH` and `python -m playwright` is
+not resolvable. Each requires the downloader to be exposed explicitly:
+
+```bash
+pipx install "grab2md[render]" --force
+pipx inject grab2md playwright --include-apps
+playwright install chromium
+```
+
+```bash
+uv tool install "grab2md[render]" --with-executables-from playwright
+playwright install chromium
 ```
 
 For a page requiring an existing browser session, create Playwright storage

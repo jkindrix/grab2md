@@ -170,7 +170,8 @@ def render_html(
     except ImportError as error:
         raise RenderingUnavailable(
             "JavaScript rendering requires 'grab2md[render]' and a Chromium "
-            "runtime installed with 'python -m playwright install chromium'."
+            "runtime. The browser installation step differs per installation "
+            "method; see the project's docs/browser-rendering.md."
         ) from error
 
     policy = BrowserRequestPolicy(
