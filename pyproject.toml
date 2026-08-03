@@ -57,10 +57,10 @@ exclude = ["src/grab2md/tests"]
 [tool.poetry.group.dev.dependencies]
 pytest = "9.1.1"
 pytest-cov = "^7.1.0"
-pre-commit = "^4.2.0"
+pre-commit = "^4.6.1"
 black = "26.5.1"
 mypy = "2.3.0"
-ruff = "0.15.22"
+ruff = "0.16.1"
 types-requests = "^2.33.0.20260712"
 bandit = "1.9.4"
 twine = "6.2.0"
