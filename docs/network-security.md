@@ -49,11 +49,14 @@ operator's control.
 
 ## Browser rendering
 
-Chromium is launched with a resolver rule that maps only the requested hostname
-to its prevalidated numeric address and makes every other DNS lookup fail. The
-route policy permits only that source origin, so cross-origin subresources and
-top-level redirects are blocked. `--allow-private-network` may authorize a
-trusted private source but does not relax the same-origin boundary.
+Chromium is launched with resolver rules that map the requested hostname and
+each explicit `--render-origin` hostname to separately prevalidated numeric
+addresses and make every other DNS lookup fail. The route policy permits only
+the source origin plus those explicit subresource origins. Credentials and
+caller-specific headers are stripped from additional origins, and cross-origin
+top-level redirects remain blocked. `--allow-private-network` may authorize a
+trusted private source or render origin but does not authorize any origin by
+itself.
 
 This optional path does not use the Requests transport's socket-level adapter.
 Its pinning boundary depends on the supported Chromium runtime honoring
@@ -63,6 +66,14 @@ policy. The adversarial Chromium gate verifies that runtime contract. These two
 pinning mechanisms are intentionally documented separately rather than treated
 as identical enforcement. Browser rendering also stops after 250 requests or
 50 MiB of aggregate decoded response data and caps serialized HTML at 10 MiB.
+Methods other than GET, HEAD, and OPTIONS are blocked throughout the render.
+WebSockets are blocked before their network handshake is established.
+Explicit `--click-selector` interactions are capped at 25 clicks, and
+top-level navigation is additionally blocked once clicking begins. Readiness or
+click selectors that match nothing fail the conversion. Completed renders
+retain bounded diagnostics for request and transfer totals, blocked origins,
+and selector match counts; INFO/debug logging exposes those facts without full
+blocked request URLs.
 
 ## Maintainer rule
 

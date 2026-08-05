@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Callable, Optional
+from urllib.parse import urlsplit
 
 from grab2md.cli.runtime import build_header_config, build_header_manager
 from grab2md.markdown.batch_processor import BatchResult
@@ -67,6 +68,9 @@ class ConvertCommandOptions:
     images_dir: str
     include_metadata: bool
     render_js: bool
+    render_origins: tuple[str, ...]
+    wait_for_selector: Optional[str]
+    click_selectors: tuple[str, ...]
     fancy: bool
 
     def conversion_arguments(self) -> dict[str, Any]:
@@ -89,6 +93,9 @@ class ConvertCommandOptions:
             "insecure": self.insecure,
             "include_metadata": self.include_metadata,
             "render_js": self.render_js,
+            "render_origins": self.render_origins,
+            "wait_for_selector": self.wait_for_selector,
+            "click_selectors": self.click_selectors,
             "allow_private_network": self.allow_private_network,
         }
 
@@ -112,6 +119,41 @@ def prepare_convert_options(
         or options.cookie_json is not None
     ):
         raise CommandUsageError("--no-cookies cannot be combined with cookie inputs")
+    if (
+        options.render_origins
+        or options.wait_for_selector is not None
+        or options.click_selectors
+    ) and not options.render_js:
+        raise CommandUsageError(
+            "--render-origin, --wait-for-selector, and --click-selector "
+            "require --render-js"
+        )
+    for origin in options.render_origins:
+        parsed = urlsplit(origin)
+        try:
+            port = parsed.port
+        except ValueError as error:
+            raise CommandUsageError(
+                "--render-origin requires a valid HTTP(S) origin"
+            ) from error
+        if (
+            parsed.scheme.casefold() not in {"http", "https"}
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+            or (port is not None and not 1 <= port <= 65535)
+        ):
+            raise CommandUsageError(
+                "--render-origin must be an HTTP(S) origin such as "
+                "https://cdn.example.com"
+            )
+    if any(not selector.strip() for selector in options.click_selectors):
+        raise CommandUsageError("--click-selector cannot be empty")
+    if options.wait_for_selector is not None and not options.wait_for_selector.strip():
+        raise CommandUsageError("--wait-for-selector cannot be empty")
 
 
 @dataclass(frozen=True)

@@ -17,7 +17,35 @@ from grab2md.network.browser_renderer import RenderError, render_html
 
 
 class JavaScriptFixtureHandler(BaseHTTPRequestHandler):
+    mutation_posts = 0
+    websocket_upgrades = 0
+
     def do_GET(self):
+        if self.headers.get("Upgrade", "").casefold() == "websocket":
+            type(self).websocket_upgrades += 1
+            self.send_response(400)
+            self.end_headers()
+            return
+        if self.path == "/websocket":
+            body = b"""<!doctype html><html><body><h1>WebSocket fixture</h1>
+            <script>new WebSocket(`ws://${location.host}/socket`);</script>
+            </body></html>"""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/mutation":
+            body = b"""<!doctype html><html><body><h1>Mutation fixture</h1>
+            <script>fetch('/mutation', {method: 'POST', body: 'change=true'});</script>
+            </body></html>"""
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path == "/authenticated":
             authenticated = (
                 "session=secret" in self.headers.get("Cookie", "")
@@ -51,6 +79,11 @@ class JavaScriptFixtureHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def do_POST(self):
+        type(self).mutation_posts += 1
+        self.send_response(204)
+        self.end_headers()
+
     def log_message(self, *_args):
         return
 
@@ -80,7 +113,17 @@ class CrossOriginScriptHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         type(self).observed_authorization = self.headers.get("Authorization")
         type(self).observed_tenant = self.headers.get("X-Tenant")
-        body = b"document.querySelector('#app').id = 'cross-origin-ready';"
+        body = b"""
+        const app = document.querySelector('#app');
+        app.id = 'cross-origin-ready';
+        app.innerHTML = '<button class="disclosure">Expand</button>';
+        app.querySelector('button').addEventListener('click', () => {
+          app.insertAdjacentHTML(
+            'beforeend',
+            '<section id="expanded"><h2>Expanded</h2><p>Clicked evidence.</p></section>'
+          );
+        });
+        """
         self.send_response(200)
         self.send_header("Content-Type", "text/javascript")
         self.send_header("Content-Length", str(len(body)))
@@ -135,6 +178,46 @@ def test_browser_connects_to_the_single_python_validated_address():
     dns.assert_called_once()
     assert rendered.final_url == url
     assert "Rendered content" in rendered.html
+
+
+def test_browser_blocks_mutating_requests_during_initial_hydration():
+    if os.getenv("GRAB2MD_RUN_RENDER_E2E") != "1":
+        pytest.skip("set GRAB2MD_RUN_RENDER_E2E=1 with the render extra and Chromium")
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), JavaScriptFixtureHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    JavaScriptFixtureHandler.mutation_posts = 0
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/mutation"
+    try:
+        with pytest.raises(RenderError, match="blocked POST request"):
+            render_html(url, allow_private_network=True)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert JavaScriptFixtureHandler.mutation_posts == 0
+
+
+def test_browser_blocks_websockets_before_the_handshake_reaches_the_server():
+    if os.getenv("GRAB2MD_RUN_RENDER_E2E") != "1":
+        pytest.skip("set GRAB2MD_RUN_RENDER_E2E=1 with the render extra and Chromium")
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), JavaScriptFixtureHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    JavaScriptFixtureHandler.websocket_upgrades = 0
+    thread.start()
+    url = f"http://127.0.0.1:{server.server_port}/websocket"
+    try:
+        rendered = render_html(url, allow_private_network=True)
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert rendered.diagnostics.blocked_websockets == 1
+    assert JavaScriptFixtureHandler.websocket_upgrades == 0
 
 
 def test_browser_storage_state_authenticates_the_isolated_context(tmp_path):
@@ -223,6 +306,7 @@ def test_explicit_cross_origin_resource_is_pinned_without_credentials():
                 "X-Tenant": "private",
             },
             wait_for_selector="#cross-origin-ready",
+            click_selectors=["button.disclosure"],
         )
     finally:
         page_server.shutdown()
@@ -233,5 +317,6 @@ def test_explicit_cross_origin_resource_is_pinned_without_credentials():
         script_thread.join(timeout=5)
 
     assert "cross-origin-ready" in rendered.html
+    assert "Clicked evidence" in rendered.html
     assert CrossOriginScriptHandler.observed_authorization is None
     assert CrossOriginScriptHandler.observed_tenant is None

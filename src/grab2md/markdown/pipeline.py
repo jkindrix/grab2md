@@ -6,7 +6,7 @@ import codecs
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Mapping
+from typing import Iterable, Mapping
 
 import requests
 from markdownify import markdownify
@@ -18,7 +18,7 @@ from grab2md.markdown.content_extractor import (
     extract_content_html,
 )
 from grab2md.markdown.document import DocumentMetadata, prepare_document
-from grab2md.network.browser_renderer import render_html
+from grab2md.network.browser_renderer import RenderDiagnostics, render_html
 from grab2md.network.image_downloader import ImageDownloader
 from grab2md.network.safe_http import (
     DEFAULT_MAX_BODY_BYTES,
@@ -73,6 +73,7 @@ class AcquiredPage:
     charset: str
     source_path: Path | None = None
     rendered: bool = False
+    render_diagnostics: RenderDiagnostics | None = None
 
 
 @dataclass(frozen=True)
@@ -256,6 +257,9 @@ def acquire_rendered_page(
     allow_private_network: bool = False,
     max_html_bytes: int = DEFAULT_MAX_BODY_BYTES,
     storage_state: Mapping[str, object] | None = None,
+    allowed_origins: Iterable[str] = (),
+    wait_for_selector: str | None = None,
+    click_selectors: Iterable[str] = (),
 ) -> AcquiredPage:
     """Acquire an HTML snapshot through the optional isolated browser."""
     try:
@@ -266,6 +270,9 @@ def acquire_rendered_page(
             allow_private_network=allow_private_network,
             max_html_bytes=max_html_bytes,
             storage_state=storage_state,
+            allowed_origins=allowed_origins,
+            wait_for_selector=wait_for_selector,
+            click_selectors=click_selectors,
         )
     except Exception as error:
         raise AcquisitionFailure(
@@ -282,6 +289,7 @@ def acquire_rendered_page(
         media_type="text/html",
         charset="utf-8",
         rendered=True,
+        render_diagnostics=rendered.diagnostics,
     )
 
 

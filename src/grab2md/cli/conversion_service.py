@@ -68,6 +68,9 @@ def convert_source(
     insecure: bool = False,
     include_metadata: bool = False,
     render_js: bool = False,
+    render_origins: tuple[str, ...] = (),
+    wait_for_selector: Optional[str] = None,
+    click_selectors: tuple[str, ...] = (),
     allow_private_network: bool = False,
     on_status: StatusCallback = _ignore_status,
 ) -> ConversionResult:
@@ -94,11 +97,14 @@ def convert_source(
             insecure=insecure,
             include_metadata=include_metadata,
             render_js=render_js,
+            render_origins=render_origins,
+            wait_for_selector=wait_for_selector,
+            click_selectors=click_selectors,
             allow_private_network=allow_private_network,
             on_status=on_status,
         )
 
-    if render_js:
+    if render_js or render_origins or wait_for_selector is not None or click_selectors:
         return ConversionResult(
             source,
             str(Path(source).expanduser().resolve()),
@@ -149,12 +155,22 @@ def _convert_url(
     insecure: bool,
     include_metadata: bool,
     render_js: bool,
+    render_origins: tuple[str, ...],
+    wait_for_selector: Optional[str],
+    click_selectors: tuple[str, ...],
     allow_private_network: bool,
     on_status: StatusCallback,
 ) -> ConversionResult:
     logger.info("Processing URL: %s", source)
     try:
         validate_content_request(content_mode, selector)
+        if (
+            render_origins or wait_for_selector is not None or click_selectors
+        ) and not render_js:
+            raise ValueError(
+                "Browser render origins, wait selectors, and click selectors "
+                "require --render-js."
+            )
         if render_js and (browser_cookies or cookie_path or cookie_json):
             raise ValueError(
                 "JavaScript rendering does not import browser or JSON cookies; "
@@ -214,6 +230,9 @@ def _convert_url(
                     verify_ssl=not insecure,
                     allow_private_network=allow_private_network,
                     storage_state=loaded_storage_state,
+                    allowed_origins=render_origins,
+                    wait_for_selector=wait_for_selector,
+                    click_selectors=click_selectors,
                 )
             else:
                 if session is None:  # guarded by the branch above
@@ -223,6 +242,16 @@ def _convert_url(
                     session=session,
                     headers=headers,
                     allow_private_network=allow_private_network,
+                )
+            if page.render_diagnostics is not None:
+                diagnostics = page.render_diagnostics
+                matched = sum(match.count for match in diagnostics.selector_matches)
+                on_status(
+                    "Rendered "
+                    f"{diagnostics.request_count} requests; "
+                    f"clicked {matched} elements; blocked "
+                    f"{len(diagnostics.blocked_origins)} unapproved origins and "
+                    f"{diagnostics.blocked_websockets} WebSockets"
                 )
             document = PagePipeline().convert(
                 page,

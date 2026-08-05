@@ -10,14 +10,60 @@ Version `0.4.2` is the first public alpha under the `grab2md` identity.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-08-05
+
 ### Added
 
+- Added explicit `--render-origin` authorization and bounded
+  `--click-selector` interactions for JavaScript-rendered pages whose content
+  depends on CDN resources and disclosure controls.
+- Added `--wait-for-selector` readiness control and bounded browser diagnostics
+  for request totals, transfer size, blocked origins, and selector match counts.
 - Added deterministic release-note and distribution-checksum rendering, a
   draft-first immutable GitHub release procedure, and explicit pre-1.0
   version/tag-signing policy.
 - Added a sanitized conversion-fidelity issue form, evidence-corpus admission
   guidance, and a retainable manual extension interaction/accessibility
   checklist.
+
+### Changed
+
+- Made the complete browser-rendering lifecycle read-only by blocking HTTP
+  methods other than GET, HEAD, and OPTIONS during navigation, hydration,
+  settling, and explicit interactions, and by blocking WebSockets before their
+  network handshake.
+- Expanded the unpacked-Chromium extension gate with keyboard focus, live
+  status, scrollable preview, semantic conversion, live-disclosure, structural
+  whitespace, responsive-image, settings-failure, and conversion-rule checks.
+- Removed the remaining URL-capture, modal, progress, and toggle CSS after
+  those unsupported surfaces were deleted, including a duplicate rule that
+  overrode active settings spacing.
+- Updated the transitive development-only `cryptography` lock to 50.0.0 after
+  the hosted dependency audit reported `PYSEC-2026-3552` against 49.0.0.
+
+### Fixed
+
+- Fixed extension extraction so relative links and media references retain the
+  active page as their base URL in full-page, article, and selection modes,
+  including every supported responsive `srcset` candidate.
+- Fixed article extraction to preserve authored page titles and disclosure
+  headings that Mozilla Readability would otherwise omit.
+- Added shared CLI/extension semantic fixtures covering headings, expanded
+  disclosure content, links, images, tables, and code blocks.
+- Fixed extension Markdown inflation by joining structural blocks at a maximum
+  of one blank line and normalizing rendered HTML whitespace without changing
+  authored `pre`/`code` indentation, blank lines, tabs, or fence content.
+- Preserved multiline syntax-highlighted code in both the CLI and extension
+  when sites render each visual line as a CSS block element without serialized
+  newline characters; CLI prose cleanup now also leaves fenced blank lines
+  unchanged.
+- Fixed custom-rule precedence, the nonfunctional Include Images opt-out,
+  duplicated figure captions, missing `srcset`-only images, omitted tiny
+  authored images, ambiguous inline-code fences, and leakage of script, style,
+  template, and noscript source into full-page Markdown.
+- Fixed popup settings validation and Chrome storage error reporting, stale
+  status timers that could erase newer errors, short uppercase document
+  recognition, and empty downloads reusing stale preview content.
 
 ## [0.4.2] - 2026-07-24
 
@@ -378,7 +424,8 @@ First alpha release after the stabilization and integrity remediation cycle.
   formats, oversized files, and output-root escapes.
 - The extension uses least-privilege permissions and exposes only tested modes.
 
-[Unreleased]: https://github.com/jkindrix/grab2md/compare/v0.4.2...HEAD
+[Unreleased]: https://github.com/jkindrix/grab2md/compare/v0.4.3...HEAD
+[0.4.3]: https://github.com/jkindrix/grab2md/compare/v0.4.2...v0.4.3
 [0.4.2]: https://github.com/jkindrix/grab2md/compare/v0.3.0...v0.4.2
 [0.3.0]: https://github.com/jkindrix/grab2md/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jkindrix/grab2md/compare/v0.1.3...v0.2.0

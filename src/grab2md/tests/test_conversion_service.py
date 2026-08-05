@@ -239,6 +239,20 @@ def test_browser_rendering_rejects_local_files_and_cookie_import(tmp_path):
     assert "does not import" in (authenticated.error or "")
 
 
+def test_browser_controls_are_not_silently_ignored_without_rendering():
+    result = conversion_service.convert_source(
+        "https://example.com",
+        output=None,
+        no_cookies=True,
+        browser_cookies=False,
+        browser=None,
+        click_selectors=("button.disclosure",),
+    )
+
+    assert result.succeeded is False
+    assert "require --render-js" in (result.error or "")
+
+
 def test_remote_conversion_loads_private_headers_and_render_storage_state(
     monkeypatch, tmp_path
 ):
@@ -276,6 +290,9 @@ def test_remote_conversion_loads_private_headers_and_render_storage_state(
         browser_cookies=False,
         browser=None,
         render_js=True,
+        render_origins=("https://cdn.example.com",),
+        wait_for_selector="main article",
+        click_selectors=("button.disclosure",),
         headers_file=headers_path,
         storage_state=state_path,
     )
@@ -289,6 +306,9 @@ def test_remote_conversion_loads_private_headers_and_render_storage_state(
         "cookies": [],
         "origins": [],
     }
+    assert acquire.call_args.kwargs["allowed_origins"] == ("https://cdn.example.com",)
+    assert acquire.call_args.kwargs["wait_for_selector"] == "main article"
+    assert acquire.call_args.kwargs["click_selectors"] == ("button.disclosure",)
     assert pipeline.convert.call_args.kwargs["content_mode"] is ContentMode.SELECTOR
     assert pipeline.convert.call_args.kwargs["selector"] == "article.docs"
 

@@ -13,9 +13,9 @@ cfgv==3.4.0 ; python_version >= "3.11" and python_version < "4.0"
 chardet==7.4.3 ; python_version >= "3.11" and python_version < "4.0"
 charset-normalizer==3.4.1 ; python_version >= "3.11" and python_version < "4.0"
 click==8.4.2 ; python_version >= "3.11" and python_version < "4.0"
-colorama==0.4.6 ; python_version >= "3.11" and python_version < "4.0" and (platform_system == "Windows" or sys_platform == "win32")
+colorama==0.4.6 ; python_version >= "3.11" and python_version < "4.0" and (sys_platform == "win32" or platform_system == "Windows")
 coverage==7.15.2 ; python_version >= "3.11" and python_version < "4.0"
-cryptography==49.0.0 ; python_version >= "3.11" and python_version < "4.0" and platform_machine != "ppc64le" and platform_machine != "s390x" and sys_platform == "linux"
+cryptography==50.0.0 ; python_version >= "3.11" and python_version < "4.0" and platform_machine != "ppc64le" and platform_machine != "s390x" and sys_platform == "linux"
 cssselect==1.4.0 ; python_version >= "3.11" and python_version < "4.0"
 cyclonedx-python-lib==11.11.0 ; python_version >= "3.11" and python_version < "4.0"
 defusedxml==0.7.1 ; python_version >= "3.11" and python_version < "4.0"

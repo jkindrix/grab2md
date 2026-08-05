@@ -39,6 +39,15 @@ No Chrome Web Store package has been published.
 4. Click "Convert to Markdown"
 5. The result will be shown, copied, or downloaded based on your settings
 
+Full-page mode snapshots the active tab's current live DOM. Expand disclosure
+or accordion content before converting when it is not present in the collapsed
+DOM. Article mode applies Readability and may intentionally restructure or omit
+surrounding page chrome; authored heading elements nested in disclosure buttons
+are promoted before article extraction so their labels survive with expanded
+content. Use full-page mode when exact live-DOM completeness matters. Relative
+links and media references are resolved against the active page URL in all
+three modes, including supported `img` and `source` `srcset` candidates.
+
 ## Advanced Settings
 
 ### Markdown Formatting Options
@@ -54,6 +63,16 @@ No Chrome Web Store package has been published.
 
 HTML tables are always converted to Markdown tables. Authored Markdown
 punctuation in page text is escaped so it remains literal in the result.
+Ordinary HTML whitespace is normalized to its rendered semantics and structural
+blocks are separated by at most one blank line. Authored whitespace inside
+`pre` and `code` remains unchanged. Syntax-highlighter line elements inside
+code blocks are converted to actual newlines instead of being concatenated.
+Script, style, template, and noscript source is excluded from full-page
+Markdown.
+
+Include Images applies to every convertible `img`, including small authored
+images and `srcset`-only images; when only `srcset` is present, its first
+supported candidate becomes the Markdown destination.
 
 Links are emitted in inline Markdown form. The alpha does not expose a
 reference-link mode.
@@ -124,6 +143,10 @@ conversion status and error announcements, all three extraction modes, preview
 scrolling, and clipboard/download completion. The committed checklist is a
 template, not completed evidence or a claim of formal accessibility
 conformance.
+
+The [0.4.3 automated/visual preflight](./release-evidence/0.4.3-preflight-2026-08-05.md)
+records its exact scope and leaves human manual review and Web Store
+authorization explicitly pending.
 
 ## License
 

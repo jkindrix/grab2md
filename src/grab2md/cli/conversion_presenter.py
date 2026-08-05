@@ -33,6 +33,9 @@ def _convert_one(
     insecure: bool,
     include_metadata: bool,
     render_js: bool,
+    render_origins: tuple[str, ...],
+    wait_for_selector: Optional[str],
+    click_selectors: tuple[str, ...],
     allow_private_network: bool,
     on_status: Optional[Callable[[str], None]] = None,
 ) -> ConversionResult:
@@ -58,6 +61,9 @@ def _convert_one(
         insecure=insecure,
         include_metadata=include_metadata,
         render_js=render_js,
+        render_origins=render_origins,
+        wait_for_selector=wait_for_selector,
+        click_selectors=click_selectors,
         allow_private_network=allow_private_network,
         on_status=status_callback,
     )
@@ -83,6 +89,9 @@ def process_single_with_progress(
     insecure: bool = False,
     include_metadata: bool = False,
     render_js: bool = False,
+    render_origins: tuple[str, ...] = (),
+    wait_for_selector: Optional[str] = None,
+    click_selectors: tuple[str, ...] = (),
     allow_private_network: bool = False,
     progress: Optional[Progress] = None,
     task_id: Optional[TaskID] = None,
@@ -112,6 +121,9 @@ def process_single_with_progress(
         insecure,
         include_metadata,
         render_js,
+        render_origins,
+        wait_for_selector,
+        click_selectors,
         allow_private_network,
         lambda message: progress.update(task_id, description=message),
     )
@@ -182,6 +194,9 @@ def process_single_quiet(
     insecure: bool = False,
     include_metadata: bool = False,
     render_js: bool = False,
+    render_origins: tuple[str, ...] = (),
+    wait_for_selector: Optional[str] = None,
+    click_selectors: tuple[str, ...] = (),
     allow_private_network: bool = False,
 ) -> bool:
     """Render a shared conversion result without decoration."""
@@ -205,6 +220,9 @@ def process_single_quiet(
         insecure,
         include_metadata,
         render_js,
+        render_origins,
+        wait_for_selector,
+        click_selectors,
         allow_private_network,
     )
     if not result.succeeded:

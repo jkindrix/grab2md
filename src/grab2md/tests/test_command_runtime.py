@@ -45,6 +45,9 @@ def convert_options(**changes) -> ConvertCommandOptions:
         "images_dir": "images",
         "include_metadata": False,
         "render_js": False,
+        "render_origins": (),
+        "wait_for_selector": None,
+        "click_selectors": (),
         "fancy": False,
     }
     values.update(changes)
@@ -135,6 +138,35 @@ def test_convert_preparation_rejects_multiple_sources_with_one_output(tmp_path):
                 output=tmp_path / "combined.md",
             )
         )
+
+
+def test_render_controls_require_browser_mode_and_validate_explicit_inputs():
+    with pytest.raises(CommandUsageError, match="require --render-js"):
+        prepare_convert_options(
+            convert_options(render_origins=("https://cdn.example.com",))
+        )
+    with pytest.raises(CommandUsageError, match=r"HTTP\(S\) origin"):
+        prepare_convert_options(
+            convert_options(
+                render_js=True,
+                render_origins=("https://cdn.example.com/assets/app.js",),
+            )
+        )
+    with pytest.raises(CommandUsageError, match="cannot be empty"):
+        prepare_convert_options(convert_options(render_js=True, click_selectors=(" ",)))
+    with pytest.raises(CommandUsageError, match="require --render-js"):
+        prepare_convert_options(convert_options(wait_for_selector="main"))
+    with pytest.raises(CommandUsageError, match="cannot be empty"):
+        prepare_convert_options(convert_options(render_js=True, wait_for_selector=" "))
+
+    prepare_convert_options(
+        convert_options(
+            render_js=True,
+            render_origins=("https://cdn.example.com",),
+            wait_for_selector="main article",
+            click_selectors=("button[aria-expanded=false]",),
+        )
+    )
 
     prepare_convert_options(
         convert_options(sources=["first.html", "second.html"], output=None)

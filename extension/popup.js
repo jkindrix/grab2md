@@ -27,7 +27,15 @@ const defaultSettings = {
 };
 
 // Current settings - will be loaded from storage
-let settings = {...defaultSettings};
+function freshDefaultSettings() {
+  return {
+    ...defaultSettings,
+    markdownOptions: { ...defaultSettings.markdownOptions },
+    contentOptions: { ...defaultSettings.contentOptions }
+  };
+}
+
+let settings = freshDefaultSettings();
 let conversionInFlight = false;
 
 const converter = new Grab2MdConverter();
@@ -44,16 +52,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Load saved settings from Chrome storage
 function loadSettings() {
-  settingsStore.load(defaultSettings, loaded => {
+  settingsStore.load(defaultSettings, (loaded, error) => {
     settings = loaded;
     applySettings();
+    if (error) showStatus('Failed to load settings: ' + error, 'error');
   });
 }
 
 // Save settings to Chrome storage
-function saveSettings() {
-  settingsStore.save(settings, () => {
-    showStatus('Settings saved', 'success');
+function saveSettings(successMessage = 'Settings saved') {
+  settingsStore.save(settings, error => {
+    if (error) {
+      showStatus('Failed to save settings: ' + error, 'error');
+      return;
+    }
+    showStatus(successMessage, 'success');
   });
 }
 
@@ -99,10 +112,9 @@ function setupEventListeners() {
   // Reset defaults button
   resetDefaultsBtn.addEventListener('click', () => {
     if (confirm('Are you sure you want to reset all settings to default values?')) {
-      settings = {...defaultSettings};
+      settings = freshDefaultSettings();
       applySettings();
-      saveSettings();
-      showStatus('Settings reset to defaults', 'success');
+      saveSettings('Settings reset to defaults');
     }
   });
 
@@ -297,26 +309,101 @@ function finishConversion() {
 // Extract content from the page based on mode
 function extractPageContent(mode) {
   let content = '';
+  const baseUrl = document.baseURI;
+  const canonicalizeReferences = root => {
+    const resolveWebReference = value => {
+      if (!value || value.trim().startsWith('#')) return value;
+      try {
+        const resolved = new URL(value, baseUrl);
+        return resolved.protocol === 'http:' || resolved.protocol === 'https:'
+          ? resolved.href
+          : value;
+      } catch (_error) {
+        return value;
+      }
+    };
+    const references = [
+      ['a', 'href'],
+      ['area', 'href'],
+      ['img', 'src'],
+      ['source', 'src'],
+      ['audio', 'src'],
+      ['video', 'src'],
+      ['video', 'poster']
+    ];
+    for (const [tagName, attribute] of references) {
+      root.querySelectorAll(`${tagName}[${attribute}]`).forEach(element => {
+        const value = element.getAttribute(attribute);
+        const resolved = resolveWebReference(value);
+        if (resolved !== value) element.setAttribute(attribute, resolved);
+      });
+    }
+    root.querySelectorAll('img[srcset], source[srcset]').forEach(element => {
+      const value = element.getAttribute('srcset');
+      if (!value || /^data:/i.test(value.trim())) return;
+      const candidates = value.split(',').map(candidate => {
+        const parts = candidate.trim().split(/\s+/, 2);
+        if (!parts[0]) return '';
+        const resolved = resolveWebReference(parts[0]);
+        return parts[1] ? `${resolved} ${parts[1]}` : resolved;
+      });
+      element.setAttribute('srcset', candidates.filter(Boolean).join(', '));
+    });
+  };
 
   switch(mode) {
-    case 'full-page':
-      content = document.documentElement.outerHTML;
+    case 'full-page': {
+      const clone = document.documentElement.cloneNode(true);
+      canonicalizeReferences(clone);
+      content = clone.outerHTML;
       break;
-    case 'selection':
+    }
+    case 'selection': {
       const selection = window.getSelection();
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const fragment = range.cloneContents();
         const div = document.createElement('div');
         div.appendChild(fragment);
+        canonicalizeReferences(div);
         content = div.innerHTML;
       }
       break;
-    case 'article':
+    }
+    case 'article': {
       if (typeof Readability !== 'function') return '';
-      const article = new Readability(document.cloneNode(true)).parse();
-      content = article && article.content ? article.content : '';
+      const clone = document.cloneNode(true);
+      const authoredTitleNode = clone.querySelector('article h1')
+        || clone.querySelector('main h1')
+        || clone.querySelector('h1');
+      const authoredTitle = authoredTitleNode
+        ?.textContent.trim().replace(/\s+/g, ' ') || '';
+      clone.querySelectorAll('button h1, button h2, button h3, button h4, button h5, button h6')
+        .forEach(heading => {
+          const button = heading.closest('button');
+          if (!button?.parentNode) return;
+          const standaloneHeading = heading.cloneNode(true);
+          standaloneHeading.removeAttribute('id');
+          button.parentNode.insertBefore(standaloneHeading, button);
+          heading.remove();
+        });
+      const article = new Readability(clone).parse();
+      if (!article?.content) return '';
+      const parsed = new DOMParser().parseFromString(article.content, 'text/html');
+      canonicalizeReferences(parsed);
+      const title = (authoredTitle || article.title || document.title || '').trim();
+      const normalizedTitle = title.replace(/\s+/g, ' ');
+      const hasTitleHeading = [...parsed.querySelectorAll('h1, h2')].some(heading => {
+        return heading.textContent.trim().replace(/\s+/g, ' ') === normalizedTitle;
+      });
+      if (normalizedTitle && !hasTitleHeading) {
+        const heading = parsed.createElement('h1');
+        heading.textContent = normalizedTitle;
+        parsed.body.prepend(heading);
+      }
+      content = parsed.body.innerHTML;
       break;
+    }
   }
 
   return content;
@@ -350,9 +437,14 @@ function handleOutput(markdown, action, pageTitle) {
 }
 
 // Download markdown as a file
-function downloadMarkdown(markdown = null, pageTitle = 'page') {
+function downloadMarkdown(
+  markdown = null,
+  pageTitle = 'page',
+  downloadsApi = chrome.downloads,
+  runtimeError = () => chrome.runtime.lastError?.message || null
+) {
   // If markdown is not provided, use the one from the result container
-  if (!markdown) {
+  if (markdown === null || markdown === undefined) {
     markdown = markdownResult.textContent;
   }
 
@@ -371,12 +463,12 @@ function downloadMarkdown(markdown = null, pageTitle = 'page') {
   const url = URL.createObjectURL(blob);
 
   return new Promise((resolve, reject) => {
-    chrome.downloads.download({
+    downloadsApi.download({
       url: url,
       filename: filename,
       saveAs: false
     }, downloadId => {
-      const error = chrome.runtime.lastError?.message || null;
+      const error = runtimeError();
       if (error) {
         showStatus('Error saving file: ' + error, 'error');
         setTimeout(() => URL.revokeObjectURL(url), 1000);
@@ -398,6 +490,11 @@ function downloadMarkdown(markdown = null, pageTitle = 'page') {
  * @param {string} type - Message type (info, success, warning, error)
  */
 function showStatus(message, type = 'info') {
+  if (window.statusTimer) {
+    clearTimeout(window.statusTimer);
+    window.statusTimer = null;
+  }
+
   statusMessage.textContent = message;
 
   // Reset styles
@@ -407,19 +504,15 @@ function showStatus(message, type = 'info') {
   // Add class based on message type
   statusMessage.classList.add(type);
 
-  // Auto-clear status after some time for non-error messages
-  if (type !== 'error') {
+  // Keep processing and error states visible until a later terminal status.
+  if (['info', 'success', 'warning'].includes(type)) {
     const clearDelay = type === 'warning' ? 5000 : 3000;
-
-    // Clear any existing timers
-    if (window.statusTimer) {
-      clearTimeout(window.statusTimer);
-    }
 
     // Set new timer
     window.statusTimer = setTimeout(() => {
       statusMessage.textContent = '';
       statusMessage.className = '';
+      window.statusTimer = null;
     }, clearDelay);
   }
 }

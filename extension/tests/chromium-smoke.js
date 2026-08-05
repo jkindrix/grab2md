@@ -148,6 +148,21 @@ async function evaluate(client, expression, options = {}) {
   return result.result.value;
 }
 
+async function pressKey(client, key, code, virtualKeyCode) {
+  const params = { key, code, windowsVirtualKeyCode: virtualKeyCode };
+  await client.send('Input.dispatchKeyEvent', { type: 'keyDown', ...params });
+  await client.send('Input.dispatchKeyEvent', { type: 'keyUp', ...params });
+}
+
+async function tabSequence(client, count) {
+  const focused = [];
+  for (let index = 0; index < count; index += 1) {
+    await pressKey(client, 'Tab', 'Tab', 9);
+    focused.push(await evaluate(client, 'document.activeElement.id'));
+  }
+  return focused;
+}
+
 async function main() {
   const xvfb = spawnSync('which', ['xvfb-run'], { encoding: 'utf8' }).stdout.trim();
   if (!xvfb) throw new Error('xvfb-run is required for unpacked-extension tests');
@@ -185,6 +200,7 @@ async function main() {
 
   let browserClient;
   let popupClient;
+  let semanticClient;
   let fixtureClient;
   let deniedClient;
   try {
@@ -240,11 +256,90 @@ async function main() {
       await evaluate(popupClient, 'new Set([...document.querySelectorAll("[id]")].map(node => node.id)).size === document.querySelectorAll("[id]").length'),
       true
     );
+    assert.deepEqual(
+      await evaluate(
+        popupClient,
+        `({
+          statusRole: statusMessage.getAttribute('role'),
+          statusLive: statusMessage.getAttribute('aria-live'),
+          statusAtomic: statusMessage.getAttribute('aria-atomic'),
+          previewTabIndex: markdownResult.tabIndex,
+          previewLabel: markdownResult.getAttribute('aria-label'),
+          copyLabel: copyBtn.getAttribute('aria-label'),
+          downloadLabel: downloadBtn.getAttribute('aria-label'),
+          settingsTabIndex: document.getElementById('settings-tab').tabIndex
+        })`
+      ),
+      {
+        statusRole: 'status',
+        statusLive: 'polite',
+        statusAtomic: 'true',
+        previewTabIndex: 0,
+        previewLabel: 'Markdown conversion result',
+        copyLabel: 'Copy conversion result to clipboard',
+        downloadLabel: 'Download conversion result as a file',
+        settingsTabIndex: -1
+      }
+    );
+    await evaluate(
+      popupClient,
+      `document.body.tabIndex = -1; document.body.focus(); document.body.classList.remove('dark-theme')`
+    );
+    await pressKey(popupClient, 'Tab', 'Tab', 9);
+    assert.equal(await evaluate(popupClient, 'document.activeElement.id'), 'theme-toggle-btn');
+    assert.deepEqual(
+      await evaluate(
+        popupClient,
+        `({
+          style: getComputedStyle(document.activeElement).outlineStyle,
+          width: getComputedStyle(document.activeElement).outlineWidth
+        })`
+      ),
+      { style: 'solid', width: '2px' }
+    );
+    await evaluate(popupClient, `document.body.classList.add('dark-theme')`);
+    assert.equal(
+      await evaluate(popupClient, `getComputedStyle(document.activeElement).outlineStyle`),
+      'solid'
+    );
+    await evaluate(popupClient, `document.body.classList.remove('dark-theme')`);
+    await pressKey(popupClient, 'Tab', 'Tab', 9);
+    assert.equal(await evaluate(popupClient, 'document.activeElement.id'), 'convert-tab');
+    await pressKey(popupClient, 'ArrowRight', 'ArrowRight', 39);
+    assert.deepEqual(
+      await evaluate(
+        popupClient,
+        `({
+          focus: document.activeElement.id,
+          selected: document.getElementById('settings-tab').getAttribute('aria-selected'),
+          panel: document.getElementById('settings').classList.contains('active')
+        })`
+      ),
+      { focus: 'settings-tab', selected: 'true', panel: true }
+    );
+    await pressKey(popupClient, 'ArrowLeft', 'ArrowLeft', 37);
+    assert.equal(await evaluate(popupClient, 'document.activeElement.id'), 'convert-tab');
+    assert.deepEqual(
+      await tabSequence(popupClient, 5),
+      ['convert', 'conversion-mode', 'output-action', 'convert-btn', 'settings-btn']
+    );
 
     await evaluate(popupClient, `settingsBtn.click()`);
     assert.equal(
       await evaluate(popupClient, `document.getElementById('settings').classList.contains('active')`),
       true
+    );
+    assert.equal(await evaluate(popupClient, 'document.activeElement.id'), 'settings');
+    assert.deepEqual(
+      await tabSequence(popupClient, 6),
+      [
+        'heading-style',
+        'bullet-marker',
+        'preserve-images',
+        'code-blocks',
+        'save-settings',
+        'reset-defaults'
+      ]
     );
     await evaluate(
       popupClient,
@@ -270,6 +365,64 @@ async function main() {
     assert.match(markdown, /Search indexing uses a model\./);
     assert.match(markdown, /```text\nmodel Search API\n```/);
 
+    const highlightedCode = await evaluate(
+      popupClient,
+      `convertToMarkdown(${JSON.stringify(
+        '<pre><code class="language-rust">' +
+        '<span class="line"><span>struct</span> User {</span>' +
+        '<span class="line">    id: UserId,</span>' +
+        '<span class="line"></span><span class="line"></span>' +
+        '<span class="line">}</span></code></pre>'
+      )})`
+    );
+    assert.equal(
+      highlightedCode,
+      '```rust\nstruct User {\n    id: UserId,\n\n\n}\n```'
+    );
+
+    const structuralMarkdown = await evaluate(
+      popupClient,
+      `convertToMarkdown(${JSON.stringify(
+        '<div>\n  <section>\n    <div><p>First paragraph.</p></div>\n' +
+        '    <div><p>Second paragraph.</p></div>\n  </section>\n</div>'
+      )})`
+    );
+    assert.match(structuralMarkdown, /First paragraph\./);
+    assert.match(structuralMarkdown, /Second paragraph\./);
+    assert.doesNotMatch(
+      structuralMarkdown,
+      /(?:\n[ \t]*){3,}/,
+      `structural blank lines were inflated: ${JSON.stringify(structuralMarkdown)}`
+    );
+
+    const figureMarkdown = await evaluate(
+      popupClient,
+      `convertToMarkdown('<figure><img src="https://example.com/chart.png" alt="Chart"><figcaption>One caption</figcaption></figure>')`
+    );
+    assert.equal((figureMarkdown.match(/One caption/g) || []).length, 1, figureMarkdown);
+    assert.match(figureMarkdown, /\*One caption\*/);
+
+    const responsiveOnlyImage = await evaluate(
+      popupClient,
+      `convertToMarkdown('<img srcset="https://example.com/small.png 1x, https://example.com/large.png 2x" alt="Responsive">')`
+    );
+    assert.equal(responsiveOnlyImage, '![Responsive](https://example.com/small.png)');
+
+    const divCodeMarkdown = await evaluate(
+      popupClient,
+      `convertToMarkdown('<div class="code-block language-js">const answer = 42;</div>')`
+    );
+    assert.equal(divCodeMarkdown, '```js\nconst answer = 42;\n```');
+    assert.equal(
+      await evaluate(
+        popupClient,
+        `convertToMarkdown(${JSON.stringify(
+          '<p><code>alpha `` beta</code> and <code>`tick`</code></p>'
+        )})`
+      ),
+      '`alpha `` beta` and `` `tick` ``'
+    );
+
     const sharedFixture = JSON.parse(fs.readFileSync(
       path.join(extensionRoot, '..', 'tests', 'fixtures', 'generic-conversion.json'),
       'utf8'
@@ -281,6 +434,84 @@ async function main() {
     for (const phrase of sharedFixture.required_phrases) {
       assert.ok(sharedMarkdown.includes(phrase), sharedMarkdown);
     }
+    for (const fragment of sharedFixture.required_markdown_fragments) {
+      assert.ok(sharedMarkdown.includes(fragment), sharedMarkdown);
+    }
+
+    probe.setPage(sharedFixture.base_path, sharedFixture.html);
+    const sharedFixtureUrl = `${probe.origin}${sharedFixture.base_path}`;
+    const semanticTarget = await createTarget(port, sharedFixtureUrl);
+    semanticClient = new CdpClient(semanticTarget.webSocketDebuggerUrl);
+    await semanticClient.connect();
+    await semanticClient.send('Runtime.enable');
+    await waitFor(
+      () => evaluate(semanticClient, `document.readyState === 'complete'`),
+      'the shared semantic fixture'
+    );
+    const extractionSource = await evaluate(popupClient, 'extractPageContent.toString()');
+    const readabilitySource = fs.readFileSync(path.join(extensionRoot, 'readability.js'), 'utf8');
+    await evaluate(semanticClient, readabilitySource);
+    const semanticFullPage = await evaluate(
+      semanticClient,
+      `(${extractionSource})('full-page')`
+    );
+    const semanticArticle = await evaluate(
+      semanticClient,
+      `(${extractionSource})('article')`
+    );
+    const semanticFullMarkdown = await evaluate(
+      popupClient,
+      `convertToMarkdown(${JSON.stringify(semanticFullPage)})`
+    );
+    const semanticArticleMarkdown = await evaluate(
+      popupClient,
+      `convertToMarkdown(${JSON.stringify(semanticArticle)})`
+    );
+    for (const phrase of sharedFixture.required_phrases) {
+      assert.ok(semanticFullMarkdown.includes(phrase), semanticFullMarkdown);
+    }
+    for (const fragment of sharedFixture.required_markdown_fragments) {
+      assert.ok(semanticFullMarkdown.includes(fragment), semanticFullMarkdown);
+    }
+    assert.match(semanticArticleMarkdown, /^# Architecture Notes/m);
+    assert.match(semanticArticleMarkdown, /^## Expanded rationale/m);
+    assert.match(semanticArticleMarkdown, /Expanded evidence remains visible\./);
+    for (const link of sharedFixture.links) {
+      const expected = new URL(link.relative, sharedFixtureUrl).href;
+      assert.ok(
+        semanticFullMarkdown.includes(`[${link.label}](${expected})`),
+        semanticFullMarkdown
+      );
+    }
+    for (const image of sharedFixture.images) {
+      const expected = new URL(image.relative, sharedFixtureUrl).href;
+      assert.ok(
+        semanticFullMarkdown.includes(`![${image.alt}](${expected})`),
+        semanticFullMarkdown
+      );
+    }
+    const semanticSrcsets = await evaluate(
+      semanticClient,
+      `(() => {
+        const parsed = new DOMParser().parseFromString(
+          ${JSON.stringify(semanticFullPage)},
+          'text/html'
+        );
+        return ${JSON.stringify(sharedFixture.srcsets)}.map(reference => {
+          return parsed.querySelector(reference.selector)?.getAttribute('srcset') || null;
+        });
+      })()`
+    );
+    sharedFixture.srcsets.forEach((reference, index) => {
+      const expected = reference.value.split(',').map(candidate => {
+        const [url, descriptor] = candidate.trim().split(/\s+/, 2);
+        const resolved = new URL(url, sharedFixtureUrl).href;
+        return descriptor ? `${resolved} ${descriptor}` : resolved;
+      }).join(', ');
+      assert.equal(semanticSrcsets[index], expected);
+    });
+    semanticClient.close();
+    semanticClient = undefined;
 
     const escapedMarkdown = await evaluate(
       popupClient,
@@ -347,6 +578,29 @@ async function main() {
       `document.getElementById('code-blocks').checked = true; saveSettingsBtn.click()`
     );
 
+    await evaluate(
+      popupClient,
+      `document.getElementById('preserve-images').checked = false; saveSettingsBtn.click()`
+    );
+    assert.equal(
+      await evaluate(
+        popupClient,
+        `convertToMarkdown('<img src="https://example.com/hidden.png" alt="Hidden">')`
+      ),
+      ''
+    );
+    await evaluate(
+      popupClient,
+      `document.getElementById('preserve-images').checked = true; saveSettingsBtn.click()`
+    );
+    assert.equal(
+      await evaluate(
+        popupClient,
+        `convertToMarkdown('<img src="https://example.com/tiny.png" alt="Tiny" width="1" height="1">')`
+      ),
+      '![Tiny](https://example.com/tiny.png)'
+    );
+
     const authoredCode = [
       '',
       'if (ready) {',
@@ -395,6 +649,8 @@ async function main() {
         '<source src="${probe.origin}/source" srcset="${probe.origin}/set.png 1x">' +
         '<link rel="stylesheet" href="${probe.origin}/style.css">' +
         '<object data="${probe.origin}/object"></object>' +
+        '<style>.private-implementation { color: red; }</style>' +
+        '<template>Template implementation text</template>' +
         '<script>globalThis.grab2mdCustomElementRuns += 1<\/script>' +
         '<grab2md-probe></grab2md-probe>' +
         '<meta http-equiv="refresh" content="0;url=${probe.origin}/navigate">'
@@ -402,6 +658,8 @@ async function main() {
     );
     assert.match(passiveMarkdown, /!\[Probe\]/);
     assert.match(passiveMarkdown, /Content after a forged sentinel close/);
+    assert.doesNotMatch(passiveMarkdown, /private-implementation|Template implementation text/);
+    assert.doesNotMatch(passiveMarkdown, /grab2mdCustomElementRuns/);
     await new Promise(resolve => setTimeout(resolve, 500));
     assert.deepEqual(
       probe.requests,
@@ -415,23 +673,34 @@ async function main() {
     );
 
     const articleText = 'A substantial article sentence with concrete evidence and punctuation. '.repeat(12);
-    const fixtureHtml = `<html><body><nav>Full navigation</nav><article><h1>Injected Article</h1><p id="selection">Selected text. ${articleText}</p><p>${articleText}</p></article><section class="comments">Full comments</section><footer>Full footer</footer></body></html>`;
+    const fixtureHtml = `<html><head><title>Injected Article | Fixture Site</title></head><body><header><h1>Fixture Site</h1></header><nav>Full navigation</nav><article><h1>Injected Article</h1><p id="selection">Selected text. ${articleText}</p><figure><button id="disclosure"><h2>Expandable evidence</h2></button></figure><p>${articleText}</p></article><section class="comments">Full comments</section><footer>Full footer</footer><script>document.getElementById('disclosure').addEventListener('click', () => { const paragraph = document.createElement('p'); paragraph.id = 'expanded-live'; paragraph.textContent = 'Expanded live content.'; document.querySelector('figure').appendChild(paragraph); });</script></body></html>`;
     probe.setPage('/fixture.html', fixtureHtml);
     const fixtureTarget = await createTarget(port, `${probe.origin}/fixture.html`);
     fixtureClient = new CdpClient(fixtureTarget.webSocketDebuggerUrl);
     await fixtureClient.connect();
     await fixtureClient.send('Runtime.enable');
-    const readabilitySource = fs.readFileSync(path.join(extensionRoot, 'readability.js'), 'utf8');
+    await waitFor(
+      () => evaluate(fixtureClient, `Boolean(document.getElementById('disclosure'))`),
+      'the disclosure fixture'
+    );
+    await evaluate(fixtureClient, `document.getElementById('disclosure').click()`);
+    assert.equal(
+      await evaluate(fixtureClient, `document.getElementById('expanded-live').textContent`),
+      'Expanded live content.'
+    );
     await evaluate(fixtureClient, readabilitySource);
     assert.equal(await evaluate(fixtureClient, 'typeof Readability'), 'function');
-    const extractionSource = await evaluate(popupClient, 'extractPageContent.toString()');
     const fullPage = await evaluate(fixtureClient, `(${extractionSource})('full-page')`);
     const article = await evaluate(fixtureClient, `(${extractionSource})('article')`);
     assert.match(fullPage, /<nav>Full navigation<\/nav>/);
     assert.match(fullPage, /Full comments/);
     assert.match(fullPage, /<footer>Full footer<\/footer>/);
-    assert.doesNotMatch(article, /Full navigation|Full comments|Full footer/);
+    assert.match(fullPage, /Expanded live content\./);
+    assert.doesNotMatch(article, /Fixture Site|Full navigation|Full comments|Full footer/);
     assert.match(article, /<h[12]>Injected Article<\/h[12]>/);
+    assert.doesNotMatch(article, /Injected Article \| Fixture Site/);
+    assert.match(article, /Expandable evidence/);
+    assert.match(article, /Expanded live content\./);
 
     const fullMarkdown = await evaluate(
       popupClient,
@@ -440,6 +709,7 @@ async function main() {
     assert.match(fullMarkdown, /Full navigation/);
     assert.match(fullMarkdown, /Full comments/);
     assert.match(fullMarkdown, /Full footer/);
+    assert.match(fullMarkdown, /Expanded live content\./);
 
     await evaluate(
       fixtureClient,
@@ -522,11 +792,80 @@ async function main() {
     );
     assert.match(injectedMarkdown, /Injected/);
 
-    await evaluate(popupClient, `handleOutput('# Preview result', 'show', 'Fixture')`);
+    await evaluate(
+      popupClient,
+      `document.getElementById('convert-tab').click();
+       handleOutput('# Preview result', 'show', 'Fixture')`
+    );
     assert.deepEqual(
       await evaluate(popupClient, `({ text: markdownResult.textContent, visible: resultContainer.style.display })`),
       { text: '# Preview result', visible: 'block' }
     );
+    await evaluate(
+      popupClient,
+      `markdownResult.textContent = Array.from({ length: 80 }, (_, index) => 'Preview line ' + index).join('\\n');
+       downloadBtn.focus()`
+    );
+    await pressKey(popupClient, 'Tab', 'Tab', 9);
+    assert.deepEqual(
+      await evaluate(
+        popupClient,
+        `markdownResult.scrollTop = markdownResult.scrollHeight;
+         ({
+           focused: document.activeElement === markdownResult,
+           scrollable: markdownResult.scrollHeight > markdownResult.clientHeight,
+           scrolled: markdownResult.scrollTop > 0,
+           outline: getComputedStyle(markdownResult).outlineStyle
+         })`
+      ),
+      { focused: true, scrollable: true, scrolled: true, outline: 'solid' }
+    );
+    await evaluate(popupClient, `handleOutput('# Preview result', 'show', 'Fixture')`);
+
+    assert.deepEqual(
+      await evaluate(
+        popupClient,
+        `showStatus('Still converting', 'processing');
+         ({ status: statusMessage.textContent, timer: window.statusTimer || null })`
+      ),
+      { status: 'Still converting', timer: null }
+    );
+    assert.deepEqual(
+      await evaluate(
+        popupClient,
+        `showStatus('Temporary success', 'success');
+         const transientTimer = window.statusTimer;
+         showStatus('Terminal failure', 'error');
+         ({
+           status: statusMessage.textContent,
+           error: statusMessage.classList.contains('error'),
+           hadTransientTimer: Boolean(transientTimer),
+           activeTimer: window.statusTimer || null
+         })`
+      ),
+      {
+        status: 'Terminal failure',
+        error: true,
+        hadTransientTimer: true,
+        activeTimer: null
+      }
+    );
+
+    const emptyDownload = await evaluate(
+      popupClient,
+      `markdownResult.textContent = '# Stale preview';
+       let capturedUrl;
+       downloadMarkdown(
+         '',
+         'Empty Fixture',
+         { download: (options, callback) => { capturedUrl = options.url; callback(71); } },
+         () => null
+       ).then(async result => ({
+         downloadId: result.downloadId,
+         body: await (await fetch(capturedUrl)).text()
+       }))`
+    );
+    assert.deepEqual(emptyDownload, { downloadId: 71, body: '' });
 
     await popupClient.send('Page.bringToFront');
     await evaluate(
@@ -552,6 +891,24 @@ async function main() {
       await evaluate(popupClient, `statusMessage.classList.contains('error')`),
       true
     );
+
+    const deniedDownload = await evaluate(
+      popupClient,
+      `downloadMarkdown(
+         '# Download failure',
+         'Fixture',
+         { download: (_options, callback) => callback() },
+         () => 'fixture download denial'
+       ).then(
+         () => ({ resolved: true, status: statusMessage.textContent }),
+         error => ({ resolved: false, status: statusMessage.textContent, error: error.message })
+       )`
+    );
+    assert.deepEqual(deniedDownload, {
+      resolved: false,
+      status: 'Error saving file: fixture download denial',
+      error: 'fixture download denial'
+    });
 
     const permissions = await evaluate(
       popupClient,
@@ -611,6 +968,7 @@ async function main() {
   } finally {
     deniedClient?.close();
     popupClient?.close();
+    semanticClient?.close();
     fixtureClient?.close();
     browserClient?.close();
     try {

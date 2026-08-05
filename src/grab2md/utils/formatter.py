@@ -4,6 +4,44 @@ from grab2md.utils.redaction import get_redacting_logger
 
 logger = get_redacting_logger(__name__)
 
+_FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})")
+
+
+def _collapse_prose_newlines(markdown_content: str) -> str:
+    """Collapse excessive prose spacing without modifying fenced code."""
+    output: list[str] = []
+    prose: list[str] = []
+    fence: tuple[str, int] | None = None
+
+    def flush_prose() -> None:
+        if prose:
+            output.append(re.sub(r"\n{3,}", "\n\n", "".join(prose)))
+            prose.clear()
+
+    for line in markdown_content.splitlines(keepends=True):
+        line_without_ending = line.rstrip("\r\n")
+        if fence is not None:
+            output.append(line)
+            character, minimum_length = fence
+            if re.fullmatch(
+                rf" {{0,3}}{re.escape(character)}{{{minimum_length},}}[ \t]*",
+                line_without_ending,
+            ):
+                fence = None
+            continue
+
+        opening = _FENCE_OPEN.match(line_without_ending)
+        if opening:
+            flush_prose()
+            marker = opening.group(1)
+            fence = (marker[0], len(marker))
+            output.append(line)
+        else:
+            prose.append(line)
+
+    flush_prose()
+    return "".join(output)
+
 
 def format_markdown(markdown_content):
     """
@@ -32,8 +70,8 @@ def format_markdown(markdown_content):
     )
     logger.info("Converted HTML <pre><code> to markdown code blocks")
 
-    # Collapse excessive newlines
-    markdown_content = re.sub(r"\n{3,}", "\n\n", markdown_content)
+    # Collapse excessive prose newlines without altering authored code.
+    markdown_content = _collapse_prose_newlines(markdown_content)
     logger.info("Collapsed excessive newlines")
 
     return markdown_content

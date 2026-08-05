@@ -64,3 +64,10 @@ linear trailing-newline trimming. Upstream 7.2.3's `<pre>` line-ending
 normalization was reverted in 7.2.4; the local derivative instead retains its
 stronger runtime contract that authored indentation, blank lines, tabs, and
 backtick runs remain unchanged.
+
+On 2026-08-05, the pinned 7.1.1 package was rechecked while diagnosing
+extension whitespace inflation. Its boundary-aware structural `join` behavior
+and custom-rule precedence semantics were restored in the local derivative,
+with a separate ordinary-HTML whitespace normalizer. The `pre`/`code` paths
+remain explicitly exempt and are covered by exact authored-whitespace runtime
+assertions.

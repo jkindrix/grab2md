@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Optional
 from urllib.parse import urljoin, urlsplit
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup, NavigableString, Tag
 
 from grab2md.utils.html_references import (
     SrcsetCandidate,
@@ -114,6 +114,42 @@ def _canonicalize_srcset(value: str, base_url: str) -> str:
     )
 
 
+def _is_structured_code_line(tag: Tag) -> bool:
+    classes = tag.get_attribute_list("class")
+    return tag.name == "div" or "line" in classes or tag.has_attr("data-line")
+
+
+def _materialize_structured_code_lines(soup: BeautifulSoup) -> None:
+    """Turn CSS-rendered code lines into authored newline text.
+
+    Syntax highlighters often serialize ``<span class="line">`` children
+    without newline text nodes and rely on block CSS for their visual layout.
+    HTML-to-Markdown libraries only see concatenated ``textContent``. Replace
+    only unambiguous line containers inside ``pre`` so ordinary token spans and
+    inline code remain untouched.
+    """
+    for pre in soup.find_all("pre"):
+        if not isinstance(pre, Tag):
+            continue
+        direct_code = pre.find("code", recursive=False)
+        container = direct_code if isinstance(direct_code, Tag) else pre
+        element_children = [
+            child for child in container.children if isinstance(child, Tag)
+        ]
+        if not element_children or not all(
+            _is_structured_code_line(child) for child in element_children
+        ):
+            continue
+        if any(
+            isinstance(child, NavigableString) and str(child).strip()
+            for child in container.children
+        ):
+            continue
+        code = "\n".join(child.get_text("", strip=False) for child in element_children)
+        container.clear()
+        container.append(NavigableString(code))
+
+
 def prepare_document(
     html_content: str, source_url: str
 ) -> tuple[str, DocumentMetadata]:
@@ -123,6 +159,7 @@ def prepare_document(
     and relative links retain their source-document semantics.
     """
     soup = BeautifulSoup(html_content, "html.parser")
+    _materialize_structured_code_lines(soup)
     remote = _is_remote(source_url)
     document_base = resolve_document_base(soup, source_url) if remote else source_url
 
