@@ -63,6 +63,9 @@ def test_root_help_presents_direct_sources_and_deemphasizes_convert_alias():
     assert "--content" in direct_help.output
     assert "--download-images" in direct_help.output
     assert "--render-js" in direct_help.output
+    assert "--render-origin" in direct_help.output
+    assert "--wait-for-selector" in direct_help.output
+    assert "--click-selector" in direct_help.output
     assert "grab2md convert" not in direct_help.output
 
     compatibility_help = CliRunner().invoke(cli.app, ["convert", "--help"])

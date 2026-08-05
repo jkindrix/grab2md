@@ -15,7 +15,7 @@ main article, or current selection.
 
 ## Status and support
 
-- Release version: `0.4.2`
+- Release version: `0.4.3`
 - Release channel: public PyPI alpha
 - Tested Python versions: 3.11, 3.12, and 3.13
 - Production PyPI distribution: `grab2md`
@@ -155,6 +155,12 @@ Useful options include:
   does not modify global configuration;
 - `--headers-file` for an owner-only JSON object of target request headers;
 - `--storage-state` with `--render-js` for owner-only Playwright session state;
+- repeatable `--render-origin` values to authorize only the additional CDN or
+  API origins a rendered page requires;
+- `--wait-for-selector` to delay browser interaction and snapshotting until a
+  known readiness element is attached;
+- repeatable `--click-selector` values to expand explicitly selected disclosure
+  controls after rendering;
 - `--enhanced-headers/--basic-headers` and `--user-agent-contact` for an honest,
   versioned request identity;
 - `--download-images` with a configurable `--images-dir`;
@@ -328,8 +334,9 @@ language fields. Local references remain relative. See
   regions and a confidence-gated readability fallback, whose quality varies by
   document. The measured decision is recorded in
   [`ADR 0002`](https://github.com/jkindrix/grab2md/blob/main/docs/adr/0002-select-main-content-extraction.md).
-- JavaScript rendering is opt-in for direct URL conversion; batch and crawl
-  remain static.
+- JavaScript rendering is opt-in for direct URL conversion; additional origins
+  and page interactions remain separately opt-in, while batch and crawl stay
+  static.
 - Metadata extraction intentionally uses declared HTML/meta fields rather than
   text inference or executable structured data.
 - Crawling is sequential; removed concurrency options are not advertised.

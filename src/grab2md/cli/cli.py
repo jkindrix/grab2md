@@ -288,6 +288,30 @@ def convert_command(
         "--render-js/--static",
         help="Render JavaScript in an isolated optional Chromium context.",
     ),
+    render_origins: Optional[List[str]] = typer.Option(
+        None,
+        "--render-origin",
+        help=(
+            "Authorize an additional browser subresource origin; repeatable and "
+            "requires --render-js."
+        ),
+    ),
+    wait_for_selector: Optional[str] = typer.Option(
+        None,
+        "--wait-for-selector",
+        help=(
+            "Wait for a Playwright selector to be attached before clicks and "
+            "snapshotting; requires --render-js."
+        ),
+    ),
+    click_selectors: Optional[List[str]] = typer.Option(
+        None,
+        "--click-selector",
+        help=(
+            "Click every element matching a Playwright selector after rendering; "
+            "repeatable and requires --render-js."
+        ),
+    ),
     log_level: LogLevel = typer.Option(
         LogLevel.WARNING, "--log-level", help="Set logging level."
     ),
@@ -324,6 +348,9 @@ def convert_command(
         images_dir=images_dir,
         include_metadata=include_metadata,
         render_js=render_js,
+        render_origins=tuple(render_origins or ()),
+        wait_for_selector=wait_for_selector,
+        click_selectors=tuple(click_selectors or ()),
         fancy=fancy,
     )
     try:

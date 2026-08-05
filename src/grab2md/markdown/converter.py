@@ -39,6 +39,9 @@ def html_to_markdown(
     network_policy=None,
     max_html_bytes=DEFAULT_MAX_BODY_BYTES,
     storage_state=None,
+    allowed_origins=(),
+    wait_for_selector=None,
+    click_selectors=(),
 ):
     """Acquire one URL and return Markdown, preserving the legacy optional API."""
     owned_session = None
@@ -52,6 +55,9 @@ def html_to_markdown(
                 allow_private_network=allow_private_network,
                 max_html_bytes=max_html_bytes,
                 storage_state=storage_state,
+                allowed_origins=allowed_origins,
+                wait_for_selector=wait_for_selector,
+                click_selectors=click_selectors,
             )
         else:
             if active_session is None:

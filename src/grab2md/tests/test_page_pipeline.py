@@ -16,7 +16,7 @@ from grab2md.markdown.pipeline import (
     acquire_local_page,
     acquire_rendered_page,
 )
-from grab2md.network.browser_renderer import RenderedPage
+from grab2md.network.browser_renderer import RenderDiagnostics, RenderedPage
 
 
 class Utf8WithoutCharsetHandler(BaseHTTPRequestHandler):
@@ -174,9 +174,14 @@ def test_local_and_rendered_acquisition_share_the_page_contract(tmp_path):
     source.write_text("<h1>Local</h1>", encoding="utf-8")
 
     local = acquire_local_page(source)
+    diagnostics = RenderDiagnostics(request_count=3)
     with patch(
         "grab2md.markdown.pipeline.render_html",
-        return_value=RenderedPage("<h1>Rendered</h1>", "https://example.com/final"),
+        return_value=RenderedPage(
+            "<h1>Rendered</h1>",
+            "https://example.com/final",
+            diagnostics,
+        ),
     ):
         rendered = acquire_rendered_page("https://example.com/start")
 
@@ -185,6 +190,7 @@ def test_local_and_rendered_acquisition_share_the_page_contract(tmp_path):
     assert local.charset == "utf-8"
     assert rendered.rendered is True
     assert rendered.final_url == "https://example.com/final"
+    assert rendered.render_diagnostics is diagnostics
 
 
 def test_page_converter_is_pure_and_returns_selected_html_and_metadata():

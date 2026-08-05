@@ -14,6 +14,31 @@ python -m playwright install chromium
 grab2md https://example.com/app --render-js --output app.md
 ```
 
+Pages that load code or data from another origin require each origin to be
+authorized explicitly. Pages whose content remains behind disclosure controls
+also require an explicit Playwright selector to click:
+
+```bash
+grab2md https://alex.draftist.io/blog/the-bedrock-of-software-design-ycqvcedsj \
+  --render-js \
+  --render-origin https://cdn.draftist.app \
+  --wait-for-selector main \
+  --click-selector 'figure button:has(h2)' \
+  --output article.md
+```
+
+Render origins and click selectors are repeatable. A render origin must be an
+exact HTTP(S) origin; paths, queries, fragments, and embedded credentials are
+rejected. `--wait-for-selector` accepts one Playwright selector and waits for it
+to be attached before clicks and snapshotting. Each click selector clicks every
+matching element once in document order. A missing readiness or click match
+fails the conversion instead of silently returning an incomplete snapshot.
+
+For troubleshooting, `--log-level INFO --debug-log render.log` records the
+request and transfer counts, each explicit selector's match count, and the
+origins blocked by the default-deny route policy. Blocked-origin diagnostics
+contain origins rather than full request URLs so query data is not exposed.
+
 For a page requiring an existing browser session, create Playwright storage
 state in a separate login process, restrict it to the current user, and pass it
 explicitly:
@@ -41,14 +66,24 @@ The context:
 - resolves the requested hostname once, validates every returned address, and
   pins Chromium to one validated numeric address while retaining the URL
   hostname for HTTP and TLS identity;
-- permits subresources only from the explicitly requested origin and blocks all
-  cross-origin requests and top-level redirects;
+- permits subresources only from the requested origin and origins explicitly
+  authorized with `--render-origin`, while stripping credentials from those
+  additional origins and blocking cross-origin top-level redirects;
 - fails all other Chromium DNS lookups and bypasses system proxy resolution;
 - rejects credential-bearing and non-HTTP(S) network URLs;
-- caps navigation at 30 seconds, post-load settling at 500 milliseconds,
-  aggregate decoded browser response data at 50 MiB, requests at 250, and
-  serialized HTML at 10 MiB; and
+- blocks HTTP methods other than GET, HEAD, and OPTIONS throughout navigation,
+  hydration, settling, and explicit interaction;
+- blocks WebSockets before their network handshake is established;
+- caps navigation at 30 seconds, settling before and after explicit clicks at
+  500 milliseconds, explicit clicks at 25, aggregate decoded browser response
+  data at 50 MiB, requests at 250, and serialized HTML at 10 MiB; and
 - closes the browser after one conversion.
+
+During explicit clicks, grab2md also blocks top-level navigation. Selectors
+should still target disclosure controls rather than general buttons: a click
+can run arbitrary page code, issue permitted GET/HEAD requests, and mutate the
+temporary browser DOM or storage. Use authenticated storage state only when the
+selected controls and page are trusted.
 
 Private, loopback, link-local, and metadata source destinations are rejected by
 default. `--allow-private-network` explicitly permits a trusted internal or
@@ -72,6 +107,14 @@ those workflows requires a browser-backed fetch result integrated at the
 crawler boundary, not an after-the-fact second fetch.
 
 Cross-origin redirects and API-driven applications may render incompletely
-because their requests are blocked. This is an intentional default-deny
-trade-off; `--allow-private-network` changes address classification only and is
-not an unrestricted cross-origin switch.
+unless every required subresource origin is authorized explicitly. Applications
+that require POST or another mutating method during initial hydration fail the
+render rather than sending that request, and WebSocket-dependent applications
+cannot use that channel. These are intentional default-deny trade-offs;
+`--allow-private-network` changes address classification only and is not an
+unrestricted cross-origin switch.
+
+No automatic "expand everything" heuristic is applied. Generic buttons can
+submit forms or change remote state, and framework-specific hydration data is
+not treated as visible article content. Use `--click-selector` only for controls
+whose behavior is understood.
