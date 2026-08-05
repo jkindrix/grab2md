@@ -1,5 +1,24 @@
 /** Side-effect-free HTML-to-Markdown conversion controller. */
 
+function structuredCodeText(node) {
+  const container = node.nodeName === 'PRE'
+    ? [...node.children].find(child => child.nodeName === 'CODE') || node
+    : node;
+  const lines = [...container.children];
+  const lineLike = line => {
+    return line.nodeName === 'DIV'
+      || line.classList.contains('line')
+      || line.hasAttribute('data-line');
+  };
+  const hasAuthoredTextOutsideLines = [...container.childNodes].some(child => {
+    return child.nodeType === 3 && child.nodeValue.trim();
+  });
+  if (lines.length && lines.every(lineLike) && !hasAuthoredTextOutsideLines) {
+    return lines.map(line => line.textContent).join('\n');
+  }
+  return node.textContent;
+}
+
 class Grab2MdConverter {
   constructor(Turndown = globalThis.TurndownService) {
     if (typeof Turndown !== 'function') {
@@ -32,7 +51,9 @@ class Grab2MdConverter {
         );
       },
       replacement(contentValue, node, options) {
-        const code = contentValue;
+        // Read directly from the preformatted node so structural Markdown
+        // joining can never alter authored indentation or blank lines.
+        const code = structuredCodeText(node);
         if (options.codeBlockStyle !== 'fenced') {
           return `\n\n    ${code.replace(/\n/g, '\n    ')}\n\n`;
         }

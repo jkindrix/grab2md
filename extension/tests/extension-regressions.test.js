@@ -12,6 +12,8 @@ const { Grab2MdSettingsStore } = require('../settings-store.js');
 test('normalizes short and malformed extracted HTML without reassigning inputs', () => {
   const complete = '<html><body>' + 'content '.repeat(20) + '</body></html>';
   assert.equal(normalizeExtractedHtml(complete), complete);
+  const shortUppercaseComplete = '<HTML><BODY>short</BODY></HTML>';
+  assert.equal(normalizeExtractedHtml(shortUppercaseComplete), shortUppercaseComplete);
 
   for (const fragment of ['<p>short</p>', 'plain malformed content']) {
     const normalized = normalizeExtractedHtml(fragment);
@@ -78,6 +80,48 @@ test('conversion and settings persistence are isolated controllers', () => {
   assert.equal(storage.saved.grab2mdSettings.markdownOptions.headingStyle, 'setext');
 });
 
+test('settings persistence rejects corrupt values and reports Chrome API failures', () => {
+  const defaults = {
+    theme: 'light',
+    markdownOptions: { headingStyle: 'atx', bulletMarker: '-' },
+    contentOptions: { preserveImages: true, codeBlocks: true }
+  };
+  const corruptStorage = {
+    get(_key, callback) {
+      callback({
+        grab2mdSettings: {
+          theme: 'system',
+          markdownOptions: { headingStyle: 'html', bulletMarker: '?' },
+          contentOptions: { preserveImages: 'yes', codeBlocks: null }
+        }
+      });
+    }
+  };
+  new Grab2MdSettingsStore(corruptStorage).load(defaults, (loaded, error) => {
+    assert.equal(error, undefined);
+    assert.deepEqual(loaded, defaults);
+    assert.notEqual(loaded.markdownOptions, defaults.markdownOptions);
+    assert.notEqual(loaded.contentOptions, defaults.contentOptions);
+  });
+
+  const failedStorage = {
+    get(_key, callback) { callback(undefined); },
+    set(_value, callback) { callback(); }
+  };
+  const failedStore = new Grab2MdSettingsStore(
+    failedStorage,
+    'grab2mdSettings',
+    () => 'sync storage unavailable'
+  );
+  failedStore.load(defaults, (loaded, error) => {
+    assert.deepEqual(loaded, defaults);
+    assert.equal(error, 'sync storage unavailable');
+  });
+  failedStore.save(defaults, error => {
+    assert.equal(error, 'sync storage unavailable');
+  });
+});
+
 test('popup exposes only implemented link and code formatting controls', () => {
   const popup = fs.readFileSync(path.join(extensionRoot, 'popup.html'), 'utf8');
   const popupScript = fs.readFileSync(path.join(extensionRoot, 'popup.js'), 'utf8');
@@ -87,6 +131,7 @@ test('popup exposes only implemented link and code formatting controls', () => {
   assert.doesNotMatch(popupScript, /cliLink|inlineLinks|link-style/);
   assert.match(popup, /Use Fenced Code Blocks/);
   assert.match(converter, /options\.codeBlockStyle !== 'fenced'/);
+  assert.match(converter, /function structuredCodeText\(/);
   assert.match(converter, /linkStyle: 'inlined'/);
   assert.match(popupScript, /await handleOutput\(/);
   assert.match(popupScript, /if \(conversionInFlight\) return/);
@@ -130,11 +175,21 @@ test('shared generic semantics fixture defines portable output properties', () =
     'utf8'
   );
   assert.equal(typeof fixture.html, 'string');
+  assert.equal(typeof fixture.base_path, 'string');
   assert.ok(Array.isArray(fixture.required_phrases));
   assert.ok(fixture.required_phrases.length > 0);
+  assert.ok(Array.isArray(fixture.required_markdown_fragments));
+  assert.ok(fixture.required_markdown_fragments.length > 0);
+  assert.ok(Array.isArray(fixture.links));
+  assert.ok(Array.isArray(fixture.images));
+  assert.ok(Array.isArray(fixture.srcsets));
   assert.doesNotMatch(popupScript, /replace\([^\n]+(?:Copy code|Search API|model)/);
   assert.match(chromiumSmoke, /generic-conversion\.json/);
   assert.match(chromiumSmoke, /sharedFixture\.required_phrases/);
+  assert.match(chromiumSmoke, /sharedFixture\.required_markdown_fragments/);
+  assert.match(chromiumSmoke, /sharedFixture\.links/);
+  assert.match(chromiumSmoke, /sharedFixture\.images/);
+  assert.match(chromiumSmoke, /sharedFixture\.srcsets/);
 });
 
 test('article mode uses the pinned packaged Mozilla Readability asset', () => {
@@ -144,7 +199,16 @@ test('article mode uses the pinned packaged Mozilla Readability asset', () => {
 
   assert.ok(!popup.includes('id="trim-content"'));
   assert.match(popupScript, /files: \['readability\.js'\]/);
-  assert.match(popupScript, /new Readability\(document\.cloneNode\(true\)\)\.parse\(\)/);
+  assert.match(popupScript, /const clone = document\.cloneNode\(true\)/);
+  assert.match(popupScript, /new Readability\(clone\)\.parse\(\)/);
+  assert.match(popupScript, /button h1, button h2, button h3/);
+  assert.match(popupScript, /querySelector\('article h1'\)/);
+  assert.match(popupScript, /querySelector\('main h1'\)/);
+  assert.match(
+    popupScript,
+    /const title = \(authoredTitle \|\| article\.title \|\| document\.title/
+  );
+  assert.match(popupScript, /canonicalizeReferences\(parsed\)/);
   assert.doesNotMatch(popupScript, /\.post-content|\.article-content|elementsToRemove/);
   assert.equal(
     crypto.createHash('sha256').update(readability).digest('hex'),
@@ -154,6 +218,7 @@ test('article mode uses the pinned packaged Mozilla Readability asset', () => {
 
 test('unsupported URL and element modes are not exposed', () => {
   const popup = fs.readFileSync(path.join(extensionRoot, 'popup.html'), 'utf8');
+  const styles = fs.readFileSync(path.join(extensionRoot, 'styles.css'), 'utf8');
   const manifest = JSON.parse(fs.readFileSync(path.join(extensionRoot, 'manifest.json'), 'utf8'));
 
   assert.ok(!popup.includes('id="url-capture-tab"'));
@@ -161,6 +226,7 @@ test('unsupported URL and element modes are not exposed', () => {
   assert.ok(!popup.includes('<option value="element">'));
   assert.equal(manifest.background, undefined);
   assert.ok(!fs.existsSync(path.join(extensionRoot, 'background.js')));
+  assert.doesNotMatch(styles, /\.url-|#capture-|\.modal|\.toggle-switch|\.progress-bar/);
 });
 
 test('supported popup preview uses packaged scripts without inline JavaScript', () => {
@@ -174,6 +240,19 @@ test('supported popup preview uses packaged scripts without inline JavaScript', 
     assert.match(script[1], /\ssrc="[^"]+"/);
     assert.equal(script[2].trim(), '');
   }
+});
+
+test('popup exposes status, preview, and icon controls accessibly', () => {
+  const popup = fs.readFileSync(path.join(extensionRoot, 'popup.html'), 'utf8');
+  const styles = fs.readFileSync(path.join(extensionRoot, 'styles.css'), 'utf8');
+
+  assert.match(popup, /id="status-message"[^>]+role="status"[^>]+aria-live="polite"/);
+  assert.match(popup, /id="markdown-result"[^>]+tabindex="0"[^>]+aria-label=/);
+  assert.match(popup, /id="copy-btn"[^>]+aria-label=/);
+  assert.match(popup, /id="download-btn"[^>]+aria-label=/);
+  assert.match(popup, /id="settings-tab"[^>]+tabindex="-1"/);
+  assert.match(styles, /#markdown-result:focus-visible/);
+  assert.doesNotMatch(styles, /\baria-live\s*:/);
 });
 
 test('manifest and controls use the documented least-privilege surface', () => {

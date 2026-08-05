@@ -5,11 +5,9 @@ function normalizeExtractedHtml(html) {
     throw new TypeError('Extracted HTML must be a non-empty string');
   }
 
-  if (html.length < 100 || (!html.includes('<html') && !html.includes('<body'))) {
-    return `<!DOCTYPE html><html><head><title>Document</title></head><body><div class="content">${html}</div></body></html>`;
-  }
+  if (/<(?:html|body)\b/i.test(html)) return html;
 
-  return html;
+  return `<!DOCTYPE html><html><head><title>Document</title></head><body><div class="content">${html}</div></body></html>`;
 }
 
 const Grab2MdConversionUtils = Object.freeze({ normalizeExtractedHtml });

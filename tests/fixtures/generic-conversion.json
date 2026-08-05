@@ -1,8 +1,45 @@
 {
-  "html": "<html><body><h1>Architecture Notes</h1><p>Copy code is ordinary authored text. The model powers the Search API.</p></body></html>",
+  "base_path": "/semantic/article/page",
+  "html": "<html><head><title>Architecture Notes</title></head><body><main><article><h1>Architecture Notes</h1><p>Copy code is ordinary authored text. The model powers the Search API. This substantial explanation describes how stable interfaces keep implementation details contained while still giving readers enough evidence to understand the design.</p><figure><button type=\"button\"><h2>Expanded rationale</h2></button><p>Expanded evidence remains visible.</p></figure><p><a href=\"guide\">Architecture guide</a></p><picture><source srcset=\"../images/diagram-small.png 1x, /images/diagram-large.png 2x\"><img src=\"/images/diagram.png\" srcset=\"../images/diagram-small.png 1x, /images/diagram-large.png 2x\" alt=\"Architecture diagram\"></picture><table><thead><tr><th>Name</th><th>Value</th></tr></thead><tbody><tr><td>layer</td><td>bedrock</td></tr></tbody></table><pre><code class=\"language-text\"><span class=\"line\"><span>model</span> Search API</span><span class=\"line\">second code line</span></code></pre></article></main></body></html>",
   "required_phrases": [
     "Architecture Notes",
     "Copy code is ordinary authored text.",
-    "The model powers the Search API."
+    "The model powers the Search API.",
+    "Expanded rationale",
+    "Expanded evidence remains visible.",
+    "Architecture guide",
+    "Architecture diagram",
+    "model Search API",
+    "second code line"
+  ],
+  "required_markdown_fragments": [
+    "# Architecture Notes",
+    "## Expanded rationale",
+    "[Architecture guide]",
+    "![Architecture diagram]",
+    "| Name | Value |",
+    "model Search API\nsecond code line"
+  ],
+  "links": [
+    {
+      "label": "Architecture guide",
+      "relative": "guide"
+    }
+  ],
+  "images": [
+    {
+      "alt": "Architecture diagram",
+      "relative": "/images/diagram.png"
+    }
+  ],
+  "srcsets": [
+    {
+      "selector": "source",
+      "value": "../images/diagram-small.png 1x, /images/diagram-large.png 2x"
+    },
+    {
+      "selector": "img",
+      "value": "../images/diagram-small.png 1x, /images/diagram-large.png 2x"
+    }
   ]
 }

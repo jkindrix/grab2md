@@ -41,6 +41,20 @@ var TurndownService = (function () {
     return string.substring(0, indexEnd);
   }
 
+  // Join structural replacements with no more than one blank line. This is
+  // Turndown's boundary-aware approach: it avoids a global cleanup pass that
+  // would also collapse authored blank lines inside code blocks.
+  function join(output, replacement) {
+    var trimmedOutput = trimTrailingNewlines(output);
+    var trimmedReplacement = trimLeadingNewlines(replacement);
+    var newlines = Math.max(
+      output.length - trimmedOutput.length,
+      replacement.length - trimmedReplacement.length
+    );
+    var separator = '\n\n'.substring(0, newlines);
+    return trimmedOutput + separator + trimmedReplacement;
+  }
+
   // Preserve authored Markdown punctuation as literal text. Line-leading
   // escapes are intentionally narrower so ordinary prose punctuation remains
   // readable in the generated source.
@@ -144,6 +158,35 @@ var TurndownService = (function () {
     return node.getElementsByTagName && tagNames.some(function (tagName) {
       return node.getElementsByTagName(tagName).length;
     });
+  }
+
+  function adjacentContentSibling(node, direction) {
+    var sibling = node[direction];
+    while (sibling) {
+      if (sibling.nodeType === 1) return sibling;
+      if (sibling.nodeType === 3 && sibling.nodeValue.trim()) return sibling;
+      sibling = sibling[direction];
+    }
+    return null;
+  }
+
+  function isInlineContent(node) {
+    return node && !(node.nodeType === 1 && isBlock(node));
+  }
+
+  // HTML collapses ordinary whitespace, unlike preformatted content. Trim it
+  // at block boundaries and retain one separator only between inline content.
+  function normalizeTextWhitespace(node) {
+    var value = node.nodeValue.replace(/[\t\n\f\r ]+/g, ' ');
+    var previous = adjacentContentSibling(node, 'previousSibling');
+    var next = adjacentContentSibling(node, 'nextSibling');
+    if (value.charAt(0) === ' ' && !isInlineContent(previous)) {
+      value = value.substring(1);
+    }
+    if (value.charAt(value.length - 1) === ' ' && !isInlineContent(next)) {
+      value = value.substring(0, value.length - 1);
+    }
+    return value;
   }
 
   /**
@@ -302,11 +345,14 @@ var TurndownService = (function () {
     },
     replacement: function (content) {
       content = content.replace(/\r?\n/g, ' ');
-      // Use double backticks if the content itself contains a backtick
-      if (content.indexOf('`') !== -1) {
-        return '`` ' + content + ' ``';
+      var delimiter = '`';
+      var runs = content.match(/`+/g) || [];
+      while (runs.indexOf(delimiter) !== -1) {
+        delimiter += '`';
       }
-      return '`' + content + '`';
+      var leadingSpace = content.charAt(0) === '`' ? ' ' : '';
+      var trailingSpace = content.charAt(content.length - 1) === '`' ? ' ' : '';
+      return delimiter + leadingSpace + content + trailingSpace + delimiter;
     }
   };
 
@@ -315,21 +361,19 @@ var TurndownService = (function () {
     filter: 'img',
     replacement: function (content, node) {
       var alt = escapeMarkdown(cleanAttribute(node.getAttribute('alt')));
-      var src = escapeLinkDestination(node.getAttribute('src') || '');
+      var src = node.getAttribute('src') || '';
+      if (!src) {
+        var srcset = node.getAttribute('srcset') || '';
+        if (srcset && !/^data:/i.test(srcset.trim())) {
+          src = (srcset.split(',')[0].trim().split(/\s+/, 1)[0] || '');
+        }
+      }
+      src = escapeLinkDestination(src);
       var title = cleanAttribute(node.getAttribute('title'));
       var titlePart = title ? ' "' + escapeLinkTitle(title) + '"' : '';
 
       // Handle missing src attribute
       if (!src) return '';
-
-      // Check if image is a decoration or small icon - skip those
-      var width = node.getAttribute('width') || node.style.width || '';
-      var height = node.getAttribute('height') || node.style.height || '';
-
-      // Skip likely decorative or tiny images
-      if ((width && parseInt(width) < 20) || (height && parseInt(height) < 20)) {
-        return '';
-      }
 
       return src ? '![' + alt + ']' + '(' + src + titlePart + ')' : '';
     }
@@ -473,19 +517,26 @@ var TurndownService = (function () {
   };
 
   // Captions and figures
+  rules.figcaption = {
+    filter: 'figcaption',
+    replacement: function (content) {
+      return content.trim() ? '\n\n*' + content + '*\n\n' : '';
+    }
+  };
+
   rules.figure = {
     filter: 'figure',
-    replacement: function (content, node) {
-      // Try to identify caption
-      var figcaption = node.querySelector('figcaption');
-      var caption = figcaption ? figcaption.textContent.trim() : '';
-
-      // If there's a caption, add it after the content
-      if (caption) {
-        return '\n\n' + content + '\n\n*' + caption + '*\n\n';
-      }
-
+    replacement: function (content) {
       return '\n\n' + content + '\n\n';
+    }
+  };
+
+  // These elements contain implementation or fallback source, not rendered
+  // document prose. Including their text pollutes full-page conversions.
+  rules.removeContent = {
+    filter: ['script', 'style', 'template', 'noscript'],
+    replacement: function () {
+      return '';
     }
   };
 
@@ -563,11 +614,15 @@ var TurndownService = (function () {
    */
   TurndownService.prototype.process = function (node) {
     var output = '';
+    var preserveWhitespace = node.nodeName === 'PRE' || node.nodeName === 'CODE';
 
     // Process each child node
     for (var i = 0; i < node.childNodes.length; i++) {
       var childNode = node.childNodes[i];
-      output += this.processNode(childNode);
+      var replacement = this.processNode(childNode);
+      output = preserveWhitespace
+        ? output + replacement
+        : join(output, replacement);
     }
 
     return output;
@@ -599,7 +654,7 @@ var TurndownService = (function () {
       var parentName = node.parentNode && node.parentNode.nodeName;
       output = parentName === 'CODE' || parentName === 'PRE'
         ? node.nodeValue
-        : escapeMarkdown(node.nodeValue);
+        : escapeMarkdown(normalizeTextWhitespace(node));
     }
 
     return output;
@@ -611,7 +666,9 @@ var TurndownService = (function () {
    * @returns {Object|null} - The matching rule or null
    */
   TurndownService.prototype.findMatchingRule = function (node) {
-    for (var key in this.rules) {
+    var keys = Object.keys(this.rules);
+    for (var index = keys.length - 1; index >= 0; index--) {
+      var key = keys[index];
       var rule = this.rules[key];
       var filter = rule.filter;
 
@@ -633,6 +690,11 @@ var TurndownService = (function () {
    * @returns {TurndownService} - The TurndownService instance
    */
   TurndownService.prototype.addRule = function (key, rule) {
+    // Reinsert replacements so reverse-order matching gives every custom rule
+    // precedence even when it reuses the name of a bundled default rule.
+    if (Object.prototype.hasOwnProperty.call(this.rules, key)) {
+      delete this.rules[key];
+    }
     this.rules[key] = rule;
     return this;
   };

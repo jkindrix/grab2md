@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from urllib.parse import urljoin
 from unittest.mock import Mock
 
 import requests
@@ -62,6 +63,24 @@ def test_html_content_conversion_preserves_ordinary_words_and_code():
     assert markdown is not None
     assert "Search, model, API, and assistant are ordinary authored words." in markdown
     assert "model Search API" in markdown
+
+
+def test_highlighter_line_elements_become_code_newlines_without_losing_blank_lines():
+    html = """
+    <pre><code><span class="line"><span>struct</span> User {</span><span class="line">    id: UserId,</span><span class="line"></span><span class="line"></span><span class="line">}</span></code></pre>
+    """
+
+    markdown = html_content_to_markdown(html, "https://example.com/code")
+
+    assert markdown == "```\nstruct User {\n    id: UserId,\n\n\n}\n```"
+
+
+def test_ordinary_code_token_spans_do_not_invent_line_breaks():
+    html = "<pre><code><span>const</span><span> value = 1;</span></code></pre>"
+
+    markdown = html_content_to_markdown(html, "https://example.com/code")
+
+    assert markdown == "```\nconst value = 1;\n```"
 
 
 def test_full_conversion_preserves_clipboard_phrases_and_ordinary_glyphs():
@@ -174,9 +193,18 @@ def test_local_conversion_handles_success_missing_and_empty_files(tmp_path):
 def test_shared_generic_semantics_fixture_preserves_authored_phrases():
     fixture_path = Path(__file__).parents[3] / "tests/fixtures/generic-conversion.json"
     fixture = json.loads(fixture_path.read_text(encoding="utf-8"))
+    fixture_url = urljoin("https://example.com", fixture["base_path"])
 
-    markdown = html_content_to_markdown(fixture["html"], "https://example.com")
+    markdown = html_content_to_markdown(fixture["html"], fixture_url)
 
     assert markdown is not None
     for phrase in fixture["required_phrases"]:
         assert phrase in markdown
+    for fragment in fixture["required_markdown_fragments"]:
+        assert fragment in markdown
+    for link in fixture["links"]:
+        expected = urljoin(fixture_url, link["relative"])
+        assert f'[{link["label"]}]({expected})' in markdown
+    for image in fixture["images"]:
+        expected = urljoin(fixture_url, image["relative"])
+        assert f'![{image["alt"]}]({expected})' in markdown
