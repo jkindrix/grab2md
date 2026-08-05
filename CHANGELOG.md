@@ -38,6 +38,8 @@ Version `0.4.2` is the first public alpha under the `grab2md` identity.
 - Removed the remaining URL-capture, modal, progress, and toggle CSS after
   those unsupported surfaces were deleted, including a duplicate rule that
   overrode active settings spacing.
+- Updated the transitive development-only `cryptography` lock to 50.0.0 after
+  the hosted dependency audit reported `PYSEC-2026-3552` against 49.0.0.
 
 ### Fixed
 
