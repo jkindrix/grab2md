@@ -12,7 +12,7 @@ repos:
       - id: detect-private-key
 
   - repo: https://github.com/psf/black
-    rev: 26.5.1
+    rev: 26.10.0
     hooks:
       - id: black
         files: ^(?:(?:src/grab2md/|tests/config/|tests/scripts/).*|scripts/(?:check_(?:documentation|package_readme)|render_release_notes))\.py$
